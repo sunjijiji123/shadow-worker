@@ -1,0 +1,69 @@
+syntax = "proto3";
+
+package shadowworker;
+
+import "whitelist.proto";
+
+// 采集控制 + 查询
+// Qt 客户端 → Go 服务
+
+option go_package = "shadow-worker/backend/internal/grpcapi;grpcapi";
+
+service CollectionService {
+  // 暂停采集
+  rpc Pause(PauseRequest) returns (Result);
+  // 恢复采集
+  rpc Resume(ResumeRequest) returns (Result);
+  // 查采集状态
+  rpc GetStatus(GetStatusRequest) returns (CollectionStatus);
+  // 查询时间线(activity_segments + events)
+  rpc QueryTimeline(TimelineRequest) returns (TimelineSnapshot);
+  // 手动触发一次 VLM 截图理解
+  rpc TriggerVLM(TriggerVLMRequest) returns (VLMSummary);
+}
+
+message PauseRequest {}
+message ResumeRequest {}
+message GetStatusRequest {}
+
+message CollectionStatus {
+  bool running = 1;           // 采集是否在跑
+  string active_app = 2;      // 当前前台白名单应用(空=非白名单/idle)
+  string active_category = 3; // active_app 的类别
+  int32 today_minutes = 4;    // 今日工作总分钟
+  int32 active_segments = 5;  // 今日活动段数
+}
+
+message TimelineRequest {
+  string date = 1; // YYYY-MM-DD
+}
+
+message TimelineSegment {
+  int64 start_ts = 1;
+  int64 end_ts = 2;
+  string app_name = 3;
+  string category = 4;
+  string window_title = 5;
+  string state = 6;
+}
+
+message TimelineEvent {
+  int64 ts = 1;
+  string type = 2;
+  string text = 3;
+  string app_name = 4;
+}
+
+message TimelineSnapshot {
+  string date = 1;
+  repeated TimelineSegment segments = 2;
+  repeated TimelineEvent events = 3;
+}
+
+message TriggerVLMRequest {}
+
+message VLMSummary {
+  string summary = 1;
+  string screenshot_path = 2;
+  string app_name = 3;
+}

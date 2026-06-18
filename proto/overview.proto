@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package shadowworker;
+
+// Qt 客户端 → Go 后台的 gRPC 服务
+// 本文件是单一真相源:跑 scripts/gen_proto.{sh,bat} 生成两端桩
+
+option go_package = "shadow-worker/backend/internal/grpcapi;grpcapi";
+
+// ============================================================
+// OverviewService: 概览页数据 + 实时状态推送
+// ============================================================
+service OverviewService {
+  // 一次性获取当前概览
+  rpc GetOverview(GetOverviewRequest) returns (OverviewData);
+  // 持续推送状态变化(今日时长/采集状态/当前应用)
+  rpc WatchOverview(WatchOverviewRequest) returns (stream OverviewUpdate);
+}
+
+message GetOverviewRequest {
+  // 预留:可指定日期,默认今天
+  string date = 1;
+}
+
+message WatchOverviewRequest {}
+
+// 概览页一次性的完整快照
+message OverviewData {
+  int32 today_minutes = 1;        // 今日工作总分钟数
+  int32 active_segments = 2;      // 今日活动段数
+  repeated AppSummary apps = 3;   // 今日有活动的应用列表
+  string collection_status = 4;   // running / paused
+  string asr_status = 5;          // ready / error / unconfigured
+  string vlm_status = 6;          // ready / error / off / unconfigured
+  string mcp_status = 7;          // running / stopped
+}
+
+// 概览页单个应用的小卡片信息
+message AppSummary {
+  string name = 1;                // 显示名 Cursor
+  string category = 2;            // coding/office/browser/chat/other
+  int32 today_minutes = 3;        // 今日分钟数
+}
+
+// WatchOverview 持续推送的增量更新
+message OverviewUpdate {
+  int32 today_minutes = 1;        // 实时更新的今日时长
+  string collection_status = 2;   // 采集状态变化
+  string active_app = 3;          // 当前前台白名单应用(空=非白名单/idle)
+}

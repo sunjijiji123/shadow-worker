@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package shadowworker;
+
+// 语音识别(流式)
+// Qt 客户端推 PCM → Go 识别 → 回传增量/最终文本
+//
+// 录音由 Qt 用 QAudioSource 采集,16kHz/mono/int16 PCM。
+// Go 侧用 whisper(cgo)或云端 SSE 识别,完成后写 events 表。
+
+option go_package = "shadow-worker/backend/internal/grpcapi;grpcapi";
+
+service AsrService {
+  // 双向流:边推音频边收结果
+  rpc StreamRecognize(stream AudioChunk) returns (stream AsrResult);
+}
+
+// PCM 音频块
+message AudioChunk {
+  bytes pcm = 1;  // 16kHz / mono / int16 little-endian
+}
+
+// 识别结果(增量或最终)
+message AsrResult {
+  string partial_text = 1;  // 增量(实时显示)
+  string final_text = 2;    // 最终(录音结束时)
+  bool done = 3;
+  string error = 4;         // 非空表示失败
+}

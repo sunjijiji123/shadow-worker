@@ -1,0 +1,211 @@
+// SettingsViewModel: 设置页 ↔ ConfigService gRPC 桥
+
+#pragma once
+
+#include <QObject>
+#include <QString>
+#include <QVariantList>
+#include <QVariantMap>
+#include <memory>
+
+#include "config.qpb.h"
+#include "config_client.grpc.qpb.h"
+#include <QAbstractGrpcChannel>
+
+class SettingsViewModel : public QObject {
+  Q_OBJECT
+  Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged)
+  Q_PROPERTY(QString error READ error NOTIFY errorChanged)
+
+  // ASR
+  Q_PROPERTY(
+      QString asrMode READ asrMode WRITE setAsrMode NOTIFY asrModeChanged)
+  Q_PROPERTY(QString asrActiveProvider READ asrActiveProvider WRITE
+                 setAsrActiveProvider NOTIFY asrActiveProviderChanged)
+  Q_PROPERTY(
+      QVariantList asrProviders READ asrProviders NOTIFY asrProvidersChanged)
+  Q_PROPERTY(QString asrLocalModelPath READ asrLocalModelPath WRITE
+                 setAsrLocalModelPath NOTIFY asrLocalModelPathChanged)
+  Q_PROPERTY(QString asrLocalModelName READ asrLocalModelName WRITE
+                 setAsrLocalModelName NOTIFY asrLocalModelNameChanged)
+  Q_PROPERTY(QString asrLocalLanguage READ asrLocalLanguage WRITE
+                 setAsrLocalLanguage NOTIFY asrLocalLanguageChanged)
+
+  // VLM
+  Q_PROPERTY(
+      QString vlmMode READ vlmMode WRITE setVlmMode NOTIFY vlmModeChanged)
+  Q_PROPERTY(QString vlmActiveProvider READ vlmActiveProvider WRITE
+                 setVlmActiveProvider NOTIFY vlmActiveProviderChanged)
+  Q_PROPERTY(
+      QVariantList vlmProviders READ vlmProviders NOTIFY vlmProvidersChanged)
+  Q_PROPERTY(int vlmInterval READ vlmInterval WRITE setVlmInterval NOTIFY
+                 vlmIntervalChanged)
+
+  // LLM / Polish
+  Q_PROPERTY(bool llmEnabled READ llmEnabled WRITE setLlmEnabled NOTIFY
+                 llmEnabledChanged)
+  Q_PROPERTY(QString llmActiveProvider READ llmActiveProvider WRITE
+                 setLlmActiveProvider NOTIFY llmActiveProviderChanged)
+  Q_PROPERTY(
+      QVariantList llmProviders READ llmProviders NOTIFY llmProvidersChanged)
+  Q_PROPERTY(QString llmPrompt READ llmPrompt WRITE setLlmPrompt NOTIFY
+                 llmPromptChanged)
+  Q_PROPERTY(QString llmInjectMode READ llmInjectMode WRITE setLlmInjectMode
+                 NOTIFY llmInjectModeChanged)
+
+  // Movement
+  Q_PROPERTY(int movementSampleMs READ movementSampleMs WRITE
+                 setMovementSampleMs NOTIFY movementSampleMsChanged)
+  Q_PROPERTY(int movementIdleS READ movementIdleS WRITE setMovementIdleS NOTIFY
+                 movementIdleSChanged)
+  Q_PROPERTY(QString movementPrecision READ movementPrecision WRITE
+                 setMovementPrecision NOTIFY movementPrecisionChanged)
+
+  // Hotkeys
+  Q_PROPERTY(QString hotkeyRecord READ hotkeyRecord WRITE setHotkeyRecord NOTIFY
+                 hotkeyRecordChanged)
+  Q_PROPERTY(QString hotkeyScreenshot READ hotkeyScreenshot WRITE
+                 setHotkeyScreenshot NOTIFY hotkeyScreenshotChanged)
+  Q_PROPERTY(QString hotkeyPromptPrefix READ hotkeyPromptPrefix WRITE
+                 setHotkeyPromptPrefix NOTIFY hotkeyPromptPrefixChanged)
+
+public:
+  explicit SettingsViewModel(QObject *parent = nullptr);
+
+  void setChannel(std::shared_ptr<QAbstractGrpcChannel> channel);
+
+  bool loading() const { return m_loading; }
+  QString error() const { return m_error; }
+
+  // ASR
+  QString asrMode() const { return m_asrMode; }
+  void setAsrMode(const QString &v);
+  QString asrActiveProvider() const { return m_asrActiveProvider; }
+  void setAsrActiveProvider(const QString &v);
+  QVariantList asrProviders() const { return m_asrProviders; }
+  QString asrLocalModelPath() const { return m_asrLocalModelPath; }
+  void setAsrLocalModelPath(const QString &v);
+  QString asrLocalModelName() const { return m_asrLocalModelName; }
+  void setAsrLocalModelName(const QString &v);
+  QString asrLocalLanguage() const { return m_asrLocalLanguage; }
+  void setAsrLocalLanguage(const QString &v);
+
+  // VLM
+  QString vlmMode() const { return m_vlmMode; }
+  void setVlmMode(const QString &v);
+  QString vlmActiveProvider() const { return m_vlmActiveProvider; }
+  void setVlmActiveProvider(const QString &v);
+  QVariantList vlmProviders() const { return m_vlmProviders; }
+  int vlmInterval() const { return m_vlmInterval; }
+  void setVlmInterval(int v);
+
+  // LLM
+  bool llmEnabled() const { return m_llmEnabled; }
+  void setLlmEnabled(bool v);
+  QString llmActiveProvider() const { return m_llmActiveProvider; }
+  void setLlmActiveProvider(const QString &v);
+  QVariantList llmProviders() const { return m_llmProviders; }
+  QString llmPrompt() const { return m_llmPrompt; }
+  void setLlmPrompt(const QString &v);
+  QString llmInjectMode() const { return m_llmInjectMode; }
+  void setLlmInjectMode(const QString &v);
+
+  // Movement
+  int movementSampleMs() const { return m_movementSampleMs; }
+  void setMovementSampleMs(int v);
+  int movementIdleS() const { return m_movementIdleS; }
+  void setMovementIdleS(int v);
+  QString movementPrecision() const { return m_movementPrecision; }
+  void setMovementPrecision(const QString &v);
+
+  // Hotkeys
+  QString hotkeyRecord() const { return m_hotkeyRecord; }
+  void setHotkeyRecord(const QString &v);
+  QString hotkeyScreenshot() const { return m_hotkeyScreenshot; }
+  void setHotkeyScreenshot(const QString &v);
+  QString hotkeyPromptPrefix() const { return m_hotkeyPromptPrefix; }
+  void setHotkeyPromptPrefix(const QString &v);
+
+  Q_INVOKABLE void addProvider(const QString &category, const QString &key);
+  Q_INVOKABLE void removeProvider(const QString &category, const QString &key);
+  Q_INVOKABLE void updateProvider(const QString &category, const QString &key,
+                                  const QVariantMap &data);
+  Q_INVOKABLE void setActiveProvider(const QString &category,
+                                     const QString &key);
+
+  Q_INVOKABLE void load();
+  Q_INVOKABLE void save();
+
+signals:
+  void loadingChanged();
+  void errorChanged();
+
+  void asrModeChanged();
+  void asrActiveProviderChanged();
+  void asrProvidersChanged();
+  void asrLocalModelPathChanged();
+  void asrLocalModelNameChanged();
+  void asrLocalLanguageChanged();
+
+  void vlmModeChanged();
+  void vlmActiveProviderChanged();
+  void vlmProvidersChanged();
+  void vlmIntervalChanged();
+
+  void llmEnabledChanged();
+  void llmActiveProviderChanged();
+  void llmProvidersChanged();
+  void llmPromptChanged();
+  void llmInjectModeChanged();
+
+  void movementSampleMsChanged();
+  void movementIdleSChanged();
+  void movementPrecisionChanged();
+
+  void hotkeyRecordChanged();
+  void hotkeyScreenshotChanged();
+  void hotkeyPromptPrefixChanged();
+
+private:
+  void setLoading(bool v);
+  void setError(const QString &e);
+  void applyConfig(const shadowworker::ConfigData &data);
+  shadowworker::ConfigData buildConfig() const;
+
+  QVariantList *providerListRef(const QString &category);
+  const QVariantList providerList(const QString &category) const;
+  void setProviderList(const QString &category, const QVariantList &list);
+  void emitProvidersChanged(const QString &category);
+
+  shadowworker::ConfigService::Client m_client;
+  std::shared_ptr<QAbstractGrpcChannel> m_channel;
+
+  bool m_loading = false;
+  QString m_error;
+
+  QString m_asrMode;
+  QString m_asrActiveProvider;
+  QVariantList m_asrProviders;
+  QString m_asrLocalModelPath;
+  QString m_asrLocalModelName;
+  QString m_asrLocalLanguage;
+
+  QString m_vlmMode;
+  QString m_vlmActiveProvider;
+  QVariantList m_vlmProviders;
+  int m_vlmInterval = 5;
+
+  bool m_llmEnabled = false;
+  QString m_llmActiveProvider;
+  QVariantList m_llmProviders;
+  QString m_llmPrompt;
+  QString m_llmInjectMode;
+
+  int m_movementSampleMs = 300;
+  int m_movementIdleS = 10;
+  QString m_movementPrecision = "medium";
+
+  QString m_hotkeyRecord = "F9";
+  QString m_hotkeyScreenshot;
+  QString m_hotkeyPromptPrefix = "Ctrl";
+};

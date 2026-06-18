@@ -1,0 +1,56 @@
+.devkit/
+.trae/
+
+# Build artifacts
+backend/shadow-worker.exe
+backend/shadow-worker
+backend/data.db
+backend/data.db-*
+client/build/
+client/build-*/
+bin/
+dist/
+
+# Qt
+client/*.user
+client/*.user.*
+client/build-*/
+
+# Go
+backend/vendor/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+Thumbs.db
+.Desktop
+
+# Generated
+backend/internal/grpcapi/*.pb.go
+backend/internal/grpcapi/*_grpc.pb.go
+client/src/grpc/*.pb.cc
+client/src/grpc/*.pb.h
+client/src/grpc/*_grpc.*
+client/build/gen_proto/
+
+# App data (本地运行产生的)
+data.db
+screenshots/
+config.yaml
+config.local.yaml
+
+# Logs
+*.log
+build_full_log.txt
+client/build_log.txt
+client/cfg.txt
+client/cfg_log.txt
+backend/server.log
+backend/server_err.log
+
+# Third-party tooling
+tools/

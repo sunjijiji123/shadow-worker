@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package shadowworker;
+
+import "whitelist.proto";
+
+// 配置读写(YAML config)
+// Qt 客户端 → Go 服务
+//
+// 注意:白名单(走 WhitelistService)+ 音频设备(Qt 本地)不在 ConfigService。
+
+option go_package = "shadow-worker/backend/internal/grpcapi;grpcapi";
+
+service ConfigService {
+  rpc GetConfig(GetConfigRequest) returns (ConfigData);
+  rpc SaveConfig(ConfigData) returns (Result);
+}
+
+message GetConfigRequest {}
+
+message ConfigData {
+  // ASR
+  string asr_mode = 1;              // cloud | local
+  string asr_active_provider = 2;
+  map<string, ProviderConfig> asr_providers = 3;
+  string asr_local_model_path = 23;
+  string asr_local_model_name = 24;
+  string asr_local_language = 25;
+
+  // Polish
+  bool polish_enabled = 4;
+  string polish_active_provider = 5;
+  map<string, ProviderConfig> polish_providers = 6;
+  string polish_prompt = 7;
+
+  // Inject
+  string inject_mode = 8;           // preview | auto
+
+  // Movement
+  int32 movement_sample_interval_ms = 9;
+  int32 movement_idle_timeout_s = 10;
+  string movement_precision = 11;   // low | medium | high
+
+  // VLM
+  string vlm_mode = 12;             // scheduled | on_demand | off
+  string vlm_active_provider = 13;
+  map<string, ProviderConfig> vlm_providers = 14;
+  int32 vlm_schedule_interval_min = 15;
+
+  // MCP
+  bool mcp_enabled = 16;
+
+  // Hotkeys
+  string hotkey_record = 17;
+  string hotkey_screenshot = 18;
+  string hotkey_prompt_prefix = 19; // Ctrl/Alt/Win
+
+  // General
+  bool autostart = 20;
+  bool collect_on_start = 21;
+  string data_dir = 22;
+}
+
+// 通用 provider 配置(ASR/Polish/VLM 共用)
+message ProviderConfig {
+  string name = 1;
+  string base_url = 2;
+  string model = 3;
+  string api_format = 4;   // openai | anthropic
+  string auth_type = 5;    // api-key | bearer
+  string api_key = 6;
+  int32 num_ctx = 7;       // Ollama 专属
+}

@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package shadowworker;
+
+// 白名单应用管理(卡片式 CRUD)
+// Qt 客户端 → Go 服务
+
+option go_package = "shadow-worker/backend/internal/grpcapi;grpcapi";
+
+service WhitelistService {
+  // 列出所有白名单应用
+  rpc List(ListAppsRequest) returns (AppList);
+  // 添加应用(Qt 选完窗口后调,传完整路径)
+  rpc Add(AddAppRequest) returns (App);
+  // 移除应用
+  rpc Remove(RemoveAppRequest) returns (Result);
+  // 改类别(点 chip 弹选项后调)
+  rpc UpdateCategory(UpdateCategoryRequest) returns (App);
+}
+
+message ListAppsRequest {
+  string date = 1;  // 可选:返回各应用该日 today_minutes
+}
+
+message AddAppRequest {
+  string path = 1;       // 完整进程路径 C:\...\Cursor.exe
+  string name = 2;       // 显示名 Cursor
+  string category = 3;   // 默认 other,coding/office/browser/chat/other
+}
+
+message RemoveAppRequest {
+  string path = 1;
+}
+
+message UpdateCategoryRequest {
+  string path = 1;
+  string category = 2;
+}
+
+// 白名单应用(对应 DB app_categories 表 + 聚合今日时长)
+message App {
+  string path = 1;
+  string name = 2;
+  string category = 3;
+  string icon_path = 4;    // 图标缓存路径(可选)
+  int32 today_minutes = 5; // 今日时长(聚合 activity_segments)
+  int64 added_at = 6;      // unix 秒
+}
+
+message AppList {
+  repeated App apps = 1;
+}
+
+message Result {
+  bool ok = 1;
+  string error = 2;
+}
