@@ -82,8 +82,7 @@ Item {
                         height: parent.height
                         color: modelData.state === "idle" ? Theme.muted
                              : (modelData.category ? Theme.colorOf(modelData.category) : Theme.muted)
-                        border.width: 1
-                        border.color: Theme.bg3
+                        // no border -> segments flow continuously (no dark gaps between them)
 
                         MouseArea {
                             anchors.fill: parent

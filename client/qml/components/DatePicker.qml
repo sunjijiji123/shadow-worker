@@ -1,18 +1,18 @@
-// DatePicker.qml - date navigator with calendar popup (v2 timeline header).
-// [< date >] + "Today" button. Clicking the date opens a month calendar popup.
+// DatePicker.qml - date navigator with calendar Popup (v2 timeline header).
+// Uses QtQuick.Controls Popup so the calendar floats on the Overlay layer
+// (above all page content, no z-order issues).
 // property dateText: "yyyy-MM-dd". signal dateSelected("yyyy-MM-dd").
 
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 import ShadowWorker
 
 Item {
     id: root
 
-    property string dateText: ""          // "yyyy-MM-dd"
-    property bool popupOpen: false
-    // internal: the month being viewed in the popup (QDate as JS Date)
-    property var viewMonth: new Date()    // first day of viewed month
+    property string dateText: ""
+    property var viewMonth: new Date()
 
     signal dateSelected(string date)
 
@@ -56,7 +56,6 @@ Item {
             anchors.rightMargin: 4
             spacing: 0
 
-            // prev day
             Rectangle {
                 width: 28; height: 28; radius: 6
                 color: prevMa.containsMouse ? Theme.bg2 : "transparent"
@@ -73,7 +72,6 @@ Item {
                 }
             }
 
-            // date display (click -> open popup)
             Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -89,12 +87,11 @@ Item {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         root.viewMonth = root.dateText ? root.parseDate(root.dateText) : new Date()
-                        root.popupOpen = !root.popupOpen
+                        calPopup.open()
                     }
                 }
             }
 
-            // next day
             Rectangle {
                 width: 28; height: 28; radius: 6
                 color: nextMa.containsMouse ? Theme.bg2 : "transparent"
@@ -113,27 +110,32 @@ Item {
         }
     }
 
-    // --- calendar popup ---
-    Rectangle {
-        id: popup
-        visible: root.popupOpen
-        anchors.top: bar.bottom
-        anchors.topMargin: 8
-        anchors.horizontalCenter: bar.horizontalCenter
+    // --- calendar Popup (Overlay layer -> floats above everything) ---
+    Popup {
+        id: calPopup
+        x: (bar.width - width) / 2
+        y: bar.height + 8
         width: 260
         height: 300
-        color: Theme.bg3
-        border.color: Theme.rule
-        border.width: 1
-        radius: 12
-        z: 100
+        padding: 0
+        modal: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        background: Rectangle {
+            color: Theme.bg3
+            border.color: Theme.rule
+            border.width: 1
+            radius: 12
+        }
+
+        onOpened: {
+            root.viewMonth = root.dateText ? root.parseDate(root.dateText) : new Date()
+        }
 
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 12
             spacing: 8
 
-            // header: prev month / title / next month
             RowLayout {
                 Layout.fillWidth: true
                 Text {
@@ -170,7 +172,6 @@ Item {
                 }
             }
 
-            // weekday header
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 0
@@ -186,7 +187,6 @@ Item {
                 }
             }
 
-            // day grid
             GridLayout {
                 id: dayGrid
                 Layout.fillWidth: true
@@ -198,7 +198,7 @@ Item {
                 Repeater {
                     model: root.buildDays(root.viewMonth)
                     delegate: Item {
-                        required property var modelData   // {day: int|0, date: "yyyy-MM-dd", isToday, isSel}
+                        required property var modelData
                         Layout.fillWidth: true
                         Layout.fillHeight: true
 
@@ -225,7 +225,7 @@ Item {
                                 onClicked: {
                                     if (modelData.day > 0) {
                                         root.dateSelected(modelData.date)
-                                        root.popupOpen = false
+                                        calPopup.close()
                                     }
                                 }
                             }
@@ -236,20 +236,11 @@ Item {
         }
     }
 
-    // click outside to close popup
-    MouseArea {
-        visible: root.popupOpen
-        anchors.fill: parent
-        z: -1
-        onClicked: root.popupOpen = false
-    }
-
-    // build 42-cell grid (6 weeks) for a month; Sun = column 0.
     function buildDays(monthDate) {
         var y = monthDate.getFullYear()
         var m = monthDate.getMonth()
         var first = new Date(y, m, 1)
-        var startWd = first.getDay()   // 0..6
+        var startWd = first.getDay()
         var daysInMonth = new Date(y, m + 1, 0).getDate()
         var today = new Date()
         var todayIso = isoDate(today)

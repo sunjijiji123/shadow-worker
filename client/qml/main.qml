@@ -13,10 +13,13 @@ ApplicationWindow {
     visible: true
     width: 1200
     height: 720
-    minimumWidth: 1024
-    minimumHeight: 600
+    // Fixed size: no user resize (simplifies layout). DPI scaling handled by Qt6.
+    minimumWidth: 1200
+    maximumWidth: 1200
+    minimumHeight: 720
+    maximumHeight: 720
     title: qsTr("Shadow Worker")
-    color: Theme.bg
+    color: Theme.bg2
 
     property string currentView: "overview"
 
@@ -109,7 +112,7 @@ ApplicationWindow {
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            color: Theme.bg
+            color: Theme.bg2
 
             StackLayout {
                 id: contentStack

@@ -1,5 +1,5 @@
-// Chip.qml - matches HTML .chip. Selectable (active state).
-// Usage: Chip { text: "..."; checked: ...; onClicked: ... }
+// Chip.qml - matches HTML .chip/.filter-chip. Selectable (active state).
+// Optional color dot (dotColor) for category filter chips.
 
 import QtQuick
 import ShadowWorker
@@ -9,6 +9,7 @@ Rectangle {
 
     property string text: ""
     property bool checked: false
+    property color dotColor: "transparent"   // if set, shows an 8x8 color square before text
 
     signal clicked()
 
@@ -16,15 +17,27 @@ Rectangle {
     border.color: checked ? Theme.accent : Theme.rule
     border.width: 1
     radius: 5
-    implicitWidth: chipText.implicitWidth + 20
-    implicitHeight: 24
+    implicitWidth: chipRow.implicitWidth + 20
+    implicitHeight: 30
 
-    Text {
-        id: chipText
+    Row {
+        id: chipRow
         anchors.centerIn: parent
-        text: root.text
-        color: checked ? Theme.accent : Theme.muted
-        font.pixelSize: Theme.fontTiny
+        spacing: 5
+
+        Rectangle {
+            visible: root.dotColor !== Qt.color("transparent")
+            width: 8; height: 8; radius: 2
+            color: root.dotColor
+            anchors.verticalCenter: parent.verticalCenter
+        }
+
+        Text {
+            text: root.text
+            color: checked ? Theme.accent : Theme.muted
+            font.pixelSize: Theme.fontTiny
+            anchors.verticalCenter: parent.verticalCenter
+        }
     }
 
     MouseArea {

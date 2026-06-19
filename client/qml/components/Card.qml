@@ -36,7 +36,6 @@ Rectangle {
             spacing: 12
 
             ColumnLayout {
-                Layout.fillWidth: true
                 spacing: 2
                 Text {
                     visible: root.title !== ""
@@ -55,7 +54,10 @@ Rectangle {
                 }
             }
 
-            Row {
+            // spacer pushes headerExtra to the far right edge
+            Item { Layout.fillWidth: true }
+
+            RowLayout {
                 id: headerExtraRow
                 spacing: 8
             }

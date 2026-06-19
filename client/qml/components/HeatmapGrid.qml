@@ -1,7 +1,7 @@
-// HeatmapGrid.qml - GitHub-style contribution grid for the overview page.
-// Pure QML (Repeater + Rectangle). Days laid out in 7-row columns (one column per ISO week).
+// HeatmapGrid.qml - GitHub-style contribution grid, grouped by month (v2 design).
+// ALWAYS renders the last `monthsBack` months of dates (like HTML cols=26 weeks).
+// Days with no data -> level 0 (dark fill); days in model -> their level.
 // model: [{ date: "YYYY-MM-DD", minutes: int, level: 0..5 }, ...]
-// Cells colored by Theme.accent at level/5 opacity; empty days (level 0) use bg.
 
 import QtQuick
 import QtQuick.Layouts
@@ -10,54 +10,56 @@ import ShadowWorker
 Item {
     id: root
 
-    property var model: []          // list of {date, minutes, level}
+    property var model: []
     property string selectedDate: ""
+    property int monthsBack: 5    // months shown; scroll for more
 
     signal dateClicked(string date)
 
-    // cell geometry
     readonly property int cellSize: 13
     readonly property int cellGap: 4
+    readonly property int monthGap: 26
+    // height matches HTML: month label (14) + gap (4) + 7 rows of cells
+    // each row = cellSize(13) + cellGap(4), 7 rows -> 7*13 + 6*4 = 115
+    readonly property int gridHeight: 14 + 4 + (7 * cellSize + 6 * cellGap)  // = 133
+    implicitHeight: gridHeight
 
-    implicitHeight: 7 * (cellSize + cellGap) + 16   // 7 rows + month label space
-    implicitWidth: 400
-
-    // level -> color
     function levelColor(level) {
-        var alpha
+        var a
         switch (level) {
-            case 1: alpha = 0.45; break
-            case 2: alpha = 0.60; break
-            case 3: alpha = 0.75; break
-            case 4: alpha = 0.90; break
-            case 5: alpha = 1.00; break
-            default: alpha = 0  // level 0 = no data
+            case 1: a = 0.45; break
+            case 2: a = 0.60; break
+            case 3: a = 0.75; break
+            case 4: a = 0.90; break
+            case 5: a = 1.00; break
+            default: a = 0
         }
-        return Qt.rgba(0.067, 0.722, 0.506, alpha)   // #10B981decomposed = 16/255,184/255,129/255
+        return Qt.rgba(0.067, 0.722, 0.506, a)   // #10B981
     }
 
-    // tooltip (created on demand, single instance)
+    function monthLabel(m) {
+        var names = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+        return names[m - 1]
+    }
+
     Rectangle {
         id: tip
         visible: false
-        color: Qt.rgba(0/255, 0/255, 0/255, 0.85)
+        color: Qt.rgba(0, 0, 0, 0.85)
         border.color: Theme.rule
         border.width: 1
         radius: 6
         width: tipText.implicitWidth + 16
         height: tipText.implicitHeight + 10
         z: 100
-        property string text: ""
         Text {
             id: tipText
             anchors.centerIn: parent
-            text: tip.text
             color: "#ffffff"
             font.pixelSize: 12
         }
         function show(txt, mx, my) {
-            text = txt
-            // position relative to root; clamp inside
+            tipText.text = txt
             var px = Math.min(Math.max(mx, 0), root.width - tip.width)
             var py = Math.max(my - tip.height - 6, 0)
             tip.x = px
@@ -67,65 +69,78 @@ Item {
         function hide() { tip.visible = false }
     }
 
-    // Grid: one column per week (7 days). We assume model is ordered ascending by date.
-    // Compute columns by grouping consecutive days; pad week start so Sunday=column row 0.
     Flickable {
         anchors.fill: parent
-        contentWidth: weekRow.implicitWidth
-        contentHeight: parent.height
+        contentWidth: monthRow.implicitWidth
+        contentHeight: monthRow.implicitHeight
         flickableDirection: Flickable.HorizontalFlick
         clip: true
         boundsBehavior: Flickable.StopAtBounds
+        interactive: contentWidth > width
 
         Row {
-            id: weekRow
-            spacing: root.cellGap
-            padding: 0
+            id: monthRow
+            spacing: root.monthGap
+            // center horizontally when content fits; Flickable scrolls when it doesn't
+            x: Math.max(0, (root.width - implicitWidth) / 2)
 
             Repeater {
-                // group model into weeks: list of columns, each column = 7 day slots
-                model: buildWeeks(root.model)
+                // always render the last N months, regardless of model
+                model: root.buildMonths(root.model, root.monthsBack)
 
-                delegate: Column {
-                    required property var modelData   // {days: [7 or fewer slots], label}
+                delegate: ColumnLayout {
+                    id: monthCol
+                    required property var modelData
                     spacing: root.cellGap
 
                     Text {
-                        // month label only on the first column of a month
-                        visible: modelData.label !== ""
                         text: modelData.label
                         color: Theme.muted
                         font.pixelSize: 11
-                        height: visible ? 14 : 0
+                        Layout.preferredHeight: 14
+                        Layout.leftMargin: 1
                     }
-                    Item { height: modelData.label !== "" ? 0 : 14; width: 1 }  // spacer when no label
 
-                    Repeater {
-                        model: modelData.days
-                        delegate: Rectangle {
-                            required property var modelData   // {date, minutes, level} or null
-                            width: root.cellSize
-                            height: root.cellSize
-                            radius: 3
-                            color: modelData ? root.levelColor(modelData.level) : Theme.bg
-                            border.color: root.selectedDate === (modelData ? modelData.date : "")
-                                          ? Theme.accent : "transparent"
-                            border.width: root.selectedDate === (modelData ? modelData.date : "") ? 1 : 0
+                    Row {
+                        spacing: root.cellGap
 
-                            MouseArea {
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                onEntered: {
-                                    if (modelData) {
-                                        var mins = modelData.minutes
-                                        var txt = modelData.date + "  " + (mins > 0 ? mins + " min" : "no activity")
-                                        var p = parent.mapToItem(root, parent.width / 2, 0)
-                                        tip.show(txt, p.x, p.y)
+                        Repeater {
+                            model: monthCol.modelData.weekColumns
+
+                            delegate: Column {
+                                required property var modelData
+                                spacing: root.cellGap
+
+                                Repeater {
+                                    model: modelData
+
+                                    delegate: Rectangle {
+                                        required property var modelData
+                                        width: root.cellSize
+                                        height: root.cellSize
+                                        radius: 3
+                                        // level 0 (no data) -> dark fill (#2a2a2a-ish); else accent by level
+                                        color: (modelData && modelData.level > 0)
+                                               ? root.levelColor(modelData.level)
+                                               : Qt.rgba(0.16, 0.16, 0.17, 1.0)   // #2a2a2a dark empty cell
+                                        border.color: "transparent"
+                                        border.width: 0
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            onEntered: {
+                                                if (modelData) {
+                                                    var mins = modelData.minutes || 0
+                                                    var txt = modelData.date + "  " + (mins > 0 ? mins + " min" : "no activity")
+                                                    var p = parent.mapToItem(root, parent.width / 2, 0)
+                                                    tip.show(txt, p.x, p.y)
+                                                }
+                                            }
+                                            onExited: tip.hide()
+                                            onClicked: if (modelData) root.dateClicked(modelData.date)
+                                        }
                                     }
-                                }
-                                onExited: tip.hide()
-                                onClicked: {
-                                    if (modelData) root.dateClicked(modelData.date)
                                 }
                             }
                         }
@@ -135,38 +150,64 @@ Item {
         }
     }
 
-    // build weeks from a flat list of {date, minutes, level}.
-    // returns [{days: [7 slots], label: "Mon"}]; each slot is the day obj or null.
-    function buildWeeks(days) {
-        var cols = []
-        var currentCol = null
-        var currentMonth = -1
-        var i = 0
-        // map date -> {y,m,d,weekday}
-        function parse(s) {
-            var parts = s.split("-")
-            return { y: parseInt(parts[0]), m: parseInt(parts[1]), d: parseInt(parts[2]) }
+    // Build the last `monthsBack` months of cells. Every day in range becomes a cell
+    // (level from model lookup, or 0). Cells flow column-by-column within each month
+    // (7 rows; first day aligned to its weekday via leading nulls).
+    function buildMonths(model, monthsBack) {
+        // index model by date for O(1) lookup
+        var byDate = {}
+        if (model) {
+            for (var i = 0; i < model.length; i++) {
+                byDate[model[i].date] = model[i]
+            }
         }
-        // JS Date: weekday 0=Sun..6=Sat; we want Sun at row 0
-        for (var idx = 0; idx < days.length; idx++) {
-            var day = days[idx]
-            var p = parse(day.date)
-            var dt = new Date(Date.UTC(p.y, p.m - 1, p.d))
-            var weekday = dt.getUTCDay()   // 0..6
-            // start a new column when weekday==0 or no current column
-            if (weekday === 0 || currentCol === null) {
-                if (currentCol !== null) cols.push(currentCol)
-                currentCol = { days: [null,null,null,null,null,null,null], label: "" }
-                // month label when month changes
-                if (p.m !== currentMonth) {
-                    currentMonth = p.m
-                    var monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
-                    currentCol.label = monthNames[p.m - 1]
+        function iso(d) {
+            var y = d.getFullYear()
+            var m = ("0" + (d.getMonth() + 1)).slice(-2)
+            var day = ("0" + d.getDate()).slice(-2)
+            return y + "-" + m + "-" + day
+        }
+        // determine start: first day of the month that is `monthsBack` months before today
+        var today = new Date()
+        var startY = today.getFullYear()
+        var startM = today.getMonth() - (monthsBack - 1)
+        while (startM < 0) { startM += 12; startY -= 1 }
+
+        var out = []
+        for (var mi = 0; mi < monthsBack; mi++) {
+            var y = startY
+            var m = startM + mi
+            while (m > 11) { m -= 12; y += 1 }
+            var label = root.monthLabel(m + 1)
+            var daysInMonth = new Date(y, m + 1, 0).getDate()
+            // build flat slot list: leading nulls for weekday of day 1, then each day
+            var firstWd = new Date(y, m, 1).getDay()   // 0..6
+            var slots = []
+            for (var p = 0; p < firstWd; p++) slots.push(null)
+            for (var d = 1; d <= daysInMonth; d++) {
+                var dd = new Date(y, m, d)
+                var isoStr = iso(dd)
+                var entry = byDate[isoStr]
+                if (entry) {
+                    slots.push(entry)
+                } else {
+                    // future days (after today) -> null (don't render)
+                    if (dd > today) {
+                        slots.push(null)
+                    } else {
+                        slots.push({ date: isoStr, minutes: 0, level: 0 })
+                    }
                 }
             }
-            currentCol.days[weekday] = day
+            // pad to multiple of 7
+            while (slots.length % 7 !== 0) slots.push(null)
+            // chunk into columns of 7
+            var cols = []
+            for (var c = 0; c < slots.length; c += 7) {
+                cols.push([slots[c], slots[c+1], slots[c+2], slots[c+3], slots[c+4], slots[c+5], slots[c+6]])
+            }
+            out.push({ label: label, weekColumns: cols })
         }
-        if (currentCol !== null) cols.push(currentCol)
-        return cols
+        return out
     }
 }

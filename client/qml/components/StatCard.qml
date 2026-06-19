@@ -18,7 +18,7 @@ Rectangle {
     border.color: Theme.rule
     border.width: 1
     radius: Theme.radiusCard
-    implicitHeight: 96
+    implicitHeight: 116
 
     ColumnLayout {
         anchors.fill: parent

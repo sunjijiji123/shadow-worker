@@ -3,6 +3,7 @@
 // Wires OverviewViewModel; heatmap via GetHeatmap, rank via GetCategoryRank (backend M1).
 
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 import ShadowWorker
 
@@ -27,10 +28,20 @@ Item {
         }
     }
 
-    ColumnLayout {
+    Flickable {
         anchors.fill: parent
         anchors.margins: 20
-        spacing: 16
+        contentWidth: width
+        contentHeight: contentCol.implicitHeight
+        flickableDirection: Flickable.VerticalFlick
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+        ColumnLayout {
+            id: contentCol
+            width: parent.width
+            spacing: 16
 
         // ---- title bar + range chips + refresh ----
         RowLayout {
@@ -78,19 +89,27 @@ Item {
                       : viewModel && viewModel.range === "week" ? qsTr("Week Duration")
                       : qsTr("Month Duration")
                 value: viewModel ? formatMinutes(viewModel.todayMinutes) : "--"
-                sub: viewModel ? formatDelta(viewModel.minutesDelta, qsTr("min")) : ""
+                sub: {
+                    if (!viewModel) return qsTr("vs yesterday --")
+                    var d = formatDelta(viewModel.minutesDelta, qsTr("min"))
+                    return d !== "" ? qsTr("vs yesterday ") + d : qsTr("vs yesterday --")
+                }
                 subColor: viewModel && viewModel.minutesDelta >= 0 ? Theme.accent : Theme.danger
             }
             StatCard {
                 label: qsTr("Interruptions")
                 value: viewModel ? viewModel.interruptCount : 0
-                sub: viewModel ? formatDelta(viewModel.interruptDelta, "") : ""
+                sub: {
+                    if (!viewModel) return qsTr("vs yesterday --")
+                    var d = formatDelta(viewModel.interruptDelta, "")
+                    return d !== "" ? qsTr("vs yesterday ") + d : qsTr("vs yesterday --")
+                }
                 subColor: viewModel && viewModel.interruptDelta <= 0 ? Theme.accent : Theme.danger
             }
             StatCard {
                 label: qsTr("Apps Used")
                 value: viewModel ? viewModel.appCount : 0
-                sub: viewModel && viewModel.activeCategory ? viewModel.activeCategory : ""
+                sub: viewModel && viewModel.activeCategory ? viewModel.activeCategory : "--"
             }
             StatCard {
                 label: qsTr("Current App")
@@ -177,45 +196,51 @@ Item {
             Card {
                 Layout.fillWidth: true
                 Layout.preferredWidth: 2
+                Layout.minimumWidth: 300
+                Layout.preferredHeight: 220
                 title: qsTr("Activity Heatmap")
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-
-                    // legend
-                    Text {
-                        text: qsTr("Less")
-                        color: Theme.muted
-                        font.pixelSize: 12
-                    }
-                    Repeater {
-                        model: [0,1,2,3,4,5]
-                        delegate: Rectangle {
-                            width: 10
-                            height: 10
-                            radius: 2
-                            color: Qt.rgba(0.067, 0.722, 0.506, [0,0.45,0.60,0.75,0.90,1.00][index])
+                // legend sits in the header, right-aligned with the title
+                headerExtra: [
+                    Row {
+                        spacing: 6
+                        Text {
+                            text: qsTr("Less")
+                            color: Theme.muted
+                            font.pixelSize: 12
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        Repeater {
+                            model: [0.25, 0.45, 0.65, 0.85, 1.00]
+                            delegate: Rectangle {
+                                width: 10
+                                height: 10
+                                radius: 2
+                                color: Qt.rgba(0.067, 0.722, 0.506, modelData)
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+                        Text {
+                            text: qsTr("More")
+                            color: Theme.muted
+                            font.pixelSize: 12
+                            anchors.verticalCenter: parent.verticalCenter
                         }
                     }
-                    Text {
-                        text: qsTr("More")
-                        color: Theme.muted
-                        font.pixelSize: 12
-                    }
-                    Item { Layout.fillWidth: true }
-                }
+                ]
 
                 HeatmapGrid {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 120
-                    model: viewModel && viewModel.heatmap ? viewModel.heatmap : []
+                    Layout.preferredHeight: 133
+                    model: root.fakeHeatmap()  // TEMP fake data; replace with viewModel.heatmap
                 }
             }
 
             // quick switches
             Card {
+                Layout.fillWidth: true
                 Layout.preferredWidth: 1
+                Layout.minimumWidth: 220
+                Layout.preferredHeight: 220
                 title: qsTr("Quick Switches")
 
                 ColumnLayout {
@@ -253,14 +278,9 @@ Item {
             }
         }
 
-        // ---- category rank + app rank ----
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 16
-
+        // ---- category rank (full width, stacked vertically with app rank) ----
             Card {
                 Layout.fillWidth: true
-                Layout.preferredWidth: 1
                 title: qsTr("Category Rank")
                 description: viewModel && viewModel.range === "day" ? qsTr("Today category share")
                            : viewModel && viewModel.range === "week" ? qsTr("Week category share")
@@ -291,9 +311,9 @@ Item {
                 }
             }
 
+        // ---- app rank (full width, below category rank) ----
             Card {
                 Layout.fillWidth: true
-                Layout.preferredWidth: 1
                 title: qsTr("App Rank")
 
                 ColumnLayout {
@@ -319,9 +339,28 @@ Item {
                     }
                 }
             }
-        }
 
-        Item { Layout.fillHeight: true }
+        // (no fillHeight spacer - Flickable handles overflow)
+        }
+    } // Flickable
+
+    // TEMP: fake heatmap data for visual verification (remove before commit)
+    function fakeHeatmap() {
+        var out = []
+        var today = new Date()
+        for (var i = 0; i < 150; i++) {
+            var d = new Date(today)
+            d.setDate(today.getDate() - i)
+            var iso = d.getFullYear() + "-" + ("0"+(d.getMonth()+1)).slice(-2) + "-" + ("0"+d.getDate()).slice(-2)
+            var wd = d.getDay()
+            var weekend = (wd === 0 || wd === 6)
+            if (Math.random() < (weekend ? 0.4 : 0.85)) {
+                var mins = weekend ? Math.floor(30 + Math.random()*90) : Math.floor(120 + Math.random()*300)
+                var lvl = mins < 60 ? 1 : mins < 180 ? 2 : mins < 300 ? 3 : mins < 420 ? 4 : 5
+                out.push({ date: iso, minutes: mins, level: lvl })
+            }
+        }
+        return out
     }
 
     // ---- helpers ----
