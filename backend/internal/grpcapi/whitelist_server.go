@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"time"
 
 	"shadow-worker/backend/internal/storage"
 )
@@ -26,8 +27,7 @@ func (s *WhitelistServer) List(ctx context.Context, req *ListAppsRequest) (*AppL
 		return nil, fmt.Errorf("列出白名单失败: %w", err)
 	}
 
-	now := today()
-	start, end := dayRange(now)
+	start, end := storage.RangeBounds(time.Time{}, "day")
 	segs, err := s.db.ListActivitySegments(start, end)
 	if err != nil {
 		return nil, fmt.Errorf("查询活动段失败: %w", err)

@@ -11,28 +11,41 @@ option go_package = "shadow-worker/backend/internal/grpcapi;grpcapi";
 // OverviewService: 概览页数据 + 实时状态推送
 // ============================================================
 service OverviewService {
-  // 一次性获取当前概览
+  // 一次性获取当前概览(date + range 支持今天/本周/本月切换)
   rpc GetOverview(GetOverviewRequest) returns (OverviewData);
   // 持续推送状态变化(今日时长/采集状态/当前应用)
   rpc WatchOverview(WatchOverviewRequest) returns (stream OverviewUpdate);
+  // 活跃热力图(GitHub 贡献格风格,回溯 N 个月)
+  rpc GetHeatmap(HeatmapRequest) returns (HeatmapData);
+  // 类别占比排行(横条 + 占比% + 时长)
+  rpc GetCategoryRank(RankRequest) returns (CategoryRankData);
 }
 
 message GetOverviewRequest {
-  // 预留:可指定日期,默认今天
+  // 可指定日期,默认今天;range=day 时用此(week/month 忽略 date 取当前周/月)
   string date = 1;
+  // day(默认)/ week / month,支撑概览页切换
+  string range = 2;
 }
 
 message WatchOverviewRequest {}
 
 // 概览页一次性的完整快照
 message OverviewData {
-  int32 today_minutes = 1;        // 今日工作总分钟数
-  int32 active_segments = 2;      // 今日活动段数
-  repeated AppSummary apps = 3;   // 今日有活动的应用列表
+  int32 today_minutes = 1;        // 当前 range 的工作总分钟数
+  int32 active_segments = 2;      // 活动段数
+  repeated AppSummary apps = 3;   // 有活动的应用列表(应用排行)
   string collection_status = 4;   // running / paused
   string asr_status = 5;          // ready / error / unconfigured
   string vlm_status = 6;          // ready / error / off / unconfigured
   string mcp_status = 7;          // running / stopped
+  // v2 新增字段(8+,不破坏旧字段)
+  int32 interrupt_count = 8;      // 打断次数(active↔idle 切换次数)
+  int32 minutes_delta = 9;        // 较上一周期 ±分钟(今天 vs 昨天 / 本周 vs 上周 / 本月 vs 上月)
+  int32 interrupt_delta = 10;     // 较上一周期 ±打断次数
+  int32 app_count = 11;           // 涉及应用数
+  string active_app = 12;         // 当前前台白名单应用(当前应用卡)
+  string active_category = 13;    // active_app 的类别
 }
 
 // 概览页单个应用的小卡片信息
@@ -47,4 +60,44 @@ message OverviewUpdate {
   int32 today_minutes = 1;        // 实时更新的今日时长
   string collection_status = 2;   // 采集状态变化
   string active_app = 3;          // 当前前台白名单应用(空=非白名单/idle)
+}
+
+// ============================================================
+// 热力图(GetHeatmap)
+// ============================================================
+message HeatmapRequest {
+  int32 months_back = 1;          // 向前回溯几个月(默认 3)
+}
+
+message HeatmapData {
+  repeated DayActivity days = 1;
+}
+
+// 热力图单日
+message DayActivity {
+  string date = 1;                // YYYY-MM-DD
+  int32 minutes = 2;              // 当日活跃分钟
+  int32 level = 3;                // 0~5 档(0=无数据,5=满格),由后端按 minutes 分桶
+}
+
+// ============================================================
+// 类别占比排行(GetCategoryRank)
+// ============================================================
+message RankRequest {
+  string date = 1;                // 默认今天
+  string range = 2;               // day / week / month
+}
+
+message CategoryRankData {
+  string range = 1;
+  int32 total_minutes = 2;
+  repeated CategoryStat categories = 3;
+}
+
+// 类别统计单行
+message CategoryStat {
+  string category = 1;            // coding/browser/chat/office/other
+  int32 minutes = 2;
+  int32 percent = 3;              // 0~100(四舍五入)
+  string color = 4;               // 类别固定色 #3B82F6 等
 }

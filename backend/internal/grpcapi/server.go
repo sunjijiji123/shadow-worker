@@ -21,31 +21,184 @@ func NewOverviewServer(db *storage.DB, coll *collector.Collector) *OverviewServe
 	return &OverviewServer{db: db, coll: coll}
 }
 
-// GetOverview 返回概览快照。
+// GetOverview 返回概览快照(支持 day/week/month 范围 + 打断次数 + 历史对比)。
 func (s *OverviewServer) GetOverview(ctx context.Context, req *GetOverviewRequest) (*OverviewData, error) {
-	minutes, segments, err := s.db.TodayActivityMinutes()
+	rng := req.Range
+	if rng == "" {
+		rng = "day"
+	}
+
+	var day time.Time
+	if req.Date != "" {
+		if parsed, err := time.Parse("2006-01-02", req.Date); err == nil {
+			day = parsed
+		}
+	}
+
+	// 当前范围边界
+	start, end := storage.RangeBounds(day, rng)
+	// 上一周期边界(算 delta)
+	prevStart, prevEnd := storage.PreviousRangeBounds(day, rng)
+
+	minutes, err := s.db.RangeActiveMinutes(start, end)
+	if err != nil {
+		return nil, err
+	}
+	segments, err := s.db.RangeActiveSegments(start, end)
+	if err != nil {
+		return nil, err
+	}
+	interrupts, err := s.db.InterruptCount(start, end)
 	if err != nil {
 		return nil, err
 	}
 
-	status := "stopped"
-	if s.coll != nil {
-		if s.coll.IsRunning() {
-			status = "running"
-		} else {
-			status = "paused"
-		}
+	// 应用排行 + 涉及应用数
+	apps, err := s.db.AppMinutesByRange(start, end)
+	if err != nil {
+		return nil, err
 	}
+	appSummaries := make([]*AppSummary, 0, len(apps))
+	for _, am := range apps {
+		appSummaries = append(appSummaries, &AppSummary{
+			Name:         am.Name,
+			Category:     am.Category,
+			TodayMinutes: int32(am.Minutes),
+		})
+	}
+
+	// 上一周期数据(delta)
+	prevMinutes, _ := s.db.RangeActiveMinutes(prevStart, prevEnd)
+	prevInterrupts, _ := s.db.InterruptCount(prevStart, prevEnd)
+
+	// 当前前台应用
+	activeApp, activeCategory := s.currentActiveApp()
+
+	status := s.collectionStatus()
 
 	return &OverviewData{
 		TodayMinutes:     int32(minutes),
 		ActiveSegments:   int32(segments),
+		Apps:             appSummaries,
 		CollectionStatus: status,
 		AsrStatus:        "ready",
 		VlmStatus:        "ready",
 		McpStatus:        "running",
-		Apps:             nil,
+		InterruptCount:   int32(interrupts),
+		MinutesDelta:     int32(minutes - prevMinutes),
+		InterruptDelta:   int32(interrupts - prevInterrupts),
+		AppCount:         int32(len(apps)),
+		ActiveApp:        activeApp,
+		ActiveCategory:   activeCategory,
 	}, nil
+}
+
+// GetHeatmap 返回活跃热力图(回溯 months_back 个月的每日活跃分钟 + 0~5 档)。
+func (s *OverviewServer) GetHeatmap(ctx context.Context, req *HeatmapRequest) (*HeatmapData, error) {
+	monthsBack := int(req.MonthsBack)
+	if monthsBack <= 0 {
+		monthsBack = 3
+	}
+
+	// 从 N 个月前的 1 号开始,到今天结束
+	now := time.Now().UTC()
+	end := now.AddDate(0, 0, 1).Truncate(24 * time.Hour) // 明天 0 点(含今天)
+	start := now.AddDate(0, -monthsBack, 0)
+	start = start.AddDate(0, 0, -(int(start.Day()) - 1)).Truncate(24 * time.Hour) // 回到 1 号
+
+	daily, err := s.db.DailyMinutes(start, end)
+	if err != nil {
+		return nil, err
+	}
+
+	// 构建 date→minutes 索引,补齐范围内每一天(无数据天 level=0)
+	idx := make(map[string]int, len(daily))
+	for _, d := range daily {
+		idx[d.Date] = d.Minutes
+	}
+
+	days := make([]*DayActivity, 0, int(end.Sub(start)/(24*time.Hour))+1)
+	for d := start; d.Before(end); d = d.Add(24 * time.Hour) {
+		m := idx[d.Format("2006-01-02")]
+		days = append(days, &DayActivity{
+			Date:    d.Format("2006-01-02"),
+			Minutes: int32(m),
+			Level:   int32(storage.MinutesToLevel(m)),
+		})
+	}
+
+	return &HeatmapData{Days: days}, nil
+}
+
+// GetCategoryRank 返回类别占比排行(横条 + 占比% + 时长 + 类别色)。
+func (s *OverviewServer) GetCategoryRank(ctx context.Context, req *RankRequest) (*CategoryRankData, error) {
+	rng := req.Range
+	if rng == "" {
+		rng = "day"
+	}
+
+	var day time.Time
+	if req.Date != "" {
+		if parsed, err := time.Parse("2006-01-02", req.Date); err == nil {
+			day = parsed
+		}
+	}
+
+	start, end := storage.RangeBounds(day, rng)
+
+	cats, err := s.db.CategoryAggregate(start, end)
+	if err != nil {
+		return nil, err
+	}
+
+	total := 0
+	for _, c := range cats {
+		total += c.Minutes
+	}
+
+	stats := make([]*CategoryStat, 0, len(cats))
+	for _, c := range cats {
+		var pct int
+		if total > 0 {
+			pct = (c.Minutes * 100) / total
+		}
+		stats = append(stats, &CategoryStat{
+			Category: c.Category,
+			Minutes:  int32(c.Minutes),
+			Percent:  int32(pct),
+			Color:    storage.CategoryColor(c.Category),
+		})
+	}
+
+	return &CategoryRankData{
+		Range:        rng,
+		TotalMinutes: int32(total),
+		Categories:   stats,
+	}, nil
+}
+
+// collectionStatus 返回当前采集状态字符串。
+func (s *OverviewServer) collectionStatus() string {
+	if s.coll == nil {
+		return "stopped"
+	}
+	if s.coll.IsRunning() {
+		return "running"
+	}
+	return "paused"
+}
+
+// currentActiveApp 返回当前前台白名单应用(名 + 类别);非白名单/idle 返回空串。
+func (s *OverviewServer) currentActiveApp() (string, string) {
+	app, err := collector.ForegroundApp()
+	if err != nil {
+		return "", ""
+	}
+	cat, _ := s.db.GetAppCategory(app.Path)
+	if cat == nil {
+		return "", ""
+	}
+	return app.Name, cat.Category
 }
 
 // WatchOverview 持续推送状态变化。
@@ -60,28 +213,14 @@ func (s *OverviewServer) WatchOverview(req *WatchOverviewRequest, stream Overvie
 		case <-ticker.C:
 		}
 
-		minutes, _, err := s.db.TodayActivityMinutes()
+		start, end := storage.RangeBounds(time.Time{}, "day")
+		minutes, err := s.db.RangeActiveMinutes(start, end)
 		if err != nil {
 			continue
 		}
 
-		status := "stopped"
-		if s.coll != nil {
-			if s.coll.IsRunning() {
-				status = "running"
-			} else {
-				status = "paused"
-			}
-		}
-
-		activeApp := ""
-		app, err := collector.ForegroundApp()
-		if err == nil {
-			cat, _ := s.db.GetAppCategory(app.Path)
-			if cat != nil {
-				activeApp = app.Name
-			}
-		}
+		status := s.collectionStatus()
+		activeApp, _ := s.currentActiveApp()
 
 		if err := stream.Send(&OverviewUpdate{
 			TodayMinutes:     int32(minutes),
@@ -91,15 +230,4 @@ func (s *OverviewServer) WatchOverview(req *WatchOverviewRequest, stream Overvie
 			return err
 		}
 	}
-}
-
-// today 返回当前 UTC 日期 00:00:00。
-func today() time.Time {
-	return time.Now().UTC().Truncate(24 * time.Hour)
-}
-
-// dayRange 返回某天的 [start, end)。
-func dayRange(day time.Time) (time.Time, time.Time) {
-	day = day.UTC().Truncate(24 * time.Hour)
-	return day, day.Add(24 * time.Hour)
 }
