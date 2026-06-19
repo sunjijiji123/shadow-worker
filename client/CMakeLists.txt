@@ -210,6 +210,7 @@ qt_add_qml_module(shadow-worker-client
         qml/components/TextArea.qml
         qml/components/PromptItem.qml
         qml/components/KeyCap.qml
+        qml/components/Badge.qml
         # pages
         qml/main.qml
         qml/pages/OverviewPage.qml
