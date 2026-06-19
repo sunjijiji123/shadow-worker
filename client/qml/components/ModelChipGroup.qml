@@ -11,9 +11,14 @@ ColumnLayout {
 
     property var chips: []
     property string activeKey: ""
+    // when only one chip remains, its × is disabled to avoid an empty list
+    // (the form below has no model to bind to). Emit closeBlocked for feedback.
+    readonly property bool canDelete: chips.length > 1
 
     signal chipClicked(string key)
     signal addClicked()
+    signal chipClosed(string key)
+    signal closeBlocked()
 
     spacing: 0
 
@@ -51,31 +56,61 @@ ColumnLayout {
                         anchors.verticalCenter: parent.verticalCenter
                     }
 
-                    // close button (deletable chips)
-                    Rectangle {
+                    // spacer that reserves room on the right of the label for the
+                    // close button (which is a sibling rendered above selectMa).
+                    // Does NOT draw the × glyph itself.
+                    Item {
                         visible: modelData.deletable !== false
-                        width: 14; height: 14; radius: 7
-                        color: closeMa.containsMouse ? Qt.rgba(239/255,68/255,68/255,0.2) : "transparent"
+                        width: 16; height: 16
                         anchors.verticalCenter: parent.verticalCenter
-                        Text {
-                            anchors.centerIn: parent
-                            text: "\u00D7"   // ×
-                            color: closeMa.containsMouse ? Theme.danger : Theme.muted
-                            font.pixelSize: 11
-                        }
-                        MouseArea {
-                            id: closeMa
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {}  // TODO: emit delete signal
-                        }
                     }
                 }
 
+                // chip select hit area (covers whole chip; sits BELOW close button in z)
                 MouseArea {
+                    id: selectMa
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root.chipClicked(modelData.key)
+                }
+
+                // close hit area - direct child of the chip Rectangle, with higher z
+                // so it reliably receives hover/click instead of the select MouseArea.
+                // Disabled (dim ×, no hover highlight, no delete) when this is the
+                // last remaining chip — see root.canDelete.
+                Rectangle {
+                    id: closeBtn
+                    visible: modelData.deletable !== false
+                    anchors.right: parent.right
+                    anchors.rightMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 16; height: 16; radius: 8
+                    // only show red hover bg when deletion is allowed
+                    color: (root.canDelete && closeMa.containsMouse)
+                           ? Qt.rgba(239/255,68/255,68/255,0.2) : "transparent"
+                    z: 10   // above selectMa
+                    Behavior on color { ColorAnimation { duration: 120 } }
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "\u00D7"   // ×
+                        color: root.canDelete
+                               ? (closeMa.containsMouse ? Theme.danger : Theme.muted)
+                               : Qt.rgba(0.4, 0.4, 0.4, 1)   // dimmed/disabled
+                        font.pixelSize: 12
+                        Behavior on color { ColorAnimation { duration: 120 } }
+                    }
+
+                    MouseArea {
+                        id: closeMa
+                        anchors.fill: parent
+                        cursorShape: root.canDelete ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        hoverEnabled: true
+                        onClicked: {
+                            if (root.canDelete) root.chipClosed(modelData.key)
+                            else root.closeBlocked()
+                        }
+                    }
                 }
             }
         }

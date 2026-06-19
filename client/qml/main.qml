@@ -148,8 +148,9 @@ ApplicationWindow {
     }
 
     // global toast helper for child pages
-    function toast(text) {
-        globalToast.show(text)
+    // type: optional, "success" (default) | "error" | "warning"
+    function toast(text, type) {
+        globalToast.show(text, type)
     }
 
     Component.onCompleted: {

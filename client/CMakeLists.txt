@@ -206,6 +206,10 @@ qt_add_qml_module(shadow-worker-client
         qml/components/VolumeBar.qml
         qml/components/MicTestButton.qml
         qml/components/AddModelDialog.qml
+        qml/components/ConfirmDialog.qml
+        qml/components/TextArea.qml
+        qml/components/PromptItem.qml
+        qml/components/KeyCap.qml
         # pages
         qml/main.qml
         qml/pages/OverviewPage.qml
