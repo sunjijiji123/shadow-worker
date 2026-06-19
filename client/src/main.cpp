@@ -25,9 +25,11 @@ static std::ofstream g_log;
 
 static void logMsg(const std::string &msg) {
   if (!g_log.is_open()) {
-    g_log.open("C:\\Users\\Administrator\\code\\1-ai\\shadow-"
-               "worker\\client\\build\\client_debug.log",
-               std::ios::app);
+    // write to %TEMP% for portability (old hardcoded path no longer exists)
+    const char *tmp = std::getenv("TEMP");
+    std::string path = tmp ? tmp : ".";
+    path += "\\shadow-worker-client.log";
+    g_log.open(path, std::ios::app);
   }
   g_log << msg << std::endl;
   g_log.flush();

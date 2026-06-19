@@ -2,8 +2,9 @@
 // Source of truth: docs/ui-spec-v2.md section 1.
 // NOTE: category/event Chinese display names are NOT here - they go through i18n .ts files.
 //       This file only holds colors/sizes (language-neutral).
-// Singleton type declared in CMakeLists (QT_QML_SINGLETON_TYPE TRUE).
+// Singleton: BOTH pragma singleton AND QT_QML_SINGLETON_TYPE in CMakeLists are required.
 
+pragma Singleton
 import QtQuick
 
 QtObject {
@@ -23,8 +24,8 @@ QtObject {
     readonly property color danger:    "#EF4444"   // red (delete/error)
 
     // accent translucent bg (used by active/hover states)
-    readonly property color accentBg:  "rgba(16,185,129,0.10)"
-    readonly property color accentBg2: "rgba(16,185,129,0.15)"
+    readonly property color accentBg:  Qt.rgba(16/255, 185/255, 129/255, 0.10)
+    readonly property color accentBg2: Qt.rgba(16/255, 185/255, 129/255, 0.15)
 
     // ---- fixed category colors (timeline/stats/cards unified) ----
     // NOTE: chat category color equals accent value, but roles differ (category vs UI action)

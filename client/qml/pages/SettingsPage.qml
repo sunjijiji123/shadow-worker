@@ -4,6 +4,7 @@
 // M3/M4 TODO: model chips + add dialog + form fields.
 
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 import ShadowWorker
 

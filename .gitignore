@@ -2,11 +2,15 @@
 .trae/
 .zcode/
 
-# Temp scripts (Python generators used during dev)
+# Temp scripts / debug artifacts (Python generators, PowerShell, screenshots)
 .scan_*.py
 .gen_*.py
 .fix_*.py
 .inject_*.py
+.restore_*.py
+.shot.ps1
+.screenshot.png
+.backend.log
 
 # Build artifacts
 backend/shadow-worker.exe

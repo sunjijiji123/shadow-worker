@@ -40,7 +40,7 @@ Item {
     Rectangle {
         id: tip
         visible: false
-        color: "rgba(0,0,0,0.85)"
+        color: Qt.rgba(0/255, 0/255, 0/255, 0.85)
         border.color: Theme.rule
         border.width: 1
         radius: 6

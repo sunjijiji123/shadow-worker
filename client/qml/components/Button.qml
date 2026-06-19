@@ -15,12 +15,12 @@ Rectangle {
 
     color: {
         if (kind === "primary") return Theme.accent
-        if (kind === "danger") return "rgba(239,68,68,0.15)"
+        if (kind === "danger") return Qt.rgba(239/255, 68/255, 68/255, 0.15)
         return "transparent"           // ghost
     }
     border.color: {
         if (kind === "primary") return Theme.accent
-        if (kind === "danger") return "rgba(239,68,68,0.3)"
+        if (kind === "danger") return Qt.rgba(239/255, 68/255, 68/255, 0.3)
         return Theme.rule              // ghost
     }
     border.width: 1
