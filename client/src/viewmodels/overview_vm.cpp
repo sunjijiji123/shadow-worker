@@ -1,4 +1,4 @@
-// OverviewViewModel 实现
+// OverviewViewModel implementation.
 
 #include "overview_vm.h"
 
@@ -27,15 +27,25 @@ void OverviewViewModel::setChannel(
   refresh();
 }
 
+void OverviewViewModel::setRange(const QString &r) {
+  if (m_range == r)
+    return;
+  m_range = r;
+  emit rangeChanged();
+  refresh();          // re-fetch stats with new range
+  refreshCategoryRank();
+}
+
 void OverviewViewModel::refresh() {
   if (!m_channel) {
-    setError(QStringLiteral("gRPC channel 未初始化"));
+    setError(QStringLiteral("gRPC channel not initialized"));
     return;
   }
   setLoading(true);
   setError({});
 
   GetOverviewRequest req;
+  req.setRange(m_range);
   std::unique_ptr<QGrpcCallReply> reply = m_client.GetOverview(req);
   auto *replyPtr = reply.get();
   reply.release();
@@ -47,16 +57,85 @@ void OverviewViewModel::refresh() {
         setLoading(false);
 
         if (!status.isOk()) {
-          setError(QStringLiteral("gRPC 错误: ") + status.message());
+          setError(QStringLiteral("gRPC error: ") + status.message());
           return;
         }
 
         std::optional<OverviewData> opt = replyPtr->read<OverviewData>();
         if (!opt.has_value()) {
-          setError(QStringLiteral("解析响应失败"));
+          setError(QStringLiteral("Failed to parse response"));
           return;
         }
         applyOverviewData(*opt);
+      });
+}
+
+void OverviewViewModel::refreshHeatmap(int monthsBack) {
+  if (!m_channel)
+    return;
+
+  shadowworker::HeatmapRequest req;
+  req.setMonthsBack(monthsBack);
+  auto reply = m_client.GetHeatmap(req);
+  auto *replyPtr = reply.get();
+  reply.release();
+
+  QObject::connect(
+      replyPtr, &QGrpcCallReply::finished, this,
+      [this, replyPtr](const QGrpcStatus &status) {
+        replyPtr->deleteLater();
+        if (!status.isOk()) {
+          qWarning() << "GetHeatmap failed:" << status.message();
+          return;
+        }
+        auto opt = replyPtr->read<shadowworker::HeatmapData>();
+        if (!opt)
+          return;
+        m_heatmap.clear();
+        const auto &days = opt->days();
+        for (const auto &d : days) {
+          QVariantMap m;
+          m["date"] = d.date();
+          m["minutes"] = (int)d.minutes();
+          m["level"] = (int)d.level();
+          m_heatmap.append(m);
+        }
+        emit heatmapChanged();
+      });
+}
+
+void OverviewViewModel::refreshCategoryRank() {
+  if (!m_channel)
+    return;
+
+  shadowworker::RankRequest req;
+  req.setRange(m_range);
+  auto reply = m_client.GetCategoryRank(req);
+  auto *replyPtr = reply.get();
+  reply.release();
+
+  QObject::connect(
+      replyPtr, &QGrpcCallReply::finished, this,
+      [this, replyPtr](const QGrpcStatus &status) {
+        replyPtr->deleteLater();
+        if (!status.isOk()) {
+          qWarning() << "GetCategoryRank failed:" << status.message();
+          return;
+        }
+        auto opt = replyPtr->read<shadowworker::CategoryRankData>();
+        if (!opt)
+          return;
+        m_categoryRank.clear();
+        const auto &cats = opt->categories();
+        for (const auto &c : cats) {
+          QVariantMap m;
+          m["category"] = c.category();
+          m["minutes"] = (int)c.minutes();
+          m["percent"] = (int)c.percent();
+          m["color"] = c.color();
+          m_categoryRank.append(m);
+        }
+        emit categoryRankChanged();
       });
 }
 
@@ -87,10 +166,16 @@ void OverviewViewModel::resumeCollection() {
 void OverviewViewModel::applyOverviewData(const OverviewData &data) {
   m_todayMinutes = (int)data.todayMinutes();
   m_activeSegments = (int)data.activeSegments();
+  m_interruptCount = (int)data.interruptCount();
+  m_minutesDelta = (int)data.minutesDelta();
+  m_interruptDelta = (int)data.interruptDelta();
+  m_appCount = (int)data.appCount();
   m_collectionStatus = data.collectionStatus();
   m_asrStatus = data.asrStatus();
   m_vlmStatus = data.vlmStatus();
   m_mcpStatus = data.mcpStatus();
+  m_activeApp = data.activeApp();
+  m_activeCategory = data.activeCategory();
 
   m_appsVariant.clear();
   const auto &apps = data.apps();
@@ -121,7 +206,7 @@ void OverviewViewModel::startWatch() {
 
   auto *stream = qobject_cast<QGrpcServerStream *>(m_watchOp);
   if (!stream) {
-    qWarning() << "WatchOverview 无法创建 server stream";
+    qWarning() << "WatchOverview: failed to create server stream";
     op.release();
     m_watchOp->deleteLater();
     m_watchOp = nullptr;
@@ -139,7 +224,7 @@ void OverviewViewModel::startWatch() {
           [this](const QGrpcStatus &status) {
             m_watchOp = nullptr;
             if (!status.isOk()) {
-              qWarning() << "WatchOverview 流结束:" << status.message();
+              qWarning() << "WatchOverview stream ended:" << status.message();
             }
           });
 

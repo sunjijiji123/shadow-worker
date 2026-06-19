@@ -2,8 +2,8 @@
 // Source of truth: docs/ui-spec-v2.md section 1.
 // NOTE: category/event Chinese display names are NOT here - they go through i18n .ts files.
 //       This file only holds colors/sizes (language-neutral).
+// Singleton type declared in CMakeLists (QT_QML_SINGLETON_TYPE TRUE).
 
-pragma singleton
 import QtQuick
 
 QtObject {

@@ -175,11 +175,15 @@ target_include_directories(shadow-worker-client PRIVATE
     ${CMAKE_SOURCE_DIR}/src/utils
 )
 
+# Declare Theme.qml as a singleton type (Qt6 way; no `pragma singleton` in the file).
+set_source_files_properties(qml/theme/Theme.qml
+    PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+
 qt_add_qml_module(shadow-worker-client
     URI ShadowWorker
     VERSION 1.0
     QML_FILES
-        # theme (pragma singleton -> auto-registered as singleton in main module)
+        # theme (singleton, declared above via QT_QML_SINGLETON_TYPE)
         qml/theme/Theme.qml
         # components
         qml/components/Card.qml
@@ -191,6 +195,9 @@ qt_add_qml_module(shadow-worker-client
         qml/components/Toast.qml
         qml/components/SaveBar.qml
         qml/components/PlaceholderLabel.qml
+        qml/components/HeatmapGrid.qml
+        qml/components/RankBar.qml
+        qml/components/QuickSwitchRow.qml
         # pages
         qml/main.qml
         qml/pages/OverviewPage.qml
