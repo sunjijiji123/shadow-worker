@@ -126,6 +126,58 @@
     .app-name { flex: 1; font-size: 14px; }
     .app-meta { font-size: 12px; color: var(--muted); }
 
+    /* list tabs + scrollable list */
+    .list-tabs { display:flex; gap:0; border-bottom:1px solid var(--rule); margin-bottom:12px; }
+    .list-tab { padding:8px 16px; font-size:14px; color:var(--muted); cursor:pointer; border-bottom:2px solid transparent; user-select:none; }
+    .list-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+    .list-section { display:none; }
+    .list-section.active { display:block; }
+    .list-view-section { display:none; }
+    .list-view-section.active { display:block; }
+    .list-filter { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+    .filter-chip { display:inline-flex; align-items:center; gap:5px; padding:4px 10px; border-radius:5px; background:var(--bg); border:1px solid var(--rule); color:var(--muted); font-size:12px; cursor:pointer; user-select:none; }
+    .filter-chip.active { background:rgba(16,185,129,0.15); border-color:var(--accent); color:var(--accent); }
+    .filter-chip .fc-dot { width:8px; height:8px; border-radius:2px; }
+    .scroll-list { max-height:360px; overflow-y:auto; }
+    .scroll-list::-webkit-scrollbar { width:6px; }
+    .scroll-list::-webkit-scrollbar-track { background:transparent; }
+    .scroll-list::-webkit-scrollbar-thumb { background:var(--rule); border-radius:3px; }
+    .scroll-list::-webkit-scrollbar-thumb:hover { background:var(--muted); }
+    .empty-hint { text-align:center; padding:32px 0; font-size:13px; color:var(--muted); }
+
+    /* worklog segment row */
+    .seg-row { padding:10px 0; border-bottom:1px solid var(--rule); }
+    .seg-row:last-child { border-bottom:none; }
+    .seg-header { display:flex; align-items:center; gap:10px; }
+    .seg-time { font-size:13px; font-weight:600; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .seg-app { display:flex; align-items:center; gap:6px; font-size:13px; flex:1; }
+    .seg-app-icon { width:20px; height:20px; border-radius:5px; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; color:#fff; flex-shrink:0; }
+    .seg-duration { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .seg-cat-badge { font-size:11px; padding:2px 7px; border-radius:4px; }
+    .seg-summary { font-size:12px; color:var(--muted); margin-top:6px; margin-left:30px; display:flex; align-items:flex-start; gap:6px; }
+    .seg-summary::before { content:'└'; color:var(--muted2); }
+
+    /* week group header */
+    .day-group-header { display:flex; align-items:center; gap:10px; padding:10px 0 6px; border-top:1px solid var(--rule); margin-top:6px; }
+    .day-group-header:first-child { border-top:none; margin-top:0; }
+    .day-group-date { font-size:13px; font-weight:600; }
+    .day-group-total { font-size:12px; color:var(--muted); }
+    .day-group-bar { flex:1; height:4px; border-radius:2px; overflow:hidden; display:flex; }
+
+    /* month summary row */
+    .month-sum-row { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--rule); cursor:pointer; }
+    .month-sum-row:last-child { border-bottom:none; }
+    .month-sum-row:hover { background:var(--bg); border-radius:6px; padding-left:8px; padding-right:8px; }
+    .month-sum-date { font-size:13px; font-weight:500; width:70px; flex-shrink:0; }
+    .month-sum-duration { font-size:13px; font-variant-numeric:tabular-nums; width:55px; flex-shrink:0; }
+    .month-sum-bar { flex:1; height:8px; border-radius:4px; overflow:hidden; display:flex; background:var(--bg); }
+    .month-sum-bar > div { height:100%; }
+    .month-sum-breakdown { font-size:11px; color:var(--muted); width:160px; flex-shrink:0; text-align:right; }
+    .month-sum-footer { display:flex; justify-content:space-between; align-items:center; padding:12px 0 0; border-top:1px solid var(--rule); margin-top:8px; font-size:13px; }
+    .month-sum-footer-total { font-weight:600; font-size:15px; }
+    .month-sum-footer-bar { flex:1; height:6px; border-radius:3px; overflow:hidden; display:flex; margin:0 16px; background:var(--bg); }
+    .month-sum-footer-bar > div { height:100%; }
+
     .update-row { display: flex; align-items: center; gap: 16px; }
     .update-links { display: flex; gap: 10px; flex-wrap: wrap; }
     .status-light { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
@@ -543,12 +595,309 @@
             </div>
           </div>
 
-          <div class="card">
-            <div class="card-title">事件列表</div>
-            <div class="app-row"><span class="app-color" style="background:#10B981"></span><span class="app-name">09:12 语音：帮我把这段代码重构一下</span><span class="app-meta">已润色</span></div>
-            <div class="app-row"><span class="app-color" style="background:#F59E0B"></span><span class="app-name">10:05 提示词注入：整理成会议纪要</span><span class="app-meta">Ctrl+1</span></div>
-            <div class="app-row"><span class="app-color" style="background:#3B82F6"></span><span class="app-name">11:28 截图：VLM 理解当前屏幕</span><span class="app-meta">自动生成</span></div>
-            <div class="app-row"><span class="app-color" style="background:#10B981"></span><span class="app-name">14:10 语音：直接发给小明</span><span class="app-meta">原文</span></div>
+          <!-- 列表 - 日视图 -->
+          <div class="card list-view-section active" data-list-view="day">
+            <div class="list-tabs" id="timeline-list-tabs">
+              <div class="list-tab active" data-list-tab="worklog">工作记录</div>
+              <div class="list-tab" data-list-tab="events">事件列表</div>
+            </div>
+
+            <!-- 工作记录 -->
+            <div class="list-section active" data-list-tab="worklog">
+              <div class="list-filter">
+                <span class="filter-chip active" data-wl-filter="all">全部</span>
+                <span class="filter-chip" data-wl-filter="coding"><span class="fc-dot" style="background:#3B82F6"></span>编程</span>
+                <span class="filter-chip" data-wl-filter="browser"><span class="fc-dot" style="background:#F59E0B"></span>浏览</span>
+                <span class="filter-chip" data-wl-filter="chat"><span class="fc-dot" style="background:#10B981"></span>沟通</span>
+                <span class="filter-chip" data-wl-filter="office"><span class="fc-dot" style="background:#8B5CF6"></span>办公</span>
+              </div>
+              <div class="scroll-list" id="worklog-list">
+                <div class="seg-row" data-cat="coding">
+                  <div class="seg-header">
+                    <span class="seg-time">09:00 - 09:42</span>
+                    <span class="seg-app"><span class="seg-app-icon" style="background:#3B82F6">Cr</span>Cursor</span>
+                    <span class="seg-cat-badge" style="background:rgba(59,130,246,0.15);color:#3B82F6">coding</span>
+                    <span class="seg-duration">42 min</span>
+                  </div>
+                  <div class="seg-summary">VLM: 正在重构 ASR 模块，修改 cloud.go 适配 Whisper 接口</div>
+                </div>
+                <div class="seg-row" data-cat="coding">
+                  <div class="seg-header">
+                    <span class="seg-time">09:42 - 10:15</span>
+                    <span class="seg-app"><span class="seg-app-icon" style="background:#3B82F6">Cr</span>Cursor</span>
+                    <span class="seg-cat-badge" style="background:rgba(59,130,246,0.15);color:#3B82F6">coding</span>
+                    <span class="seg-duration">33 min</span>
+                  </div>
+                  <div class="seg-summary">VLM: 编写 shadow-worker 配置模块 config.go</div>
+                </div>
+                <div class="seg-row" data-cat="browser">
+                  <div class="seg-header">
+                    <span class="seg-time">10:15 - 10:48</span>
+                    <span class="seg-app"><span class="seg-app-icon" style="background:#F59E0B">Ch</span>Chrome</span>
+                    <span class="seg-cat-badge" style="background:rgba(245,158,11,0.15);color:#F59E0B">browser</span>
+                    <span class="seg-duration">33 min</span>
+                  </div>
+                  <div class="seg-summary">VLM: 查看 MCP 协议文档和 go-sdk 示例</div>
+                </div>
+                <div class="seg-row" data-cat="chat">
+                  <div class="seg-header">
+                    <span class="seg-time">10:48 - 11:03</span>
+                    <span class="seg-app"><span class="seg-app-icon" style="background:#10B981">We</span>WeChat</span>
+                    <span class="seg-cat-badge" style="background:rgba(16,185,129,0.15);color:#10B981">chat</span>
+                    <span class="seg-duration">15 min</span>
+                  </div>
+                  <div class="seg-summary">VLM: 与同事讨论接口设计方案</div>
+                </div>
+                <div class="seg-row" data-cat="coding">
+                  <div class="seg-header">
+                    <span class="seg-time">11:03 - 11:28</span>
+                    <span class="seg-app"><span class="seg-app-icon" style="background:#3B82F6">Cr</span>Cursor</span>
+                    <span class="seg-cat-badge" style="background:rgba(59,130,246,0.15);color:#3B82F6">coding</span>
+                    <span class="seg-duration">25 min</span>
+                  </div>
+                  <div class="seg-summary">VLM: 重构语音识别接口，拆分 asr engine</div>
+                </div>
+                <div class="seg-row" data-cat="office">
+                  <div class="seg-header">
+                    <span class="seg-time">11:28 - 12:00</span>
+                    <span class="seg-app"><span class="seg-app-icon" style="background:#8B5CF6">Wd</span>Word</span>
+                    <span class="seg-cat-badge" style="background:rgba(139,92,246,0.15);color:#8B5CF6">office</span>
+                    <span class="seg-duration">32 min</span>
+                  </div>
+                  <div class="seg-summary">VLM: 编写需求文档和会议纪要</div>
+                </div>
+                <div class="seg-row" data-cat="browser">
+                  <div class="seg-header">
+                    <span class="seg-time">13:30 - 14:10</span>
+                    <span class="seg-app"><span class="seg-app-icon" style="background:#F59E0B">Ch</span>Chrome</span>
+                    <span class="seg-cat-badge" style="background:rgba(245,158,11,0.15);color:#F59E0B">browser</span>
+                    <span class="seg-duration">40 min</span>
+                  </div>
+                  <div class="seg-summary">VLM: 搜索 SQLite 优化方案和索引策略</div>
+                </div>
+                <div class="seg-row" data-cat="coding">
+                  <div class="seg-header">
+                    <span class="seg-time">14:10 - 15:30</span>
+                    <span class="seg-app"><span class="seg-app-icon" style="background:#3B82F6">Cr</span>Cursor</span>
+                    <span class="seg-cat-badge" style="background:rgba(59,130,246,0.15);color:#3B82F6">coding</span>
+                    <span class="seg-duration">80 min</span>
+                  </div>
+                  <div class="seg-summary">VLM: 实现 activity_segments 存储和查询逻辑</div>
+                </div>
+                <div class="seg-row" data-cat="chat">
+                  <div class="seg-header">
+                    <span class="seg-time">15:30 - 15:50</span>
+                    <span class="seg-app"><span class="seg-app-icon" style="background:#10B981">We</span>WeChat</span>
+                    <span class="seg-cat-badge" style="background:rgba(16,185,129,0.15);color:#10B981">chat</span>
+                    <span class="seg-duration">20 min</span>
+                  </div>
+                  <div class="seg-summary">VLM: 回复工作消息，确认下周排期</div>
+                </div>
+                <div class="seg-row" data-cat="coding">
+                  <div class="seg-header">
+                    <span class="seg-time">15:50 - 17:00</span>
+                    <span class="seg-app"><span class="seg-app-icon" style="background:#3B82F6">Cr</span>Cursor</span>
+                    <span class="seg-cat-badge" style="background:rgba(59,130,246,0.15);color:#3B82F6">coding</span>
+                    <span class="seg-duration">70 min</span>
+                  </div>
+                  <div class="seg-summary">VLM: 编写 gRPC 接口和 protobuf 定义</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 事件列表 -->
+            <div class="list-section" data-list-tab="events">
+              <div class="list-filter">
+                <span class="filter-chip active" data-ev-filter="all">全部</span>
+                <span class="filter-chip" data-ev-filter="voice"><span class="fc-dot" style="background:#10B981"></span>语音</span>
+                <span class="filter-chip" data-ev-filter="prompt_inject"><span class="fc-dot" style="background:#F59E0B"></span>提示词</span>
+                <span class="filter-chip" data-ev-filter="screenshot"><span class="fc-dot" style="background:#3B82F6"></span>截图</span>
+                <span class="filter-chip" data-ev-filter="vlm_summary"><span class="fc-dot" style="background:#8B5CF6"></span>VLM摘要</span>
+              </div>
+              <div class="scroll-list" id="event-list">
+                <div class="app-row" data-ev-type="voice"><span class="app-color" style="background:#10B981"></span><span class="app-name">09:12 语音：帮我把这段代码重构一下</span><span class="app-meta">已润色</span></div>
+                <div class="app-row" data-ev-type="prompt_inject"><span class="app-color" style="background:#F59E0B"></span><span class="app-name">10:05 提示词注入：整理成会议纪要</span><span class="app-meta">Ctrl+1</span></div>
+                <div class="app-row" data-ev-type="screenshot"><span class="app-color" style="background:#3B82F6"></span><span class="app-name">11:28 截图：VLM 理解当前屏幕</span><span class="app-meta">自动生成</span></div>
+                <div class="app-row" data-ev-type="vlm_summary"><span class="app-color" style="background:#8B5CF6"></span><span class="app-name">11:35 VLM摘要：正在编辑 config.go</span><span class="app-meta">自动</span></div>
+                <div class="app-row" data-ev-type="voice"><span class="app-color" style="background:#10B981"></span><span class="app-name">14:10 语音：直接发给小明</span><span class="app-meta">原文</span></div>
+                <div class="app-row" data-ev-type="prompt_inject"><span class="app-color" style="background:#F59E0B"></span><span class="app-name">14:30 提示词注入：翻译成英文</span><span class="app-meta">Ctrl+2</span></div>
+                <div class="app-row" data-ev-type="screenshot"><span class="app-color" style="background:#3B82F6"></span><span class="app-name">15:45 截图：记录当前界面状态</span><span class="app-meta">自动生成</span></div>
+                <div class="app-row" data-ev-type="voice"><span class="app-color" style="background:#10B981"></span><span class="app-name">16:20 语音：生成单元测试</span><span class="app-meta">已润色</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 列表 - 周视图 -->
+          <div class="card list-view-section" data-list-view="week">
+            <div class="list-tabs">
+              <div class="list-tab active" data-wl-week-tab="worklog">工作记录</div>
+              <div class="list-tab" data-wl-week-tab="events">事件列表</div>
+            </div>
+
+            <!-- 周工作记录 -->
+            <div class="list-section active" data-wl-week-tab="worklog">
+              <div class="list-filter">
+                <span class="filter-chip active" data-wl-week-filter="all">全部</span>
+                <span class="filter-chip" data-wl-week-filter="coding"><span class="fc-dot" style="background:#3B82F6"></span>编程</span>
+                <span class="filter-chip" data-wl-week-filter="browser"><span class="fc-dot" style="background:#F59E0B"></span>浏览</span>
+                <span class="filter-chip" data-wl-week-filter="chat"><span class="fc-dot" style="background:#10B981"></span>沟通</span>
+                <span class="filter-chip" data-wl-week-filter="office"><span class="fc-dot" style="background:#8B5CF6"></span>办公</span>
+              </div>
+              <div class="scroll-list">
+                <div class="day-group-header">
+                  <span class="day-group-date">6月15日 周一</span>
+                  <span class="day-group-total">4h 20m</span>
+                  <div class="day-group-bar"><div style="width:60%;background:#3B82F6"></div><div style="width:30%;background:#10B981"></div><div style="width:10%;background:#F59E0B"></div></div>
+                </div>
+                <div class="seg-row" data-cat="coding"><div class="seg-header"><span class="seg-time">09:00 - 10:20</span><span class="seg-app"><span class="seg-app-icon" style="background:#3B82F6">Cr</span>Cursor</span><span class="seg-cat-badge" style="background:rgba(59,130,246,0.15);color:#3B82F6">coding</span><span class="seg-duration">80 min</span></div><div class="seg-summary">VLM: 重构 ASR 模块</div></div>
+                <div class="seg-row" data-cat="chat"><div class="seg-header"><span class="seg-time">10:20 - 11:00</span><span class="seg-app"><span class="seg-app-icon" style="background:#10B981">We</span>WeChat</span><span class="seg-cat-badge" style="background:rgba(16,185,129,0.15);color:#10B981">chat</span><span class="seg-duration">40 min</span></div><div class="seg-summary">VLM: 讨论需求方案</div></div>
+                <div class="seg-row" data-cat="coding"><div class="seg-header"><span class="seg-time">14:00 - 15:40</span><span class="seg-app"><span class="seg-app-icon" style="background:#3B82F6">Cr</span>Cursor</span><span class="seg-cat-badge" style="background:rgba(59,130,246,0.15);color:#3B82F6">coding</span><span class="seg-duration">100 min</span></div><div class="seg-summary">VLM: 编写存储层代码</div></div>
+                <div class="seg-row" data-cat="browser"><div class="seg-header"><span class="seg-time">15:40 - 16:20</span><span class="seg-app"><span class="seg-app-icon" style="background:#F59E0B">Ch</span>Chrome</span><span class="seg-cat-badge" style="background:rgba(245,158,11,0.15);color:#F59E0B">browser</span><span class="seg-duration">40 min</span></div><div class="seg-summary">VLM: 查阅技术文档</div></div>
+
+                <div class="day-group-header">
+                  <span class="day-group-date">6月16日 周二</span>
+                  <span class="day-group-total">3h 50m</span>
+                  <div class="day-group-bar"><div style="width:45%;background:#3B82F6"></div><div style="width:40%;background:#F59E0B"></div><div style="width:15%;background:#6B7280"></div></div>
+                </div>
+                <div class="seg-row" data-cat="coding"><div class="seg-header"><span class="seg-time">09:30 - 11:00</span><span class="seg-app"><span class="seg-app-icon" style="background:#3B82F6">Cr</span>Cursor</span><span class="seg-cat-badge" style="background:rgba(59,130,246,0.15);color:#3B82F6">coding</span><span class="seg-duration">90 min</span></div><div class="seg-summary">VLM: 实现 MCP server</div></div>
+                <div class="seg-row" data-cat="browser"><div class="seg-header"><span class="seg-time">13:30 - 15:30</span><span class="seg-app"><span class="seg-app-icon" style="background:#F59E0B">Ch</span>Chrome</span><span class="seg-cat-badge" style="background:rgba(245,158,11,0.15);color:#F59E0B">browser</span><span class="seg-duration">120 min</span></div><div class="seg-summary">VLM: 调研竞品方案</div></div>
+                <div class="seg-row" data-cat="coding"><div class="seg-header"><span class="seg-time">15:30 - 16:20</span><span class="seg-app"><span class="seg-app-icon" style="background:#3B82F6">Cr</span>Cursor</span><span class="seg-cat-badge" style="background:rgba(59,130,246,0.15);color:#3B82F6">coding</span><span class="seg-duration">50 min</span></div><div class="seg-summary">VLM: 修复编译错误</div></div>
+
+                <div class="day-group-header">
+                  <span class="day-group-date">6月17日 周三</span>
+                  <span class="day-group-total">5h 10m</span>
+                  <div class="day-group-bar"><div style="width:70%;background:#3B82F6"></div><div style="width:20%;background:#10B981"></div><div style="width:10%;background:#8B5CF6"></div></div>
+                </div>
+                <div class="seg-row" data-cat="coding"><div class="seg-header"><span class="seg-time">09:00 - 11:30</span><span class="seg-app"><span class="seg-app-icon" style="background:#3B82F6">Cr</span>Cursor</span><span class="seg-cat-badge" style="background:rgba(59,130,246,0.15);color:#3B82F6">coding</span><span class="seg-duration">150 min</span></div><div class="seg-summary">VLM: 实现事件采集模块</div></div>
+                <div class="seg-row" data-cat="chat"><div class="seg-header"><span class="seg-time">13:00 - 14:00</span><span class="seg-app"><span class="seg-app-icon" style="background:#10B981">We</span>WeChat</span><span class="seg-cat-badge" style="background:rgba(16,185,129,0.15);color:#10B981">chat</span><span class="seg-duration">60 min</span></div><div class="seg-summary">VLM: 周会沟通</div></div>
+                <div class="seg-row" data-cat="office"><div class="seg-header"><span class="seg-time">14:00 - 15:10</span><span class="seg-app"><span class="seg-app-icon" style="background:#8B5CF6">Wd</span>Word</span><span class="seg-cat-badge" style="background:rgba(139,92,246,0.15);color:#8B5CF6">office</span><span class="seg-duration">70 min</span></div><div class="seg-summary">VLM: 编写设计文档</div></div>
+                <div class="seg-row" data-cat="coding"><div class="seg-header"><span class="seg-time">15:10 - 17:00</span><span class="seg-app"><span class="seg-app-icon" style="background:#3B82F6">Cr</span>Cursor</span><span class="seg-cat-badge" style="background:rgba(59,130,246,0.15);color:#3B82F6">coding</span><span class="seg-duration">110 min</span></div><div class="seg-summary">VLM: 编写单元测试</div></div>
+
+                <div class="day-group-header">
+                  <span class="day-group-date">6月18日 周四</span>
+                  <span class="day-group-total">3h 20m</span>
+                  <div class="day-group-bar"><div style="width:55%;background:#3B82F6"></div><div style="width:25%;background:#10B981"></div><div style="width:20%;background:#F59E0B"></div></div>
+                </div>
+                <div class="seg-row" data-cat="coding"><div class="seg-header"><span class="seg-time">09:00 - 10:15</span><span class="seg-app"><span class="seg-app-icon" style="background:#3B82F6">Cr</span>Cursor</span><span class="seg-cat-badge" style="background:rgba(59,130,246,0.15);color:#3B82F6">coding</span><span class="seg-duration">75 min</span></div><div class="seg-summary">VLM: 重构配置模块</div></div>
+                <div class="seg-row" data-cat="browser"><div class="seg-header"><span class="seg-time">10:15 - 10:48</span><span class="seg-app"><span class="seg-app-icon" style="background:#F59E0B">Ch</span>Chrome</span><span class="seg-cat-badge" style="background:rgba(245,158,11,0.15);color:#F59E0B">browser</span><span class="seg-duration">33 min</span></div><div class="seg-summary">VLM: 查看 MCP 文档</div></div>
+                <div class="seg-row" data-cat="chat"><div class="seg-header"><span class="seg-time">10:48 - 11:03</span><span class="seg-app"><span class="seg-app-icon" style="background:#10B981">We</span>WeChat</span><span class="seg-cat-badge" style="background:rgba(16,185,129,0.15);color:#10B981">chat</span><span class="seg-duration">15 min</span></div><div class="seg-summary">VLM: 讨论接口设计</div></div>
+                <div class="seg-row" data-cat="coding"><div class="seg-header"><span class="seg-time">14:10 - 15:30</span><span class="seg-app"><span class="seg-app-icon" style="background:#3B82F6">Cr</span>Cursor</span><span class="seg-cat-badge" style="background:rgba(59,130,246,0.15);color:#3B82F6">coding</span><span class="seg-duration">80 min</span></div><div class="seg-summary">VLM: 实现存储查询逻辑</div></div>
+
+                <div class="day-group-header">
+                  <span class="day-group-date">6月19日 周五</span>
+                  <span class="day-group-total">2h 55m</span>
+                  <div class="day-group-bar"><div style="width:35%;background:#3B82F6"></div><div style="width:35%;background:#F59E0B"></div><div style="width:30%;background:#10B981"></div></div>
+                </div>
+                <div class="seg-row" data-cat="coding"><div class="seg-header"><span class="seg-time">09:00 - 10:00</span><span class="seg-app"><span class="seg-app-icon" style="background:#3B82F6">Cr</span>Cursor</span><span class="seg-cat-badge" style="background:rgba(59,130,246,0.15);color:#3B82F6">coding</span><span class="seg-duration">60 min</span></div><div class="seg-summary">VLM: 代码 review</div></div>
+                <div class="seg-row" data-cat="browser"><div class="seg-header"><span class="seg-time">10:00 - 11:00</span><span class="seg-app"><span class="seg-app-icon" style="background:#F59E0B">Ch</span>Chrome</span><span class="seg-cat-badge" style="background:rgba(245,158,11,0.15);color:#F59E0B">browser</span><span class="seg-duration">60 min</span></div><div class="seg-summary">VLM: 查阅最佳实践</div></div>
+                <div class="seg-row" data-cat="chat"><div class="seg-header"><span class="seg-time">14:00 - 14:55</span><span class="seg-app"><span class="seg-app-icon" style="background:#10B981">We</span>WeChat</span><span class="seg-cat-badge" style="background:rgba(16,185,129,0.15);color:#10B981">chat</span><span class="seg-duration">55 min</span></div><div class="seg-summary">VLM: 确认下周排期</div></div>
+              </div>
+            </div>
+
+            <!-- 周事件列表 -->
+            <div class="list-section" data-wl-week-tab="events">
+              <div class="list-filter">
+                <span class="filter-chip active" data-ev-week-filter="all">全部</span>
+                <span class="filter-chip" data-ev-week-filter="voice"><span class="fc-dot" style="background:#10B981"></span>语音</span>
+                <span class="filter-chip" data-ev-week-filter="prompt_inject"><span class="fc-dot" style="background:#F59E0B"></span>提示词</span>
+                <span class="filter-chip" data-ev-week-filter="screenshot"><span class="fc-dot" style="background:#3B82F6"></span>截图</span>
+                <span class="filter-chip" data-ev-week-filter="vlm_summary"><span class="fc-dot" style="background:#8B5CF6"></span>VLM摘要</span>
+              </div>
+              <div class="scroll-list">
+                <div class="day-group-header"><span class="day-group-date">6月15日 周一</span><span class="day-group-total">6 条事件</span></div>
+                <div class="app-row" data-ev-type="voice"><span class="app-color" style="background:#10B981"></span><span class="app-name">09:15 语音：开始重构 ASR 模块</span><span class="app-meta">已润色</span></div>
+                <div class="app-row" data-ev-type="prompt_inject"><span class="app-color" style="background:#F59E0B"></span><span class="app-name">10:30 提示词：生成接口文档</span><span class="app-meta">Ctrl+1</span></div>
+                <div class="app-row" data-ev-type="screenshot"><span class="app-color" style="background:#3B82F6"></span><span class="app-name">14:20 截图：记录当前进度</span><span class="app-meta">自动</span></div>
+                <div class="day-group-header"><span class="day-group-date">6月16日 周二</span><span class="day-group-total">5 条事件</span></div>
+                <div class="app-row" data-ev-type="voice"><span class="app-color" style="background:#10B981"></span><span class="app-name">09:40 语音：实现 MCP server</span><span class="app-meta">已润色</span></div>
+                <div class="app-row" data-ev-type="vlm_summary"><span class="app-color" style="background:#8B5CF6"></span><span class="app-name">14:00 VLM摘要：正在调研竞品</span><span class="app-meta">自动</span></div>
+                <div class="day-group-header"><span class="day-group-date">6月17日 周三</span><span class="day-group-total">8 条事件</span></div>
+                <div class="app-row" data-ev-type="voice"><span class="app-color" style="background:#10B981"></span><span class="app-name">09:10 语音：实现事件采集</span><span class="app-meta">已润色</span></div>
+                <div class="app-row" data-ev-type="prompt_inject"><span class="app-color" style="background:#F59E0B"></span><span class="app-name">13:30 提示词：整理周会要点</span><span class="app-meta">Ctrl+2</span></div>
+                <div class="app-row" data-ev-type="screenshot"><span class="app-color" style="background:#3B82F6"></span><span class="app-name">15:30 截图：测试结果截图</span><span class="app-meta">自动</span></div>
+                <div class="day-group-header"><span class="day-group-date">6月18日 周四</span><span class="day-group-total">8 条事件</span></div>
+                <div class="app-row" data-ev-type="voice"><span class="app-color" style="background:#10B981"></span><span class="app-name">09:12 语音：帮我把这段代码重构</span><span class="app-meta">已润色</span></div>
+                <div class="app-row" data-ev-type="prompt_inject"><span class="app-color" style="background:#F59E0B"></span><span class="app-name">10:05 提示词：整理成会议纪要</span><span class="app-meta">Ctrl+1</span></div>
+                <div class="app-row" data-ev-type="screenshot"><span class="app-color" style="background:#3B82F6"></span><span class="app-name">11:28 截图：VLM 理解屏幕</span><span class="app-meta">自动</span></div>
+                <div class="day-group-header"><span class="day-group-date">6月19日 周五</span><span class="day-group-total">4 条事件</span></div>
+                <div class="app-row" data-ev-type="voice"><span class="app-color" style="background:#10B981"></span><span class="app-name">09:20 语音：代码 review</span><span class="app-meta">原文</span></div>
+                <div class="app-row" data-ev-type="prompt_inject"><span class="app-color" style="background:#F59E0B"></span><span class="app-name">14:30 提示词：翻译成英文</span><span class="app-meta">Ctrl+2</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 列表 - 月视图 -->
+          <div class="card list-view-section" data-list-view="month">
+            <div class="list-tabs">
+              <div class="list-tab active" data-month-tab="worklog">工作记录</div>
+              <div class="list-tab" data-month-tab="events">事件列表</div>
+            </div>
+
+            <!-- 月工作记录 - 每天汇总 -->
+            <div class="list-section active" data-month-tab="worklog">
+              <div class="list-filter">
+                <span class="filter-chip active" data-wl-month-filter="all">全部</span>
+                <span class="filter-chip" data-wl-month-filter="coding"><span class="fc-dot" style="background:#3B82F6"></span>编程</span>
+                <span class="filter-chip" data-wl-month-filter="browser"><span class="fc-dot" style="background:#F59E0B"></span>浏览</span>
+                <span class="filter-chip" data-wl-month-filter="chat"><span class="fc-dot" style="background:#10B981"></span>沟通</span>
+                <span class="filter-chip" data-wl-month-filter="office"><span class="fc-dot" style="background:#8B5CF6"></span>办公</span>
+              </div>
+              <div class="scroll-list" style="max-height:400px;">
+                <div class="month-sum-row"><span class="month-sum-date">6月1日</span><span class="month-sum-duration">3h 20m</span><div class="month-sum-bar"><div style="width:60%;background:#3B82F6"></div><div style="width:20%;background:#F59E0B"></div><div style="width:20%;background:#10B981"></div></div><span class="month-sum-breakdown">编程 60% · 浏览 20% · 沟通 20%</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月2日</span><span class="month-sum-duration">4h 10m</span><div class="month-sum-bar"><div style="width:70%;background:#3B82F6"></div><div style="width:30%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">编程 70% · 办公 30%</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月3日</span><span class="month-sum-duration">2h 50m</span><div class="month-sum-bar"><div style="width:50%;background:#F59E0B"></div><div style="width:50%;background:#10B981"></div></div><span class="month-sum-breakdown">浏览 50% · 沟通 50%</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月4日</span><span class="month-sum-duration">5h 30m</span><div class="month-sum-bar"><div style="width:80%;background:#3B82F6"></div><div style="width:20%;background:#F59E0B"></div></div><span class="month-sum-breakdown">编程 80% · 浏览 20%</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月5日</span><span class="month-sum-duration">3h 00m</span><div class="month-sum-bar"><div style="width:40%;background:#3B82F6"></div><div style="width:35%;background:#8B5CF6"></div><div style="width:25%;background:#10B981"></div></div><span class="month-sum-breakdown">编程 40% · 办公 35% · 沟通 25%</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月8日</span><span class="month-sum-duration">4h 20m</span><div class="month-sum-bar"><div style="width:60%;background:#3B82F6"></div><div style="width:30%;background:#10B981"></div><div style="width:10%;background:#F59E0B"></div></div><span class="month-sum-breakdown">编程 60% · 沟通 30% · 浏览 10%</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月9日</span><span class="month-sum-duration">3h 50m</span><div class="month-sum-bar"><div style="width:45%;background:#3B82F6"></div><div style="width:40%;background:#F59E0B"></div><div style="width:15%;background:#6B7280"></div></div><span class="month-sum-breakdown">编程 45% · 浏览 40% · 其他 15%</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月10日</span><span class="month-sum-duration">5h 10m</span><div class="month-sum-bar"><div style="width:70%;background:#3B82F6"></div><div style="width:20%;background:#10B981"></div><div style="width:10%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">编程 70% · 沟通 20% · 办公 10%</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月11日</span><span class="month-sum-duration">4h 00m</span><div class="month-sum-bar"><div style="width:55%;background:#3B82F6"></div><div style="width:25%;background:#F59E0B"></div><div style="width:20%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">编程 55% · 浏览 25% · 办公 20%</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月12日</span><span class="month-sum-duration">3h 15m</span><div class="month-sum-bar"><div style="width:50%;background:#3B82F6"></div><div style="width:30%;background:#10B981"></div><div style="width:20%;background:#F59E0B"></div></div><span class="month-sum-breakdown">编程 50% · 沟通 30% · 浏览 20%</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月15日</span><span class="month-sum-duration">4h 20m</span><div class="month-sum-bar"><div style="width:60%;background:#3B82F6"></div><div style="width:30%;background:#10B981"></div><div style="width:10%;background:#F59E0B"></div></div><span class="month-sum-breakdown">编程 60% · 沟通 30% · 浏览 10%</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月16日</span><span class="month-sum-duration">3h 50m</span><div class="month-sum-bar"><div style="width:45%;background:#3B82F6"></div><div style="width:40%;background:#F59E0B"></div><div style="width:15%;background:#6B7280"></div></div><span class="month-sum-breakdown">编程 45% · 浏览 40% · 其他 15%</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月17日</span><span class="month-sum-duration">5h 10m</span><div class="month-sum-bar"><div style="width:70%;background:#3B82F6"></div><div style="width:20%;background:#10B981"></div><div style="width:10%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">编程 70% · 沟通 20% · 办公 10%</span></div>
+                <div class="month-sum-row" style="background:rgba(16,185,129,0.06);border-radius:6px;padding-left:8px;padding-right:8px;"><span class="month-sum-date" style="color:var(--accent)">6月18日</span><span class="month-sum-duration" style="color:var(--accent)">3h 20m</span><div class="month-sum-bar"><div style="width:55%;background:#3B82F6"></div><div style="width:25%;background:#10B981"></div><div style="width:20%;background:#F59E0B"></div></div><span class="month-sum-breakdown">编程 55% · 沟通 25% · 浏览 20%</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月19日</span><span class="month-sum-duration">2h 55m</span><div class="month-sum-bar"><div style="width:35%;background:#3B82F6"></div><div style="width:35%;background:#F59E0B"></div><div style="width:30%;background:#10B981"></div></div><span class="month-sum-breakdown">编程 35% · 浏览 35% · 沟通 30%</span></div>
+                <div class="month-sum-footer">
+                  <span class="month-sum-footer-total">本月合计 68h 30m</span>
+                  <div class="month-sum-footer-bar"><div style="width:55%;background:#3B82F6"></div><div style="width:25%;background:#F59E0B"></div><div style="width:12%;background:#10B981"></div><div style="width:8%;background:#8B5CF6"></div></div>
+                  <span style="font-size:12px;color:var(--muted);">编程 55% · 浏览 25% · 沟通 12% · 办公 8%</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 月事件列表 - 每天汇总 -->
+            <div class="list-section" data-month-tab="events">
+              <div class="list-filter">
+                <span class="filter-chip active" data-ev-month-filter="all">全部</span>
+                <span class="filter-chip" data-ev-month-filter="voice"><span class="fc-dot" style="background:#10B981"></span>语音</span>
+                <span class="filter-chip" data-ev-month-filter="prompt_inject"><span class="fc-dot" style="background:#F59E0B"></span>提示词</span>
+                <span class="filter-chip" data-ev-month-filter="screenshot"><span class="fc-dot" style="background:#3B82F6"></span>截图</span>
+                <span class="filter-chip" data-ev-month-filter="vlm_summary"><span class="fc-dot" style="background:#8B5CF6"></span>VLM摘要</span>
+              </div>
+              <div class="scroll-list" style="max-height:400px;">
+                <div class="month-sum-row"><span class="month-sum-date">6月1日</span><span class="month-sum-duration">5 条</span><div class="month-sum-bar"><div style="width:40%;background:#10B981"></div><div style="width:30%;background:#F59E0B"></div><div style="width:20%;background:#3B82F6"></div><div style="width:10%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">语音 2 · 提示词 1 · 截图 1 · VLM 1</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月2日</span><span class="month-sum-duration">3 条</span><div class="month-sum-bar"><div style="width:67%;background:#10B981"></div><div style="width:33%;background:#F59E0B"></div></div><span class="month-sum-breakdown">语音 2 · 提示词 1</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月3日</span><span class="month-sum-duration">4 条</span><div class="month-sum-bar"><div style="width:50%;background:#3B82F6"></div><div style="width:25%;background:#10B981"></div><div style="width:25%;background:#F59E0B"></div></div><span class="month-sum-breakdown">截图 2 · 语音 1 · 提示词 1</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月4日</span><span class="month-sum-duration">7 条</span><div class="month-sum-bar"><div style="width:43%;background:#10B981"></div><div style="width:28%;background:#F59E0B"></div><div style="width:15%;background:#3B82F6"></div><div style="width:14%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">语音 3 · 提示词 2 · 截图 1 · VLM 1</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月5日</span><span class="month-sum-duration">2 条</span><div class="month-sum-bar"><div style="width:100%;background:#10B981"></div></div><span class="month-sum-breakdown">语音 2</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月8日</span><span class="month-sum-duration">6 条</span><div class="month-sum-bar"><div style="width:50%;background:#10B981"></div><div style="width:17%;background:#F59E0B"></div><div style="width:17%;background:#3B82F6"></div><div style="width:16%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">语音 3 · 提示词 1 · 截图 1 · VLM 1</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月9日</span><span class="month-sum-duration">5 条</span><div class="month-sum-bar"><div style="width:40%;background:#10B981"></div><div style="width:40%;background:#F59E0B"></div><div style="width:20%;background:#3B82F6"></div></div><span class="month-sum-breakdown">语音 2 · 提示词 2 · 截图 1</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月10日</span><span class="month-sum-duration">8 条</span><div class="month-sum-bar"><div style="width:38%;background:#10B981"></div><div style="width:25%;background:#F59E0B"></div><div style="width:25%;background:#3B82F6"></div><div style="width:12%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">语音 3 · 提示词 2 · 截图 2 · VLM 1</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月11日</span><span class="month-sum-duration">4 条</span><div class="month-sum-bar"><div style="width:50%;background:#10B981"></div><div style="width:25%;background:#F59E0B"></div><div style="width:25%;background:#3B82F6"></div></div><span class="month-sum-breakdown">语音 2 · 提示词 1 · 截图 1</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月12日</span><span class="month-sum-duration">3 条</span><div class="month-sum-bar"><div style="width:67%;background:#10B981"></div><div style="width:33%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">语音 2 · VLM 1</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月15日</span><span class="month-sum-duration">6 条</span><div class="month-sum-bar"><div style="width:33%;background:#10B981"></div><div style="width:33%;background:#F59E0B"></div><div style="width:17%;background:#3B82F6"></div><div style="width:17%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">语音 2 · 提示词 2 · 截图 1 · VLM 1</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月16日</span><span class="month-sum-duration">5 条</span><div class="month-sum-bar"><div style="width:40%;background:#10B981"></div><div style="width:40%;background:#F59E0B"></div><div style="width:20%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">语音 2 · 提示词 2 · VLM 1</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月17日</span><span class="month-sum-duration">8 条</span><div class="month-sum-bar"><div style="width:38%;background:#10B981"></div><div style="width:25%;background:#F59E0B"></div><div style="width:25%;background:#3B82F6"></div><div style="width:12%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">语音 3 · 提示词 2 · 截图 2 · VLM 1</span></div>
+                <div class="month-sum-row" style="background:rgba(16,185,129,0.06);border-radius:6px;padding-left:8px;padding-right:8px;"><span class="month-sum-date" style="color:var(--accent)">6月18日</span><span class="month-sum-duration" style="color:var(--accent)">8 条</span><div class="month-sum-bar"><div style="width:38%;background:#10B981"></div><div style="width:25%;background:#F59E0B"></div><div style="width:25%;background:#3B82F6"></div><div style="width:12%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">语音 3 · 提示词 2 · 截图 2 · VLM 1</span></div>
+                <div class="month-sum-row"><span class="month-sum-date">6月19日</span><span class="month-sum-duration">4 条</span><div class="month-sum-bar"><div style="width:50%;background:#10B981"></div><div style="width:50%;background:#F59E0B"></div></div><span class="month-sum-breakdown">语音 2 · 提示词 2</span></div>
+                <div class="month-sum-footer">
+                  <span class="month-sum-footer-total">本月合计 78 条</span>
+                  <div class="month-sum-footer-bar"><div style="width:42%;background:#10B981"></div><div style="width:28%;background:#F59E0B"></div><div style="width:18%;background:#3B82F6"></div><div style="width:12%;background:#8B5CF6"></div></div>
+                  <span style="font-size:12px;color:var(--muted);">语音 33 · 提示词 22 · 截图 14 · VLM 9</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1357,12 +1706,15 @@
     document.querySelectorAll('.select-options').forEach(l => l.classList.remove('open'));
   });
 
-  // timeline view switcher
+  // timeline view switcher (controls both track + list)
   document.querySelectorAll('.chip[data-group="timeline-view"]').forEach(chip => {
     chip.addEventListener('click', () => {
       const val = chip.dataset.val;
       document.querySelectorAll('.timeline-view-section').forEach(s => {
         s.classList.toggle('active', s.dataset.view === val);
+      });
+      document.querySelectorAll('.list-view-section').forEach(s => {
+        s.classList.toggle('active', s.dataset.listView === val);
       });
     });
   });
@@ -1667,6 +2019,115 @@
       heatTooltip.style.opacity = '0';
     });
   }
+
+  // timeline list tabs + filter
+  document.querySelectorAll('#timeline-list-tabs .list-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const target = tab.dataset.listTab;
+      document.querySelectorAll('#timeline-list-tabs .list-tab').forEach(t => t.classList.toggle('active', t === tab));
+      document.querySelectorAll('.list-section').forEach(s => s.classList.toggle('active', s.dataset.listTab === target));
+    });
+  });
+
+  // worklog category filter
+  document.querySelectorAll('[data-wl-filter]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const filter = chip.dataset.wlFilter;
+      document.querySelectorAll('[data-wl-filter]').forEach(c => c.classList.toggle('active', c === chip));
+      const list = document.getElementById('worklog-list');
+      let visible = 0;
+      list.querySelectorAll('.seg-row').forEach(row => {
+        const show = filter === 'all' || row.dataset.cat === filter;
+        row.style.display = show ? '' : 'none';
+        if (show) visible++;
+      });
+      let hint = list.querySelector('.empty-hint');
+      if (visible === 0) {
+        if (!hint) { hint = document.createElement('div'); hint.className = 'empty-hint'; list.appendChild(hint); }
+        hint.textContent = '该类别今日无工作记录';
+      } else if (hint) {
+        hint.remove();
+      }
+    });
+  });
+
+  // event type filter
+  document.querySelectorAll('[data-ev-filter]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const filter = chip.dataset.evFilter;
+      document.querySelectorAll('[data-ev-filter]').forEach(c => c.classList.toggle('active', c === chip));
+      const list = document.getElementById('event-list');
+      let visible = 0;
+      list.querySelectorAll('.app-row').forEach(row => {
+        const show = filter === 'all' || row.dataset.evType === filter;
+        row.style.display = show ? '' : 'none';
+        if (show) visible++;
+      });
+      let hint = list.querySelector('.empty-hint');
+      if (visible === 0) {
+        if (!hint) { hint = document.createElement('div'); hint.className = 'empty-hint'; list.appendChild(hint); }
+        hint.textContent = '该类型今日无事件';
+      } else if (hint) {
+        hint.remove();
+      }
+    });
+  });
+
+  // generic list tab switcher (for week/month sections)
+  document.querySelectorAll('.list-view-section .list-tabs').forEach(tabs => {
+    tabs.querySelectorAll('.list-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const section = tab.closest('.list-view-section');
+        const tabAttr = Object.keys(tab.dataset)[0];
+        const tabVal = tab.dataset[tabAttr];
+        section.querySelectorAll('.list-tab').forEach(t => t.classList.toggle('active', t === tab));
+        section.querySelectorAll('.list-section').forEach(s => {
+          const sVal = s.dataset[tabAttr];
+          s.classList.toggle('active', sVal === tabVal);
+        });
+      });
+    });
+  });
+
+  // generic filter chip handler for week/month sections
+  function bindFilterChips(attr) {
+    document.querySelectorAll('[' + attr + ']').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const filter = chip.dataset[attr];
+        const section = chip.closest('.list-section');
+        document.querySelectorAll('[' + attr + ']').forEach(c => c.classList.toggle('active', c === chip));
+        const list = section.querySelector('.scroll-list');
+        let visible = 0;
+        list.querySelectorAll('[data-cat], [data-ev-type]').forEach(row => {
+          const cat = row.dataset.cat || row.dataset.evType;
+          const show = filter === 'all' || cat === filter;
+          row.style.display = show ? '' : 'none';
+          if (show) visible++;
+        });
+        // also show/hide day-group-headers based on if they have visible rows after them
+        list.querySelectorAll('.day-group-header').forEach(h => {
+          let next = h.nextElementSibling;
+          let hasVisible = false;
+          while (next && !next.classList.contains('day-group-header')) {
+            if (next.style.display !== 'none') { hasVisible = true; break; }
+            next = next.nextElementSibling;
+          }
+          h.style.display = hasVisible ? '' : 'none';
+        });
+        let hint = list.querySelector('.empty-hint');
+        if (visible === 0) {
+          if (!hint) { hint = document.createElement('div'); hint.className = 'empty-hint'; list.appendChild(hint); }
+          hint.textContent = '该筛选条件下无数据';
+        } else if (hint) {
+          hint.remove();
+        }
+      });
+    });
+  }
+  bindFilterChips('data-wl-week-filter');
+  bindFilterChips('data-ev-week-filter');
+  bindFilterChips('data-wl-month-filter');
+  bindFilterChips('data-ev-month-filter');
 
   // MCP config tabs + copy
   document.querySelectorAll('.mcp-config-tab').forEach(tab => {
