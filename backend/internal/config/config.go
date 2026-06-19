@@ -4,12 +4,16 @@
 package config
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
+
+//go:embed default_prompt.txt
+var defaultPrompt string
 
 // ASRMode 是 ASR 模式。
 type ASRMode string
@@ -40,8 +44,8 @@ type LocalASRConfig struct {
 
 // ASRConfig 是 ASR 配置块。
 type ASRConfig struct {
-	Mode           string                `yaml:"mode"`
-	ActiveProvider string                `yaml:"active_provider"`
+	Mode           string                 `yaml:"mode"`
+	ActiveProvider string                 `yaml:"active_provider"`
 	Providers      map[string]ASRProvider `yaml:"providers"`
 	Local          LocalASRConfig         `yaml:"local"`
 }
@@ -59,10 +63,10 @@ type VLMProvider struct {
 
 // VLMConfig 是 VLM 配置块。
 type VLMConfig struct {
-	Mode                string                `yaml:"mode"` // scheduled | on_demand | off
-	ActiveProvider      string                `yaml:"active_provider"`
+	Mode                string                 `yaml:"mode"` // scheduled | on_demand | off
+	ActiveProvider      string                 `yaml:"active_provider"`
 	Providers           map[string]VLMProvider `yaml:"providers"`
-	ScheduleIntervalMin int                   `yaml:"schedule_interval_min"`
+	ScheduleIntervalMin int                    `yaml:"schedule_interval_min"`
 }
 
 // LLMProvider 是单个 LLM/Polish 供应商配置。
@@ -78,18 +82,18 @@ type LLMProvider struct {
 
 // LLMConfig 是 LLM(Polish) 配置块。
 type LLMConfig struct {
-	Enabled        string               `yaml:"enabled"` // on | off
-	ActiveProvider string               `yaml:"active_provider"`
+	Enabled        string                 `yaml:"enabled"` // on | off
+	ActiveProvider string                 `yaml:"active_provider"`
 	Providers      map[string]LLMProvider `yaml:"providers"`
-	Prompt         string               `yaml:"prompt"`
-	InjectMode     string               `yaml:"inject_mode"` // preview | auto
+	Prompt         string                 `yaml:"prompt"`
+	InjectMode     string                 `yaml:"inject_mode"` // preview | auto
 }
 
 // HotkeyConfig 是热键配置块。
 type HotkeyConfig struct {
-	Record        string `yaml:"record"`
-	Screenshot    string `yaml:"screenshot"`
-	PromptPrefix  string `yaml:"prompt_prefix"` // Ctrl | Alt | Win
+	Record       string `yaml:"record"`
+	Screenshot   string `yaml:"screenshot"`
+	PromptPrefix string `yaml:"prompt_prefix"` // Ctrl | Alt | Win
 }
 
 // MovementConfig 是采集配置块。
@@ -171,7 +175,7 @@ func Default() *Config {
 					APIFormat: "openai",
 				},
 			},
-			Prompt:     "请润色并补全标点",
+			Prompt:     defaultPrompt,
 			InjectMode: "preview",
 		},
 		Movement: MovementConfig{
