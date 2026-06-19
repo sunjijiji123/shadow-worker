@@ -48,7 +48,7 @@
     h2 { font-size: 20px; margin-top: 48px; margin-bottom: 16px; border-left: 4px solid var(--accent); padding-left: 12px; }
     .note { color: var(--muted); font-size: 14px; margin-bottom: 16px; }
 
-    .wireframe { background: var(--bg2); border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; margin-bottom: 32px; }
+    .wireframe { background: var(--bg2); border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; margin-bottom: 32px; display: flex; flex-direction: column; max-height: 65vh; }
     .window-titlebar { height: 36px; background: var(--bg3); display: flex; align-items: center; padding: 0 12px; gap: 8px; }
     .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--rule); }
     .dot.red { background: #ef4444; }
@@ -56,14 +56,14 @@
     .dot.green { background: #10b981; }
     .window-title { color: var(--muted); font-size: 13px; margin-left: 8px; }
 
-    .app-body { display: flex; min-height: 600px; }
+    .app-body { display: flex; flex: 1; min-height: 0; overflow: hidden; position: relative; }
     .sidebar { width: 180px; background: var(--bg2); border-right: 1px solid var(--rule); padding: 16px 0; }
     .nav-item { display: flex; align-items: center; gap: 10px; padding: 12px 18px; color: var(--muted); font-size: 14px; cursor: pointer; user-select: none; }
     .nav-item:hover { color: var(--ink); }
     .nav-item.active { color: var(--accent); background: rgba(16,185,129,0.1); border-left: 3px solid var(--accent); }
     .nav-item svg { width: 18px; height: 18px; fill: currentColor; }
 
-    .content { flex: 1; padding: 20px; overflow: auto; }
+    .content { flex: 1; padding: 20px; overflow: auto; position: relative; }
     .content-title { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
     .content-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 
@@ -85,6 +85,10 @@
     .btn-ghost:hover { color: var(--ink); border-color: var(--accent); }
     .btn-danger { background: rgba(239,68,68,0.15); color: var(--danger); border: 1px solid rgba(239,68,68,0.3); }
     .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+    .toast { position: absolute; top: 16px; right: 16px; z-index: 1000; display: flex; align-items: center; gap: 8px; background: var(--bg3); border: 1px solid var(--rule); border-radius: 8px; padding: 10px 14px; font-size: 13px; box-shadow: 0 8px 32px rgba(0,0,0,0.35); opacity: 0; transform: translateY(-8px); transition: all .25s; pointer-events: none; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .settings-save-bar { position: absolute; bottom: 0; left: 180px; right: 0; padding: 16px 20px; background: linear-gradient(to top, var(--bg) 70%, transparent); display: flex; justify-content: flex-end; gap: 12px; z-index: 10; }
 
     .mic-test-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 6px; font-size: 13px; cursor: pointer; user-select: none; white-space: nowrap; background: rgba(16,185,129,0.1); border: 1px solid var(--accent); color: var(--accent); transition: .2s; }
     .mic-test-btn:hover { background: rgba(16,185,129,0.2); color: #fff; }
@@ -200,18 +204,6 @@
     .day-group-bar { flex:1; height:4px; border-radius:2px; overflow:hidden; display:flex; }
 
     /* month summary row */
-    .month-sum-row { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--rule); cursor:pointer; }
-    .month-sum-row:last-child { border-bottom:none; }
-    .month-sum-row:hover { background:var(--bg); border-radius:6px; padding-left:8px; padding-right:8px; }
-    .month-sum-date { font-size:13px; font-weight:500; width:70px; flex-shrink:0; }
-    .month-sum-duration { font-size:13px; font-variant-numeric:tabular-nums; width:55px; flex-shrink:0; }
-    .month-sum-bar { flex:1; height:8px; border-radius:4px; overflow:hidden; display:flex; background:var(--bg); }
-    .month-sum-bar > div { height:100%; }
-    .month-sum-breakdown { font-size:11px; color:var(--muted); width:160px; flex-shrink:0; text-align:right; }
-    .month-sum-footer { display:flex; justify-content:space-between; align-items:center; padding:12px 0 0; border-top:1px solid var(--rule); margin-top:8px; font-size:13px; }
-    .month-sum-footer-total { font-weight:600; font-size:15px; }
-    .month-sum-footer-bar { flex:1; height:6px; border-radius:3px; overflow:hidden; display:flex; margin:0 16px; background:var(--bg); }
-    .month-sum-footer-bar > div { height:100%; }
 
     .update-row { display: flex; align-items: center; gap: 16px; }
     .update-links { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -364,6 +356,7 @@
     .heatmap-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
     .heatmap-legend { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
     .heatmap-legend span { width: 10px; height: 10px; border-radius: 2px; background: #2a2a2a; }
+    .heatmap-legend .legend-label { width: auto; height: auto; }
     .heatmap-legend span.l1 { background: rgba(16,185,129,0.25); }
     .heatmap-legend span.l2 { background: rgba(16,185,129,0.45); }
     .heatmap-legend span.l3 { background: rgba(16,185,129,0.65); }
@@ -414,6 +407,37 @@
     /* timeline */
     .timeline-view-section { display: none; }
     .timeline-view-section.active { display: block; }
+    .date-picker { display: flex; align-items: center; gap: 4px; background: var(--bg3); border: 1px solid var(--rule); border-radius: 8px; padding: 4px; position: relative; }
+    .date-nav { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: var(--muted); cursor: pointer; font-size: 12px; user-select: none; }
+    .date-nav:hover { background: var(--bg2); color: var(--ink); }
+    .date-display { min-width: 150px; text-align: center; font-size: 14px; font-weight: 500; padding: 0 8px; cursor: pointer; }
+    .calendar-popup {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 50%;
+      transform: translateX(-50%);
+      width: 260px;
+      background: var(--bg3);
+      border: 1px solid var(--rule);
+      border-radius: 12px;
+      padding: 12px;
+      z-index: 100;
+      display: none;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+    }
+    .calendar-popup.open { display: block; }
+    .calendar-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .cal-title { font-size: 14px; font-weight: 600; }
+    .cal-nav { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: var(--muted); cursor: pointer; font-size: 12px; user-select: none; }
+    .cal-nav:hover { background: var(--bg2); color: var(--ink); }
+    .cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+    .cal-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+    .cal-day { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 12px; color: var(--ink); cursor: pointer; position: relative; }
+    .cal-day:hover:not(.empty) { background: var(--bg2); }
+    .cal-day.selected { background: var(--accent); color: #000; font-weight: 600; }
+    .cal-day.today:not(.selected) { border: 1px solid var(--accent); }
+    .cal-day.empty { cursor: default; }
+    .cal-day .dot { position: absolute; bottom: 3px; width: 4px; height: 4px; border-radius: 50%; background: var(--accent); }
     .timeline-ruler { display:flex; justify-content:space-between; font-size:11px; color:var(--muted); padding:0 4px; margin-bottom:8px; }
     .timeline-track { position:relative; height:32px; background:var(--bg); border-radius:6px; margin-top:28px; overflow:hidden; }
     .t-segment { position:absolute; top:0; height:100%; border-right:1px solid var(--bg3); cursor: help; }
@@ -434,17 +458,21 @@
     .dot-legend.voice { background:#10b981; }
     .dot-legend.prompt { background:#f59e0b; }
     .dot-legend.screenshot { background:#3b82f6; }
+    .dot-legend.coding { background:#3B82F6; }
+    .dot-legend.browser { background:#F59E0B; }
+    .dot-legend.chat { background:#10B981; }
+    .dot-legend.office { background:#8B5CF6; }
+    .dot-legend.other { background:#6B7280; }
+    .dot-legend.idle { background:#2a2a2a; }
 
-    .week-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:12px; }
-    .week-day { background:var(--bg); border:1px solid var(--rule); border-radius:8px; padding:10px; text-align:center; }
-    .week-label { font-size:12px; color:var(--muted); margin-bottom:8px; }
-    .week-bar { display:flex; align-items:flex-end; gap:3px; height:80px; justify-content:center; }
-    .w-bar { width:8px; border-radius:2px 2px 0 0; }
-    .week-total { font-size:12px; color:var(--ink); margin-top:8px; }
-
-    .month-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:6px; }
-    .month-day { aspect-ratio:1; background:var(--bg); border:1px solid var(--rule); border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:12px; color:var(--muted); }
-    .month-day.active { background:var(--accent); color:#000; }
+    .category-rank { margin-top: 14px; }
+    .category-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .category-row:last-child { margin-bottom: 0; }
+    .category-info { display: flex; align-items: center; gap: 8px; width: 70px; flex-shrink: 0; }
+    .category-name { font-size: 14px; }
+    .category-bar-wrap { flex: 1; height: 10px; background: var(--bg2); border-radius: 5px; overflow: hidden; }
+    .category-bar { height: 100%; border-radius: 5px; transition: width .25s ease; }
+    .category-value { width: 110px; text-align: right; font-size: 13px; color: var(--muted); flex-shrink: 0; }
 
     @media (max-width: 768px) {
       .app-body { flex-direction: column; }
@@ -499,14 +527,14 @@
           </div>
           <div class="stats-row">
             <div class="stat-card">
-              <div class="stat-header">今日工作时长</div>
-              <div class="stat-value">3h 20m</div>
-              <div class="stat-sub">较昨日 +28 min</div>
+              <div class="stat-header" id="stat-duration-label">今日工作时长</div>
+              <div class="stat-value" id="stat-duration">3h 20m</div>
+              <div class="stat-sub" id="stat-duration-sub">较昨日 +28 min</div>
             </div>
             <div class="stat-card">
-              <div class="stat-header">活跃段数</div>
-              <div class="stat-value">14</div>
-              <div class="stat-sub">平均每段 14 min</div>
+              <div class="stat-header">打断次数</div>
+              <div class="stat-value" id="stat-interrupt">12</div>
+              <div class="stat-sub" id="stat-interrupt-sub">较昨日 -3</div>
             </div>
             <div class="stat-card">
               <div class="stat-header">涉及应用</div>
@@ -536,14 +564,13 @@
               <div class="heatmap-header">
                 <div class="card-title">活跃热力图</div>
                 <div class="heatmap-legend">
-                  <span>较少</span>
-                  <span></span>
+                  <span class="legend-label">较少</span>
                   <span class="l1"></span>
                   <span class="l2"></span>
                   <span class="l3"></span>
                   <span class="l4"></span>
                   <span class="l5"></span>
-                  <span>较多</span>
+                  <span class="legend-label">较多</span>
                 </div>
               </div>
               <div class="heatmap" id="activity-heatmap"></div>
@@ -574,65 +601,49 @@
             </div>
           </div>
           <div class="card">
-            <div class="card-title">类别趋势</div>
-            <div class="card-desc">近 7 天各类别活跃分钟</div>
-            <div class="trend-wrap">
-              <div class="trend-y-axis">
-                <span>8h</span>
-                <span>6h</span>
-                <span>4h</span>
-                <span>2h</span>
-                <span>0</span>
+            <div class="card-title">类别占比排行</div>
+            <div class="card-desc" id="category-rank-desc">今日各类别活跃时长占比</div>
+            <div class="category-rank" id="category-rank">
+              <div class="category-row">
+                <div class="category-info">
+                  <i class="dot-legend coding"></i>
+                  <span class="category-name">编程</span>
+                </div>
+                <div class="category-bar-wrap">
+                  <div class="category-bar" style="width:52%;background:#3B82F6;"></div>
+                </div>
+                <div class="category-value">52% · 1h 44m</div>
               </div>
-              <div class="trend-chart">
-                <div class="trend-grid">
-                  <div class="trend-grid-line"></div>
-                  <div class="trend-grid-line"></div>
-                  <div class="trend-grid-line"></div>
-                  <div class="trend-grid-line"></div>
-                  <div class="trend-grid-line"></div>
+              <div class="category-row">
+                <div class="category-info">
+                  <i class="dot-legend browser"></i>
+                  <span class="category-name">浏览</span>
                 </div>
-                <div class="trend-bar" data-label="周一">
-                  <div class="trend-seg coding" style="height:38%"></div>
-                  <div class="trend-seg browser" style="height:14%"></div>
-                  <div class="trend-seg chat" style="height:8%"></div>
+                <div class="category-bar-wrap">
+                  <div class="category-bar" style="width:24%;background:#F59E0B;"></div>
                 </div>
-                <div class="trend-bar" data-label="周二">
-                  <div class="trend-seg coding" style="height:22%"></div>
-                  <div class="trend-seg browser" style="height:14%"></div>
-                  <div class="trend-seg office" style="height:4%"></div>
-                </div>
-                <div class="trend-bar" data-label="周三">
-                  <div class="trend-seg coding" style="height:48%"></div>
-                  <div class="trend-seg chat" style="height:12%"></div>
-                  <div class="trend-seg browser" style="height:10%"></div>
-                  <div class="trend-seg office" style="height:5%"></div>
-                </div>
-                <div class="trend-bar" data-label="周四">
-                  <div class="trend-seg coding" style="height:32%"></div>
-                  <div class="trend-seg chat" style="height:10%"></div>
-                  <div class="trend-seg browser" style="height:8%"></div>
-                </div>
-                <div class="trend-bar" data-label="周五">
-                  <div class="trend-seg coding" style="height:18%"></div>
-                  <div class="trend-seg browser" style="height:12%"></div>
-                  <div class="trend-seg chat" style="height:5%"></div>
-                </div>
-                <div class="trend-bar" data-label="周六">
-                  <div class="trend-seg browser" style="height:8%"></div>
-                  <div class="trend-seg chat" style="height:2%"></div>
-                </div>
-                <div class="trend-bar" data-label="周日">
-                  <div class="trend-seg browser" style="height:10%"></div>
-                  <div class="trend-seg chat" style="height:5%"></div>
-                </div>
+                <div class="category-value">24% · 48m</div>
               </div>
-            </div>
-            <div style="display:flex;gap:16px;margin-top:12px;font-size:12px;color:var(--muted);">
-              <span><i class="dot-legend coding"></i>编程</span>
-              <span><i class="dot-legend browser"></i>浏览</span>
-              <span><i class="dot-legend chat"></i>沟通</span>
-              <span><i class="dot-legend office"></i>办公</span>
+              <div class="category-row">
+                <div class="category-info">
+                  <i class="dot-legend chat"></i>
+                  <span class="category-name">沟通</span>
+                </div>
+                <div class="category-bar-wrap">
+                  <div class="category-bar" style="width:16%;background:#10B981;"></div>
+                </div>
+                <div class="category-value">16% · 32m</div>
+              </div>
+              <div class="category-row">
+                <div class="category-info">
+                  <i class="dot-legend office"></i>
+                  <span class="category-name">办公</span>
+                </div>
+                <div class="category-bar-wrap">
+                  <div class="category-bar" style="width:8%;background:#8B5CF6;"></div>
+                </div>
+                <div class="category-value">8% · 16m</div>
+              </div>
             </div>
           </div>
           <div class="card">
@@ -659,26 +670,36 @@
           <div class="content-header">
             <div class="content-title">时间轴</div>
             <div style="display:flex;gap:8px;align-items:center;">
-              <div class="select-wrap" data-options="今天,昨天,近7天,近30天"><div class="select">今天</div></div>
-              <div class="chip-group" style="margin:0;">
-                <span class="chip active" data-group="timeline-view" data-val="day">日</span>
-                <span class="chip" data-group="timeline-view" data-val="week">周</span>
-                <span class="chip" data-group="timeline-view" data-val="month">月</span>
+              <div class="date-picker" id="timeline-date-picker">
+                <span class="date-nav" id="date-prev">＜</span>
+                <span class="date-display" id="date-display">2026-06-18 周四</span>
+                <span class="date-nav" id="date-next">＞</span>
+                <div class="calendar-popup" id="calendar-popup">
+                  <div class="calendar-header">
+                    <span class="cal-nav" id="cal-prev">＜</span>
+                    <span class="cal-title" id="cal-title">2026年6月</span>
+                    <span class="cal-nav" id="cal-next">＞</span>
+                  </div>
+                  <div class="cal-weekdays">
+                    <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+                  </div>
+                  <div class="cal-days" id="cal-days"></div>
+                </div>
               </div>
-              <input class="input" placeholder="搜索事件" style="width:160px;">
+              <span class="btn btn-ghost btn-sm" id="date-today">今天</span>
             </div>
           </div>
 
           <!-- 日视图 -->
           <div class="card timeline-view-section active" data-view="day">
             <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-              <div style="font-size:14px;font-weight:600;">2026-06-18 周四</div>
-              <div style="font-size:12px;color:var(--muted);">工作 3h 20m · 活跃 4 段</div>
+              <div style="font-size:14px;font-weight:600;" id="timeline-date-title">2026-06-18 周四</div>
+              <div style="font-size:12px;color:var(--muted);" id="timeline-day-summary">工作 3h 20m · 活跃 4 段</div>
             </div>
             <div class="timeline-ruler">
               <span>09:00</span><span>10:00</span><span>11:00</span><span>12:00</span><span>13:00</span><span>14:00</span><span>15:00</span><span>16:00</span><span>17:00</span><span>18:00</span>
             </div>
-            <div class="timeline-track">
+            <div class="timeline-track" id="timeline-track">
               <div class="t-segment coding" style="left:0%;width:18%;" title="编程 · Cursor · 点击让 AI 补全详情"></div>
               <div class="t-segment idle" style="left:18%;width:6%;" title="离开 · 未生成工作记录"></div>
               <div class="t-segment coding" style="left:24%;width:22%;" title="编程 · Cursor · 编写 shadow-worker 配置模块"></div>
@@ -696,32 +717,6 @@
               <span><i class="dot-legend office"></i>办公</span>
               <span><i class="dot-legend other"></i>其他</span>
               <span><i class="dot-legend idle"></i>离开</span>
-            </div>
-          </div>
-
-          <!-- 周视图 -->
-          <div class="card timeline-view-section" data-view="week">
-            <div style="font-size:14px;font-weight:600;margin-bottom:12px;">2026-06-15 ~ 2026-06-21</div>
-            <div class="week-grid">
-              <div class="week-day"><div class="week-label">周一</div><div class="week-bar"><div class="w-bar coding" style="height:60%"></div><div class="w-bar chat" style="height:30%"></div><div class="w-bar browser" style="height:10%"></div></div><div class="week-total">4h 20m</div></div>
-              <div class="week-day"><div class="week-label">周二</div><div class="week-bar"><div class="w-bar coding" style="height:45%"></div><div class="w-bar browser" style="height:40%"></div><div class="w-bar idle" style="height:15%"></div></div><div class="week-total">3h 50m</div></div>
-              <div class="week-day"><div class="week-label">周三</div><div class="week-bar"><div class="w-bar coding" style="height:70%"></div><div class="w-bar chat" style="height:20%"></div><div class="w-bar office" style="height:10%"></div></div><div class="week-total">5h 10m</div></div>
-              <div class="week-day"><div class="week-label">周四</div><div class="week-bar"><div class="w-bar coding" style="height:55%"></div><div class="w-bar chat" style="height:25%"></div><div class="w-bar browser" style="height:20%"></div></div><div class="week-total">3h 20m</div></div>
-              <div class="week-day"><div class="week-label">周五</div><div class="week-bar"><div class="w-bar coding" style="height:35%"></div><div class="w-bar browser" style="height:35%"></div><div class="w-bar chat" style="height:30%"></div></div><div class="week-total">2h 55m</div></div>
-              <div class="week-day"><div class="week-label">周六</div><div class="week-bar"><div class="w-bar idle" style="height:100%"></div></div><div class="week-total">—</div></div>
-              <div class="week-day"><div class="week-label">周日</div><div class="week-bar"><div class="w-bar idle" style="height:100%"></div></div><div class="week-total">—</div></div>
-            </div>
-          </div>
-
-          <!-- 月视图 -->
-          <div class="card timeline-view-section" data-view="month">
-            <div style="font-size:14px;font-weight:600;margin-bottom:12px;">2026-06</div>
-            <div class="month-grid">
-              <div class="month-day">1</div><div class="month-day">2</div><div class="month-day">3</div><div class="month-day">4</div><div class="month-day">5</div><div class="month-day">6</div><div class="month-day">7</div>
-              <div class="month-day">8</div><div class="month-day">9</div><div class="month-day">10</div><div class="month-day">11</div><div class="month-day">12</div><div class="month-day">13</div><div class="month-day">14</div>
-              <div class="month-day">15</div><div class="month-day">16</div><div class="month-day">17</div><div class="month-day active">18</div><div class="month-day">19</div><div class="month-day">20</div><div class="month-day">21</div>
-              <div class="month-day">22</div><div class="month-day">23</div><div class="month-day">24</div><div class="month-day">25</div><div class="month-day">26</div><div class="month-day">27</div><div class="month-day">28</div>
-              <div class="month-day">29</div><div class="month-day">30</div>
             </div>
           </div>
 
@@ -857,178 +852,6 @@
             </div>
           </div>
 
-          <!-- 列表 - 周视图 -->
-          <div class="card list-view-section" data-list-view="week">
-            <div class="list-tabs">
-              <div class="list-tab active" data-wl-week-tab="worklog">工作记录</div>
-              <div class="list-tab" data-wl-week-tab="events">事件列表</div>
-            </div>
-
-            <!-- 周工作记录 -->
-            <div class="list-section active" data-wl-week-tab="worklog">
-              <div class="list-filter">
-                <span class="filter-chip active" data-wl-week-filter="all">全部</span>
-                <span class="filter-chip" data-wl-week-filter="coding"><span class="fc-dot" style="background:#3B82F6"></span>编程</span>
-                <span class="filter-chip" data-wl-week-filter="browser"><span class="fc-dot" style="background:#F59E0B"></span>浏览</span>
-                <span class="filter-chip" data-wl-week-filter="chat"><span class="fc-dot" style="background:#10B981"></span>沟通</span>
-                <span class="filter-chip" data-wl-week-filter="office"><span class="fc-dot" style="background:#8B5CF6"></span>办公</span>
-              </div>
-              <div class="scroll-list">
-                <div class="day-group-header">
-                  <span class="day-group-date">6月15日 周一</span>
-                  <span class="day-group-total">4h 20m</span>
-                  <div class="day-group-bar"><div style="width:60%;background:#3B82F6"></div><div style="width:30%;background:#10B981"></div><div style="width:10%;background:#F59E0B"></div></div>
-                </div>
-                <div class="seg-row" data-cat="coding"><div class="seg-header"><span class="seg-time">09:00 - 10:20</span><span class="seg-app"><span class="seg-app-icon" style="background:#3B82F6">Cr</span>Cursor</span><span class="seg-cat-badge" style="background:rgba(59,130,246,0.15);color:#3B82F6">coding</span><span class="seg-duration">80 min</span></div><div class="seg-summary">VLM: 重构 ASR 模块</div></div>
-                <div class="seg-row" data-cat="chat"><div class="seg-header"><span class="seg-time">10:20 - 11:00</span><span class="seg-app"><span class="seg-app-icon" style="background:#10B981">We</span>WeChat</span><span class="seg-cat-badge" style="background:rgba(16,185,129,0.15);color:#10B981">chat</span><span class="seg-duration">40 min</span></div><div class="seg-summary">VLM: 讨论需求方案</div></div>
-                <div class="seg-row" data-cat="coding"><div class="seg-header"><span class="seg-time">14:00 - 15:40</span><span class="seg-app"><span class="seg-app-icon" style="background:#3B82F6">Cr</span>Cursor</span><span class="seg-cat-badge" style="background:rgba(59,130,246,0.15);color:#3B82F6">coding</span><span class="seg-duration">100 min</span></div><div class="seg-summary">VLM: 编写存储层代码</div></div>
-                <div class="seg-row" data-cat="browser"><div class="seg-header"><span class="seg-time">15:40 - 16:20</span><span class="seg-app"><span class="seg-app-icon" style="background:#F59E0B">Ch</span>Chrome</span><span class="seg-cat-badge" style="background:rgba(245,158,11,0.15);color:#F59E0B">browser</span><span class="seg-duration">40 min</span></div><div class="seg-summary">VLM: 查阅技术文档</div></div>
-
-                <div class="day-group-header">
-                  <span class="day-group-date">6月16日 周二</span>
-                  <span class="day-group-total">3h 50m</span>
-                  <div class="day-group-bar"><div style="width:45%;background:#3B82F6"></div><div style="width:40%;background:#F59E0B"></div><div style="width:15%;background:#6B7280"></div></div>
-                </div>
-                <div class="seg-row" data-cat="coding"><div class="seg-header"><span class="seg-time">09:30 - 11:00</span><span class="seg-app"><span class="seg-app-icon" style="background:#3B82F6">Cr</span>Cursor</span><span class="seg-cat-badge" style="background:rgba(59,130,246,0.15);color:#3B82F6">coding</span><span class="seg-duration">90 min</span></div><div class="seg-summary">VLM: 实现 MCP server</div></div>
-                <div class="seg-row" data-cat="browser"><div class="seg-header"><span class="seg-time">13:30 - 15:30</span><span class="seg-app"><span class="seg-app-icon" style="background:#F59E0B">Ch</span>Chrome</span><span class="seg-cat-badge" style="background:rgba(245,158,11,0.15);color:#F59E0B">browser</span><span class="seg-duration">120 min</span></div><div class="seg-summary">VLM: 调研竞品方案</div></div>
-                <div class="seg-row" data-cat="coding"><div class="seg-header"><span class="seg-time">15:30 - 16:20</span><span class="seg-app"><span class="seg-app-icon" style="background:#3B82F6">Cr</span>Cursor</span><span class="seg-cat-badge" style="background:rgba(59,130,246,0.15);color:#3B82F6">coding</span><span class="seg-duration">50 min</span></div><div class="seg-summary">VLM: 修复编译错误</div></div>
-
-                <div class="day-group-header">
-                  <span class="day-group-date">6月17日 周三</span>
-                  <span class="day-group-total">5h 10m</span>
-                  <div class="day-group-bar"><div style="width:70%;background:#3B82F6"></div><div style="width:20%;background:#10B981"></div><div style="width:10%;background:#8B5CF6"></div></div>
-                </div>
-                <div class="seg-row" data-cat="coding"><div class="seg-header"><span class="seg-time">09:00 - 11:30</span><span class="seg-app"><span class="seg-app-icon" style="background:#3B82F6">Cr</span>Cursor</span><span class="seg-cat-badge" style="background:rgba(59,130,246,0.15);color:#3B82F6">coding</span><span class="seg-duration">150 min</span></div><div class="seg-summary">VLM: 实现事件采集模块</div></div>
-                <div class="seg-row" data-cat="chat"><div class="seg-header"><span class="seg-time">13:00 - 14:00</span><span class="seg-app"><span class="seg-app-icon" style="background:#10B981">We</span>WeChat</span><span class="seg-cat-badge" style="background:rgba(16,185,129,0.15);color:#10B981">chat</span><span class="seg-duration">60 min</span></div><div class="seg-summary">VLM: 周会沟通</div></div>
-                <div class="seg-row" data-cat="office"><div class="seg-header"><span class="seg-time">14:00 - 15:10</span><span class="seg-app"><span class="seg-app-icon" style="background:#8B5CF6">Wd</span>Word</span><span class="seg-cat-badge" style="background:rgba(139,92,246,0.15);color:#8B5CF6">office</span><span class="seg-duration">70 min</span></div><div class="seg-summary">VLM: 编写设计文档</div></div>
-                <div class="seg-row" data-cat="coding"><div class="seg-header"><span class="seg-time">15:10 - 17:00</span><span class="seg-app"><span class="seg-app-icon" style="background:#3B82F6">Cr</span>Cursor</span><span class="seg-cat-badge" style="background:rgba(59,130,246,0.15);color:#3B82F6">coding</span><span class="seg-duration">110 min</span></div><div class="seg-summary">VLM: 编写单元测试</div></div>
-
-                <div class="day-group-header">
-                  <span class="day-group-date">6月18日 周四</span>
-                  <span class="day-group-total">3h 20m</span>
-                  <div class="day-group-bar"><div style="width:55%;background:#3B82F6"></div><div style="width:25%;background:#10B981"></div><div style="width:20%;background:#F59E0B"></div></div>
-                </div>
-                <div class="seg-row" data-cat="coding"><div class="seg-header"><span class="seg-time">09:00 - 10:15</span><span class="seg-app"><span class="seg-app-icon" style="background:#3B82F6">Cr</span>Cursor</span><span class="seg-cat-badge" style="background:rgba(59,130,246,0.15);color:#3B82F6">coding</span><span class="seg-duration">75 min</span></div><div class="seg-summary">VLM: 重构配置模块</div></div>
-                <div class="seg-row" data-cat="browser"><div class="seg-header"><span class="seg-time">10:15 - 10:48</span><span class="seg-app"><span class="seg-app-icon" style="background:#F59E0B">Ch</span>Chrome</span><span class="seg-cat-badge" style="background:rgba(245,158,11,0.15);color:#F59E0B">browser</span><span class="seg-duration">33 min</span></div><div class="seg-summary">VLM: 查看 MCP 文档</div></div>
-                <div class="seg-row" data-cat="chat"><div class="seg-header"><span class="seg-time">10:48 - 11:03</span><span class="seg-app"><span class="seg-app-icon" style="background:#10B981">We</span>WeChat</span><span class="seg-cat-badge" style="background:rgba(16,185,129,0.15);color:#10B981">chat</span><span class="seg-duration">15 min</span></div><div class="seg-summary">VLM: 讨论接口设计</div></div>
-                <div class="seg-row" data-cat="coding"><div class="seg-header"><span class="seg-time">14:10 - 15:30</span><span class="seg-app"><span class="seg-app-icon" style="background:#3B82F6">Cr</span>Cursor</span><span class="seg-cat-badge" style="background:rgba(59,130,246,0.15);color:#3B82F6">coding</span><span class="seg-duration">80 min</span></div><div class="seg-summary">VLM: 实现存储查询逻辑</div></div>
-
-                <div class="day-group-header">
-                  <span class="day-group-date">6月19日 周五</span>
-                  <span class="day-group-total">2h 55m</span>
-                  <div class="day-group-bar"><div style="width:35%;background:#3B82F6"></div><div style="width:35%;background:#F59E0B"></div><div style="width:30%;background:#10B981"></div></div>
-                </div>
-                <div class="seg-row" data-cat="coding"><div class="seg-header"><span class="seg-time">09:00 - 10:00</span><span class="seg-app"><span class="seg-app-icon" style="background:#3B82F6">Cr</span>Cursor</span><span class="seg-cat-badge" style="background:rgba(59,130,246,0.15);color:#3B82F6">coding</span><span class="seg-duration">60 min</span></div><div class="seg-summary">VLM: 代码 review</div></div>
-                <div class="seg-row" data-cat="browser"><div class="seg-header"><span class="seg-time">10:00 - 11:00</span><span class="seg-app"><span class="seg-app-icon" style="background:#F59E0B">Ch</span>Chrome</span><span class="seg-cat-badge" style="background:rgba(245,158,11,0.15);color:#F59E0B">browser</span><span class="seg-duration">60 min</span></div><div class="seg-summary">VLM: 查阅最佳实践</div></div>
-                <div class="seg-row" data-cat="chat"><div class="seg-header"><span class="seg-time">14:00 - 14:55</span><span class="seg-app"><span class="seg-app-icon" style="background:#10B981">We</span>WeChat</span><span class="seg-cat-badge" style="background:rgba(16,185,129,0.15);color:#10B981">chat</span><span class="seg-duration">55 min</span></div><div class="seg-summary">VLM: 确认下周排期</div></div>
-              </div>
-            </div>
-
-            <!-- 周事件列表 -->
-            <div class="list-section" data-wl-week-tab="events">
-              <div class="list-filter">
-                <span class="filter-chip active" data-ev-week-filter="all">全部</span>
-                <span class="filter-chip" data-ev-week-filter="voice"><span class="fc-dot" style="background:#10B981"></span>语音</span>
-                <span class="filter-chip" data-ev-week-filter="prompt_inject"><span class="fc-dot" style="background:#F59E0B"></span>提示词</span>
-                <span class="filter-chip" data-ev-week-filter="screenshot"><span class="fc-dot" style="background:#3B82F6"></span>截图</span>
-                <span class="filter-chip" data-ev-week-filter="vlm_summary"><span class="fc-dot" style="background:#8B5CF6"></span>VLM摘要</span>
-              </div>
-              <div class="scroll-list">
-                <div class="day-group-header"><span class="day-group-date">6月15日 周一</span><span class="day-group-total">6 条事件</span></div>
-                <div class="app-row" data-ev-type="voice"><span class="app-color" style="background:#10B981"></span><span class="app-name">09:15 语音：开始重构 ASR 模块</span><span class="app-meta">已润色</span></div>
-                <div class="app-row" data-ev-type="prompt_inject"><span class="app-color" style="background:#F59E0B"></span><span class="app-name">10:30 提示词：生成接口文档</span><span class="app-meta">Ctrl+1</span></div>
-                <div class="app-row" data-ev-type="screenshot"><span class="app-color" style="background:#3B82F6"></span><span class="app-name">14:20 截图：记录当前进度</span><span class="app-meta">自动</span></div>
-                <div class="day-group-header"><span class="day-group-date">6月16日 周二</span><span class="day-group-total">5 条事件</span></div>
-                <div class="app-row" data-ev-type="voice"><span class="app-color" style="background:#10B981"></span><span class="app-name">09:40 语音：实现 MCP server</span><span class="app-meta">已润色</span></div>
-                <div class="app-row" data-ev-type="vlm_summary"><span class="app-color" style="background:#8B5CF6"></span><span class="app-name">14:00 VLM摘要：正在调研竞品</span><span class="app-meta">自动</span></div>
-                <div class="day-group-header"><span class="day-group-date">6月17日 周三</span><span class="day-group-total">8 条事件</span></div>
-                <div class="app-row" data-ev-type="voice"><span class="app-color" style="background:#10B981"></span><span class="app-name">09:10 语音：实现事件采集</span><span class="app-meta">已润色</span></div>
-                <div class="app-row" data-ev-type="prompt_inject"><span class="app-color" style="background:#F59E0B"></span><span class="app-name">13:30 提示词：整理周会要点</span><span class="app-meta">Ctrl+2</span></div>
-                <div class="app-row" data-ev-type="screenshot"><span class="app-color" style="background:#3B82F6"></span><span class="app-name">15:30 截图：测试结果截图</span><span class="app-meta">自动</span></div>
-                <div class="day-group-header"><span class="day-group-date">6月18日 周四</span><span class="day-group-total">8 条事件</span></div>
-                <div class="app-row" data-ev-type="voice"><span class="app-color" style="background:#10B981"></span><span class="app-name">09:12 语音：帮我把这段代码重构</span><span class="app-meta">已润色</span></div>
-                <div class="app-row" data-ev-type="prompt_inject"><span class="app-color" style="background:#F59E0B"></span><span class="app-name">10:05 提示词：整理成会议纪要</span><span class="app-meta">Ctrl+1</span></div>
-                <div class="app-row" data-ev-type="screenshot"><span class="app-color" style="background:#3B82F6"></span><span class="app-name">11:28 截图：VLM 理解屏幕</span><span class="app-meta">自动</span></div>
-                <div class="day-group-header"><span class="day-group-date">6月19日 周五</span><span class="day-group-total">4 条事件</span></div>
-                <div class="app-row" data-ev-type="voice"><span class="app-color" style="background:#10B981"></span><span class="app-name">09:20 语音：代码 review</span><span class="app-meta">原文</span></div>
-                <div class="app-row" data-ev-type="prompt_inject"><span class="app-color" style="background:#F59E0B"></span><span class="app-name">14:30 提示词：翻译成英文</span><span class="app-meta">Ctrl+2</span></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 列表 - 月视图 -->
-          <div class="card list-view-section" data-list-view="month">
-            <div class="list-tabs">
-              <div class="list-tab active" data-month-tab="worklog">工作记录</div>
-              <div class="list-tab" data-month-tab="events">事件列表</div>
-            </div>
-
-            <!-- 月工作记录 - 每天汇总 -->
-            <div class="list-section active" data-month-tab="worklog">
-              <div class="list-filter">
-                <span class="filter-chip active" data-wl-month-filter="all">全部</span>
-                <span class="filter-chip" data-wl-month-filter="coding"><span class="fc-dot" style="background:#3B82F6"></span>编程</span>
-                <span class="filter-chip" data-wl-month-filter="browser"><span class="fc-dot" style="background:#F59E0B"></span>浏览</span>
-                <span class="filter-chip" data-wl-month-filter="chat"><span class="fc-dot" style="background:#10B981"></span>沟通</span>
-                <span class="filter-chip" data-wl-month-filter="office"><span class="fc-dot" style="background:#8B5CF6"></span>办公</span>
-              </div>
-              <div class="scroll-list" style="max-height:400px;">
-                <div class="month-sum-row"><span class="month-sum-date">6月1日</span><span class="month-sum-duration">3h 20m</span><div class="month-sum-bar"><div style="width:60%;background:#3B82F6"></div><div style="width:20%;background:#F59E0B"></div><div style="width:20%;background:#10B981"></div></div><span class="month-sum-breakdown">编程 60% · 浏览 20% · 沟通 20%</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月2日</span><span class="month-sum-duration">4h 10m</span><div class="month-sum-bar"><div style="width:70%;background:#3B82F6"></div><div style="width:30%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">编程 70% · 办公 30%</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月3日</span><span class="month-sum-duration">2h 50m</span><div class="month-sum-bar"><div style="width:50%;background:#F59E0B"></div><div style="width:50%;background:#10B981"></div></div><span class="month-sum-breakdown">浏览 50% · 沟通 50%</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月4日</span><span class="month-sum-duration">5h 30m</span><div class="month-sum-bar"><div style="width:80%;background:#3B82F6"></div><div style="width:20%;background:#F59E0B"></div></div><span class="month-sum-breakdown">编程 80% · 浏览 20%</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月5日</span><span class="month-sum-duration">3h 00m</span><div class="month-sum-bar"><div style="width:40%;background:#3B82F6"></div><div style="width:35%;background:#8B5CF6"></div><div style="width:25%;background:#10B981"></div></div><span class="month-sum-breakdown">编程 40% · 办公 35% · 沟通 25%</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月8日</span><span class="month-sum-duration">4h 20m</span><div class="month-sum-bar"><div style="width:60%;background:#3B82F6"></div><div style="width:30%;background:#10B981"></div><div style="width:10%;background:#F59E0B"></div></div><span class="month-sum-breakdown">编程 60% · 沟通 30% · 浏览 10%</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月9日</span><span class="month-sum-duration">3h 50m</span><div class="month-sum-bar"><div style="width:45%;background:#3B82F6"></div><div style="width:40%;background:#F59E0B"></div><div style="width:15%;background:#6B7280"></div></div><span class="month-sum-breakdown">编程 45% · 浏览 40% · 其他 15%</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月10日</span><span class="month-sum-duration">5h 10m</span><div class="month-sum-bar"><div style="width:70%;background:#3B82F6"></div><div style="width:20%;background:#10B981"></div><div style="width:10%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">编程 70% · 沟通 20% · 办公 10%</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月11日</span><span class="month-sum-duration">4h 00m</span><div class="month-sum-bar"><div style="width:55%;background:#3B82F6"></div><div style="width:25%;background:#F59E0B"></div><div style="width:20%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">编程 55% · 浏览 25% · 办公 20%</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月12日</span><span class="month-sum-duration">3h 15m</span><div class="month-sum-bar"><div style="width:50%;background:#3B82F6"></div><div style="width:30%;background:#10B981"></div><div style="width:20%;background:#F59E0B"></div></div><span class="month-sum-breakdown">编程 50% · 沟通 30% · 浏览 20%</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月15日</span><span class="month-sum-duration">4h 20m</span><div class="month-sum-bar"><div style="width:60%;background:#3B82F6"></div><div style="width:30%;background:#10B981"></div><div style="width:10%;background:#F59E0B"></div></div><span class="month-sum-breakdown">编程 60% · 沟通 30% · 浏览 10%</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月16日</span><span class="month-sum-duration">3h 50m</span><div class="month-sum-bar"><div style="width:45%;background:#3B82F6"></div><div style="width:40%;background:#F59E0B"></div><div style="width:15%;background:#6B7280"></div></div><span class="month-sum-breakdown">编程 45% · 浏览 40% · 其他 15%</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月17日</span><span class="month-sum-duration">5h 10m</span><div class="month-sum-bar"><div style="width:70%;background:#3B82F6"></div><div style="width:20%;background:#10B981"></div><div style="width:10%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">编程 70% · 沟通 20% · 办公 10%</span></div>
-                <div class="month-sum-row" style="background:rgba(16,185,129,0.06);border-radius:6px;padding-left:8px;padding-right:8px;"><span class="month-sum-date" style="color:var(--accent)">6月18日</span><span class="month-sum-duration" style="color:var(--accent)">3h 20m</span><div class="month-sum-bar"><div style="width:55%;background:#3B82F6"></div><div style="width:25%;background:#10B981"></div><div style="width:20%;background:#F59E0B"></div></div><span class="month-sum-breakdown">编程 55% · 沟通 25% · 浏览 20%</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月19日</span><span class="month-sum-duration">2h 55m</span><div class="month-sum-bar"><div style="width:35%;background:#3B82F6"></div><div style="width:35%;background:#F59E0B"></div><div style="width:30%;background:#10B981"></div></div><span class="month-sum-breakdown">编程 35% · 浏览 35% · 沟通 30%</span></div>
-                <div class="month-sum-footer">
-                  <span class="month-sum-footer-total">本月合计 68h 30m</span>
-                  <div class="month-sum-footer-bar"><div style="width:55%;background:#3B82F6"></div><div style="width:25%;background:#F59E0B"></div><div style="width:12%;background:#10B981"></div><div style="width:8%;background:#8B5CF6"></div></div>
-                  <span style="font-size:12px;color:var(--muted);">编程 55% · 浏览 25% · 沟通 12% · 办公 8%</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- 月事件列表 - 每天汇总 -->
-            <div class="list-section" data-month-tab="events">
-              <div class="list-filter">
-                <span class="filter-chip active" data-ev-month-filter="all">全部</span>
-                <span class="filter-chip" data-ev-month-filter="voice"><span class="fc-dot" style="background:#10B981"></span>语音</span>
-                <span class="filter-chip" data-ev-month-filter="prompt_inject"><span class="fc-dot" style="background:#F59E0B"></span>提示词</span>
-                <span class="filter-chip" data-ev-month-filter="screenshot"><span class="fc-dot" style="background:#3B82F6"></span>截图</span>
-                <span class="filter-chip" data-ev-month-filter="vlm_summary"><span class="fc-dot" style="background:#8B5CF6"></span>VLM摘要</span>
-              </div>
-              <div class="scroll-list" style="max-height:400px;">
-                <div class="month-sum-row"><span class="month-sum-date">6月1日</span><span class="month-sum-duration">5 条</span><div class="month-sum-bar"><div style="width:40%;background:#10B981"></div><div style="width:30%;background:#F59E0B"></div><div style="width:20%;background:#3B82F6"></div><div style="width:10%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">语音 2 · 提示词 1 · 截图 1 · VLM 1</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月2日</span><span class="month-sum-duration">3 条</span><div class="month-sum-bar"><div style="width:67%;background:#10B981"></div><div style="width:33%;background:#F59E0B"></div></div><span class="month-sum-breakdown">语音 2 · 提示词 1</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月3日</span><span class="month-sum-duration">4 条</span><div class="month-sum-bar"><div style="width:50%;background:#3B82F6"></div><div style="width:25%;background:#10B981"></div><div style="width:25%;background:#F59E0B"></div></div><span class="month-sum-breakdown">截图 2 · 语音 1 · 提示词 1</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月4日</span><span class="month-sum-duration">7 条</span><div class="month-sum-bar"><div style="width:43%;background:#10B981"></div><div style="width:28%;background:#F59E0B"></div><div style="width:15%;background:#3B82F6"></div><div style="width:14%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">语音 3 · 提示词 2 · 截图 1 · VLM 1</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月5日</span><span class="month-sum-duration">2 条</span><div class="month-sum-bar"><div style="width:100%;background:#10B981"></div></div><span class="month-sum-breakdown">语音 2</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月8日</span><span class="month-sum-duration">6 条</span><div class="month-sum-bar"><div style="width:50%;background:#10B981"></div><div style="width:17%;background:#F59E0B"></div><div style="width:17%;background:#3B82F6"></div><div style="width:16%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">语音 3 · 提示词 1 · 截图 1 · VLM 1</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月9日</span><span class="month-sum-duration">5 条</span><div class="month-sum-bar"><div style="width:40%;background:#10B981"></div><div style="width:40%;background:#F59E0B"></div><div style="width:20%;background:#3B82F6"></div></div><span class="month-sum-breakdown">语音 2 · 提示词 2 · 截图 1</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月10日</span><span class="month-sum-duration">8 条</span><div class="month-sum-bar"><div style="width:38%;background:#10B981"></div><div style="width:25%;background:#F59E0B"></div><div style="width:25%;background:#3B82F6"></div><div style="width:12%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">语音 3 · 提示词 2 · 截图 2 · VLM 1</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月11日</span><span class="month-sum-duration">4 条</span><div class="month-sum-bar"><div style="width:50%;background:#10B981"></div><div style="width:25%;background:#F59E0B"></div><div style="width:25%;background:#3B82F6"></div></div><span class="month-sum-breakdown">语音 2 · 提示词 1 · 截图 1</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月12日</span><span class="month-sum-duration">3 条</span><div class="month-sum-bar"><div style="width:67%;background:#10B981"></div><div style="width:33%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">语音 2 · VLM 1</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月15日</span><span class="month-sum-duration">6 条</span><div class="month-sum-bar"><div style="width:33%;background:#10B981"></div><div style="width:33%;background:#F59E0B"></div><div style="width:17%;background:#3B82F6"></div><div style="width:17%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">语音 2 · 提示词 2 · 截图 1 · VLM 1</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月16日</span><span class="month-sum-duration">5 条</span><div class="month-sum-bar"><div style="width:40%;background:#10B981"></div><div style="width:40%;background:#F59E0B"></div><div style="width:20%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">语音 2 · 提示词 2 · VLM 1</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月17日</span><span class="month-sum-duration">8 条</span><div class="month-sum-bar"><div style="width:38%;background:#10B981"></div><div style="width:25%;background:#F59E0B"></div><div style="width:25%;background:#3B82F6"></div><div style="width:12%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">语音 3 · 提示词 2 · 截图 2 · VLM 1</span></div>
-                <div class="month-sum-row" style="background:rgba(16,185,129,0.06);border-radius:6px;padding-left:8px;padding-right:8px;"><span class="month-sum-date" style="color:var(--accent)">6月18日</span><span class="month-sum-duration" style="color:var(--accent)">8 条</span><div class="month-sum-bar"><div style="width:38%;background:#10B981"></div><div style="width:25%;background:#F59E0B"></div><div style="width:25%;background:#3B82F6"></div><div style="width:12%;background:#8B5CF6"></div></div><span class="month-sum-breakdown">语音 3 · 提示词 2 · 截图 2 · VLM 1</span></div>
-                <div class="month-sum-row"><span class="month-sum-date">6月19日</span><span class="month-sum-duration">4 条</span><div class="month-sum-bar"><div style="width:50%;background:#10B981"></div><div style="width:50%;background:#F59E0B"></div></div><span class="month-sum-breakdown">语音 2 · 提示词 2</span></div>
-                <div class="month-sum-footer">
-                  <span class="month-sum-footer-total">本月合计 78 条</span>
-                  <div class="month-sum-footer-bar"><div style="width:42%;background:#10B981"></div><div style="width:28%;background:#F59E0B"></div><div style="width:18%;background:#3B82F6"></div><div style="width:12%;background:#8B5CF6"></div></div>
-                  <span style="font-size:12px;color:var(--muted);">语音 33 · 提示词 22 · 截图 14 · VLM 9</span>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
 
         <!-- settings -->
@@ -1662,14 +1485,6 @@
     <div class="note" style="margin-top:12px;">结果气泡位于录音条正上方；实时识别时文字在浮窗上方从右往左滚动；润色中替换为蓝色跳动点。</div>
   </div>
 
-  <h2>3. 待确认清单</h2>
-  <ul class="note" style="line-height:2;">
-    <li>模型厂商“+ 添加”按钮点击后弹出输入框保存为新 chip，OK 吗？</li>
-    <li>文字润色里的提示词列表已移到“个人提示词”并简化为“名称 + 快捷键”行，OK 吗？</li>
-    <li>行为采集应用白名单内嵌分类 chip；VLM 仅采集白名单应用窗口，不再单独设置屏蔽窗口，OK 吗？</li>
-    <li>润色图标 hover tip 改为“AI 润色”，OK 吗？</li>
-    <li>时间轴页增加日期/应用筛选 + 事件列表，OK 吗？</li>
-  </ul>
 </div>
 
 <div id="heat-tooltip"></div>
@@ -1704,14 +1519,31 @@
 <script>
 (function() {
   // main nav
+  function updateSettingsSaveBar() {
+    const settingsSaveBar = document.getElementById('settings-save-bar');
+    if (!settingsSaveBar) return;
+    const settingsView = document.querySelector('#main-content .main-view[data-view="settings"]');
+    settingsSaveBar.style.display = (settingsView && settingsView.classList.contains('active')) ? 'flex' : 'none';
+  }
   document.querySelectorAll('#main-app .nav-item').forEach(item => {
     item.addEventListener('click', () => {
       document.querySelectorAll('#main-app .nav-item').forEach(i => i.classList.remove('active'));
       item.classList.add('active');
       const view = item.dataset.view;
-      document.querySelectorAll('#main-content .main-view').forEach(v => v.classList.toggle('active', v.dataset.view === view));
+      document.querySelectorAll('#main-content .main-view').forEach(v => {
+        const isTarget = v.dataset.view === view;
+        v.classList.toggle('active', isTarget);
+        v.style.display = isTarget ? 'block' : 'none';
+      });
+      updateSettingsSaveBar();
+      // defensive: close any floating UI from previous view
+      document.querySelectorAll('.calendar-popup').forEach(p => p.classList.remove('open'));
+      const heatTooltip = document.getElementById('heat-tooltip');
+      if (heatTooltip) heatTooltip.style.opacity = '0';
+      document.querySelectorAll('.select-options').forEach(l => l.classList.remove('open'));
     });
   });
+  document.addEventListener('DOMContentLoaded', updateSettingsSaveBar);
 
   // settings tabs
   document.querySelectorAll('#settings-tabs .tab').forEach(tab => {
@@ -1721,6 +1553,33 @@
       const key = tab.dataset.tab;
       document.querySelectorAll('.main-view[data-view="settings"] .section').forEach(s => s.classList.toggle('active', s.dataset.tab === key));
     });
+  });
+
+  function showToast(text) {
+    const toast = document.getElementById('global-toast');
+    const toastText = document.getElementById('toast-text');
+    if (!toast || !toastText) return;
+    toastText.textContent = text;
+    clearTimeout(toast._hideTimer);
+    toast.classList.add('show');
+    toast._hideTimer = setTimeout(() => toast.classList.remove('show'), 2500);
+  }
+
+  // settings page: single save button for the whole settings page
+  document.addEventListener('DOMContentLoaded', () => {
+    const appBody = document.querySelector('.app-body');
+    const settingsSaveBar = document.getElementById('settings-save-bar');
+    const toast = document.getElementById('global-toast');
+    if (appBody) {
+      if (settingsSaveBar) appBody.appendChild(settingsSaveBar);
+      if (toast) appBody.appendChild(toast);
+    }
+    const settingsSaveBtn = document.getElementById('settings-save-btn');
+    if (settingsSaveBtn) {
+      settingsSaveBtn.addEventListener('click', () => {
+        showToast('设置已保存');
+      });
+    }
   });
 
   // ================= 模型服务（ASR/VLM/LLM）chip + 添加弹窗 =================
@@ -1877,6 +1736,10 @@
         const area = document.getElementById('vlm-mode-area');
         if (area) area.style.display = toggle.classList.contains('on') ? 'block' : 'none';
       }
+      // overview quick switches auto-save
+      if (toggle.closest('.main-view[data-view="overview"]')) {
+        showToast('已保存');
+      }
     });
   });
 
@@ -1887,8 +1750,93 @@
       const group = chip.dataset.group;
       chip.closest('.chip-group').querySelectorAll('.chip[data-group="' + group + '"]').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
+      if (group === 'overview-range') updateOverview(chip.dataset.val);
     });
   });
+
+  // 概览页：今天 / 本周 / 本月 数据切换
+  const overviewData = {
+    day: {
+      durationLabel: '今日工作时长',
+      duration: '3h 20m',
+      durationSub: '较昨日 +28 min',
+      interrupt: '12',
+      interruptSub: '较昨日 -3',
+      categoryDesc: '今日各类别活跃时长占比',
+      categories: [
+        { name: '编程', cls: 'coding', width: 52, color: '#3B82F6', value: '52% · 1h 44m' },
+        { name: '浏览', cls: 'browser', width: 24, color: '#F59E0B', value: '24% · 48m' },
+        { name: '沟通', cls: 'chat', width: 16, color: '#10B981', value: '16% · 32m' },
+        { name: '办公', cls: 'office', width: 8, color: '#8B5CF6', value: '8% · 16m' }
+      ]
+    },
+    week: {
+      durationLabel: '本周工作时长',
+      duration: '26h 45m',
+      durationSub: '较上周 +2h 12m',
+      interrupt: '67',
+      interruptSub: '较上周 -8',
+      categoryDesc: '本周各类别活跃时长占比',
+      categories: [
+        { name: '编程', cls: 'coding', width: 46, color: '#3B82F6', value: '46% · 12h 18m' },
+        { name: '沟通', cls: 'chat', width: 26, color: '#10B981', value: '26% · 6h 57m' },
+        { name: '浏览', cls: 'browser', width: 20, color: '#F59E0B', value: '20% · 5h 21m' },
+        { name: '办公', cls: 'office', width: 8, color: '#8B5CF6', value: '8% · 2h 09m' }
+      ]
+    },
+    month: {
+      durationLabel: '本月工作时长',
+      duration: '112h 30m',
+      durationSub: '较上月 -5h 40m',
+      interrupt: '284',
+      interruptSub: '较上月 +23',
+      categoryDesc: '本月各类别活跃时长占比',
+      categories: [
+        { name: '编程', cls: 'coding', width: 44, color: '#3B82F6', value: '44% · 49h 30m' },
+        { name: '沟通', cls: 'chat', width: 28, color: '#10B981', value: '28% · 31h 30m' },
+        { name: '浏览', cls: 'browser', width: 18, color: '#F59E0B', value: '18% · 20h 15m' },
+        { name: '办公', cls: 'office', width: 10, color: '#8B5CF6', value: '10% · 11h 15m' }
+      ]
+    }
+  };
+
+  function updateOverview(range) {
+    const data = overviewData[range];
+    if (!data) return;
+    const durationLabel = document.getElementById('stat-duration-label');
+    const duration = document.getElementById('stat-duration');
+    const durationSub = document.getElementById('stat-duration-sub');
+    const interrupt = document.getElementById('stat-interrupt');
+    const interruptSub = document.getElementById('stat-interrupt-sub');
+    const catDesc = document.getElementById('category-rank-desc');
+    const catRank = document.getElementById('category-rank');
+
+    if (durationLabel) durationLabel.textContent = data.durationLabel;
+    if (duration) duration.textContent = data.duration;
+    if (durationSub) durationSub.textContent = data.durationSub;
+    if (interrupt) interrupt.textContent = data.interrupt;
+    if (interruptSub) interruptSub.textContent = data.interruptSub;
+    if (catDesc) catDesc.textContent = data.categoryDesc;
+    if (catRank) {
+      catRank.innerHTML = data.categories.map(c => `
+        <div class="category-row">
+          <div class="category-info">
+            <i class="dot-legend ${c.cls}"></i>
+            <span class="category-name">${c.name}</span>
+          </div>
+          <div class="category-bar-wrap">
+            <div class="category-bar" style="width:0%;background:${c.color};"></div>
+          </div>
+          <div class="category-value">${c.value}</div>
+        </div>
+      `).join('');
+      requestAnimationFrame(() => {
+        catRank.querySelectorAll('.category-bar').forEach((bar, i) => {
+          bar.style.width = data.categories[i].width + '%';
+        });
+      });
+    }
+  }
 
   // radio buttons
   document.querySelectorAll('.radio-group').forEach(group => {
@@ -1957,18 +1905,243 @@
     document.querySelectorAll('.select-options').forEach(l => l.classList.remove('open'));
   });
 
-  // timeline view switcher (controls both track + list)
-  document.querySelectorAll('.chip[data-group="timeline-view"]').forEach(chip => {
-    chip.addEventListener('click', () => {
-      const val = chip.dataset.val;
-      document.querySelectorAll('.timeline-view-section').forEach(s => {
-        s.classList.toggle('active', s.dataset.view === val);
+  // timeline date picker: day-level navigation + calendar popup
+  (function initTimelineDate() {
+    const dateDisplay = document.getElementById('date-display');
+    const dateTitle = document.getElementById('timeline-date-title');
+    const daySummary = document.getElementById('timeline-day-summary');
+    const prevBtn = document.getElementById('date-prev');
+    const nextBtn = document.getElementById('date-next');
+    const todayBtn = document.getElementById('date-today');
+    const track = document.getElementById('timeline-track');
+    const worklogList = document.getElementById('worklog-list');
+    const eventList = document.getElementById('event-list');
+    const calendarPopup = document.getElementById('calendar-popup');
+    const calTitle = document.getElementById('cal-title');
+    const calDays = document.getElementById('cal-days');
+    const calPrev = document.getElementById('cal-prev');
+    const calNext = document.getElementById('cal-next');
+    if (!dateDisplay) return;
+
+    const weekdays = ['周日','周一','周二','周三','周四','周五','周六'];
+    const today = new Date(2026, 5, 18); // 固定模拟“今天”
+    let current = new Date(today);
+    let calMonth = new Date(today);
+
+    const dayData = {
+      '2026-06-16': {
+        title: '2026-06-16 周二',
+        summary: '工作 3h 50m · 活跃 3 段',
+        track: [
+          { cls: 'coding', left: 0, width: 32 },
+          { cls: 'browser', left: 36, width: 42 },
+          { cls: 'coding', left: 82, width: 12 },
+        ],
+        worklog: [
+          { time: '09:30 - 11:00', app: 'Cursor', icon: 'Cr', iconBg: '#3B82F6', cat: 'coding', dur: '90 min', sum: 'VLM: 实现 MCP server' },
+          { time: '13:30 - 15:30', app: 'Chrome', icon: 'Ch', iconBg: '#F59E0B', cat: 'browser', dur: '120 min', sum: 'VLM: 调研竞品方案' },
+          { time: '15:30 - 16:20', app: 'Cursor', icon: 'Cr', iconBg: '#3B82F6', cat: 'coding', dur: '50 min', sum: 'VLM: 修复编译错误' },
+        ],
+        events: [
+          { type: 'voice', time: '09:40', text: '语音：实现 MCP server', meta: '已润色' },
+          { type: 'vlm_summary', time: '14:00', text: 'VLM摘要：正在调研竞品', meta: '自动' },
+        ]
+      },
+      '2026-06-17': {
+        title: '2026-06-17 周三',
+        summary: '工作 5h 10m · 活跃 4 段',
+        track: [
+          { cls: 'coding', left: 0, width: 36 },
+          { cls: 'chat', left: 38, width: 10 },
+          { cls: 'office', left: 50, width: 12 },
+          { cls: 'coding', left: 64, width: 26 },
+        ],
+        worklog: [
+          { time: '09:00 - 11:30', app: 'Cursor', icon: 'Cr', iconBg: '#3B82F6', cat: 'coding', dur: '150 min', sum: 'VLM: 实现事件采集模块' },
+          { time: '13:00 - 14:00', app: 'WeChat', icon: 'We', iconBg: '#10B981', cat: 'chat', dur: '60 min', sum: 'VLM: 周会沟通' },
+          { time: '14:00 - 15:10', app: 'Word', icon: 'Wd', iconBg: '#8B5CF6', cat: 'office', dur: '70 min', sum: 'VLM: 编写设计文档' },
+          { time: '15:10 - 17:00', app: 'Cursor', icon: 'Cr', iconBg: '#3B82F6', cat: 'coding', dur: '110 min', sum: 'VLM: 编写单元测试' },
+        ],
+        events: [
+          { type: 'voice', time: '09:10', text: '语音：实现事件采集', meta: '已润色' },
+          { type: 'prompt_inject', time: '13:30', text: '提示词：整理周会要点', meta: 'Ctrl+2' },
+          { type: 'screenshot', time: '15:30', text: '截图：测试结果截图', meta: '自动' },
+        ]
+      },
+      '2026-06-18': {
+        title: '2026-06-18 周四',
+        summary: '工作 3h 20m · 活跃 4 段',
+        track: [
+          { cls: 'coding', left: 0, width: 18 },
+          { cls: 'idle', left: 18, width: 6 },
+          { cls: 'coding', left: 24, width: 22 },
+          { cls: 'idle', left: 46, width: 4 },
+          { cls: 'chat', left: 50, width: 12 },
+          { cls: 'browser', left: 62, width: 16 },
+          { cls: 'idle', left: 78, width: 4 },
+          { cls: 'coding', left: 82, width: 14 },
+          { cls: 'idle', left: 96, width: 4 },
+        ],
+        worklog: [
+          { time: '09:00 - 09:42', app: 'Cursor', icon: 'Cr', iconBg: '#3B82F6', cat: 'coding', dur: '42 min', sum: 'VLM: 正在重构 ASR 模块，修改 cloud.go 适配 Whisper 接口' },
+          { time: '09:42 - 10:15', app: 'Cursor', icon: 'Cr', iconBg: '#3B82F6', cat: 'coding', dur: '33 min', sum: 'VLM: 编写 shadow-worker 配置模块 config.go' },
+          { time: '10:15 - 10:48', app: 'Chrome', icon: 'Ch', iconBg: '#F59E0B', cat: 'browser', dur: '33 min', sum: 'VLM: 搜索 SQLite 优化方案和索引策略' },
+          { time: '10:48 - 11:03', app: 'WeChat', icon: 'We', iconBg: '#10B981', cat: 'chat', dur: '15 min', sum: 'VLM: 回复工作消息，确认下周排期' },
+          { time: '13:30 - 14:10', app: 'Word', icon: 'Wd', iconBg: '#8B5CF6', cat: 'office', dur: '32 min', sum: 'VLM: 编写需求文档和会议纪要' },
+          { time: '14:10 - 15:30', app: 'Cursor', icon: 'Cr', iconBg: '#3B82F6', cat: 'coding', dur: '80 min', sum: 'VLM: 实现 activity_segments 存储和查询逻辑' },
+          { time: '15:30 - 15:50', app: 'WeChat', icon: 'We', iconBg: '#10B981', cat: 'chat', dur: '20 min', sum: 'VLM: 回复工作消息，确认下周排期' },
+          { time: '15:50 - 17:00', app: 'Cursor', icon: 'Cr', iconBg: '#3B82F6', cat: 'coding', dur: '70 min', sum: 'VLM: 编写 gRPC 接口和 protobuf 定义' },
+        ],
+        events: [
+          { type: 'voice', time: '09:12', text: '语音：帮我把这段代码重构一下', meta: '已润色' },
+          { type: 'prompt_inject', time: '10:05', text: '提示词注入：整理成会议纪要', meta: 'Ctrl+1' },
+          { type: 'screenshot', time: '11:28', text: '截图：VLM 理解当前屏幕', meta: '自动生成' },
+          { type: 'vlm_summary', time: '11:35', text: 'VLM摘要：正在编辑 config.go', meta: '自动' },
+          { type: 'voice', time: '14:10', text: '语音：直接发给小明', meta: '原文' },
+          { type: 'prompt_inject', time: '14:30', text: '提示词注入：翻译成英文', meta: 'Ctrl+2' },
+          { type: 'screenshot', time: '15:45', text: '截图：记录当前界面状态', meta: '自动生成' },
+          { type: 'voice', time: '16:20', text: '语音：生成单元测试', meta: '已润色' },
+        ]
+      },
+      '2026-06-19': {
+        title: '2026-06-19 周五',
+        summary: '工作 2h 55m · 活跃 3 段',
+        track: [
+          { cls: 'coding', left: 0, width: 14 },
+          { cls: 'browser', left: 16, width: 14 },
+          { cls: 'chat', left: 54, width: 13 },
+        ],
+        worklog: [
+          { time: '09:00 - 10:00', app: 'Cursor', icon: 'Cr', iconBg: '#3B82F6', cat: 'coding', dur: '60 min', sum: 'VLM: 代码 review' },
+          { time: '10:00 - 11:00', app: 'Chrome', icon: 'Ch', iconBg: '#F59E0B', cat: 'browser', dur: '60 min', sum: 'VLM: 查阅最佳实践' },
+          { time: '14:00 - 14:55', app: 'WeChat', icon: 'We', iconBg: '#10B981', cat: 'chat', dur: '55 min', sum: 'VLM: 确认下周排期' },
+        ],
+        events: [
+          { type: 'voice', time: '09:20', text: '语音：代码 review', meta: '原文' },
+          { type: 'prompt_inject', time: '14:30', text: '提示词：翻译成英文', meta: 'Ctrl+2' },
+        ]
+      }
+    };
+
+    function fmt(d) {
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+    function display(d) {
+      return `${fmt(d)} ${weekdays[d.getDay()]}`;
+    }
+    function render() {
+      const key = fmt(current);
+      const emptyDay = { summary: '无记录', track: [], worklog: [], events: [] };
+      const data = dayData[key] || emptyDay;
+      dateDisplay.textContent = display(current);
+      if (dateTitle) dateTitle.textContent = display(current);
+      if (daySummary) daySummary.textContent = data.summary;
+      if (track) {
+        track.innerHTML = data.track.map(s => `<div class="t-segment ${s.cls}" style="left:${s.left}%;width:${s.width}%;" title="${s.cls}"></div>`).join('');
+      }
+      if (worklogList) {
+        worklogList.innerHTML = data.worklog.map(w => `
+          <div class="seg-row" data-cat="${w.cat}">
+            <div class="seg-header">
+              <span class="seg-time">${w.time}</span>
+              <span class="seg-app"><span class="seg-app-icon" style="background:${w.iconBg}">${w.icon}</span>${w.app}</span>
+              <span class="seg-cat-badge" style="background:rgba(${hexToRgb(w.iconBg)},0.15);color:${w.iconBg}">${w.cat}</span>
+              <span class="seg-duration">${w.dur}</span>
+            </div>
+            <div class="seg-summary">${w.sum}</div>
+          </div>
+        `).join('');
+      }
+      if (eventList) {
+        eventList.innerHTML = data.events.map(e => `
+          <div class="app-row" data-ev-type="${e.type}">
+            <span class="app-color" style="background:${typeColor(e.type)}"></span>
+            <span class="app-name">${e.time} ${e.text}</span>
+            <span class="app-meta">${e.meta}</span>
+          </div>
+        `).join('');
+      }
+      recomputeDayHeaders();
+      renderCalendar();
+    }
+    function hexToRgb(hex) {
+      const n = parseInt(hex.replace('#',''), 16);
+      return `${(n>>16)&255},${(n>>8)&255},${n&255}`;
+    }
+    function typeColor(type) {
+      const map = { voice: '#10B981', prompt_inject: '#F59E0B', screenshot: '#3B82F6', vlm_summary: '#8B5CF6' };
+      return map[type] || '#6B7280';
+    }
+    function recomputeDayHeaders() {
+      document.querySelectorAll('.day-group-header').forEach(h => {
+        let next = h.nextElementSibling;
+        let visible = false;
+        while (next && !next.classList.contains('day-group-header')) {
+          if (!next.classList.contains('hidden-row')) visible = true;
+          next = next.nextElementSibling;
+        }
+        h.style.display = visible ? 'flex' : 'none';
       });
-      document.querySelectorAll('.list-view-section').forEach(s => {
-        s.classList.toggle('active', s.dataset.listView === val);
+    }
+    function renderCalendar() {
+      if (!calTitle || !calDays) return;
+      const y = calMonth.getFullYear();
+      const m = calMonth.getMonth();
+      calTitle.textContent = `${y}年${m + 1}月`;
+      const firstDay = new Date(y, m, 1).getDay();
+      const daysInMonth = new Date(y, m + 1, 0).getDate();
+      calDays.innerHTML = '';
+      for (let i = 0; i < firstDay; i++) {
+        const empty = document.createElement('div');
+        empty.className = 'cal-day empty';
+        calDays.appendChild(empty);
+      }
+      for (let d = 1; d <= daysInMonth; d++) {
+        const cell = document.createElement('div');
+        cell.className = 'cal-day';
+        cell.textContent = d;
+        const date = new Date(y, m, d);
+        const isSelected = date.getFullYear() === current.getFullYear() && date.getMonth() === current.getMonth() && date.getDate() === current.getDate();
+        const isToday = date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate();
+        if (isSelected) cell.classList.add('selected');
+        if (isToday) cell.classList.add('today');
+        if (dayData[fmt(date)]) {
+          const dot = document.createElement('span');
+          dot.className = 'dot';
+          cell.appendChild(dot);
+        }
+        cell.addEventListener('click', () => {
+          current = new Date(y, m, d);
+          render();
+          calendarPopup.classList.remove('open');
+        });
+        calDays.appendChild(cell);
+      }
+    }
+
+    if (dateDisplay) {
+      dateDisplay.addEventListener('click', (e) => {
+        e.stopPropagation();
+        calMonth = new Date(current.getFullYear(), current.getMonth(), 1);
+        renderCalendar();
+        const isOpen = calendarPopup.classList.contains('open');
+        document.querySelectorAll('.calendar-popup').forEach(p => p.classList.remove('open'));
+        if (!isOpen) calendarPopup.classList.add('open');
       });
-    });
-  });
+    }
+    if (prevBtn) prevBtn.addEventListener('click', () => { current.setDate(current.getDate() - 1); render(); });
+    if (nextBtn) nextBtn.addEventListener('click', () => { current.setDate(current.getDate() + 1); render(); });
+    if (todayBtn) todayBtn.addEventListener('click', () => { current = new Date(today); render(); });
+    if (calPrev) calPrev.addEventListener('click', (e) => { e.stopPropagation(); calMonth.setMonth(calMonth.getMonth() - 1); renderCalendar(); });
+    if (calNext) calNext.addEventListener('click', (e) => { e.stopPropagation(); calMonth.setMonth(calMonth.getMonth() + 1); renderCalendar(); });
+    document.addEventListener('click', () => { calendarPopup.classList.remove('open'); });
+    calendarPopup.addEventListener('click', (e) => { e.stopPropagation(); });
+    window.setTimelineDate = function(date) {
+      current = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      render();
+    };
+    render();
+  })();
 
   // personal prompt list add/delete/sync
   const addPromptBtn = document.getElementById('add-personal-prompt');
@@ -2344,6 +2517,8 @@
         const dateStr = (d.getMonth() + 1) + '月' + d.getDate() + '日';
         const weekStr = ['日','一','二','三','四','五','六'][dayOfWeek];
         cell.dataset.tip = dateStr + ' 周' + weekStr + '：' + (level ? minutes + ' 分钟活跃' : '无记录');
+        cell.dataset.date = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+        cell.style.cursor = level ? 'pointer' : 'default';
         monthMap.get(monthKey).grid.appendChild(cell);
       }
     }
@@ -2373,6 +2548,16 @@
       const cell = e.target.closest('.heat-cell');
       if (!cell) return;
       heatTooltip.style.opacity = '0';
+    });
+    heatmapEl.addEventListener('click', e => {
+      const cell = e.target.closest('.heat-cell');
+      if (!cell || !cell.dataset.date) return;
+      const [y, m, d] = cell.dataset.date.split('-').map(Number);
+      if (window.setTimelineDate) {
+        window.setTimelineDate(new Date(y, m - 1, d));
+      }
+      const nav = Array.from(document.querySelectorAll('.nav-item')).find(n => n.dataset.view === 'timeline');
+      if (nav) nav.click();
     });
   }
 
@@ -2480,11 +2665,6 @@
       });
     });
   }
-  bindFilterChips('data-wl-week-filter');
-  bindFilterChips('data-ev-week-filter');
-  bindFilterChips('data-wl-month-filter');
-  bindFilterChips('data-ev-month-filter');
-
   // MCP config tabs + copy
   document.querySelectorAll('.mcp-config-tab').forEach(tab => {
     tab.addEventListener('click', () => {
@@ -2570,8 +2750,19 @@
           </div>
         </div>
       </div>
+
     </div>
   </div>
+
+  <div class="settings-save-bar" id="settings-save-bar" style="display:none;">
+    <span class="btn btn-primary" id="settings-save-btn">保存设置</span>
+  </div>
+
+  <div class="toast" id="global-toast">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zm3.78 6.55-4 4a.75.75 0 0 1-1.06 0l-2-2a.75.75 0 0 1 1.06-1.06L7.25 8.94l3.47-3.47a.75.75 0 0 1 1.06 1.06z"/></svg>
+    <span id="toast-text">已保存</span>
+  </div>
+</div>
 
 </body>
 </html>
