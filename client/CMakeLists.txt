@@ -15,11 +15,21 @@ cmake_minimum_required(VERSION 3.21)
 #   build\shadow-worker-client.exe
 # ============================================================
 
-# 引导 WrapProtoc 找到本项目自带的 protoc(tools/protoc)
+# Locate protoc for WrapProtoc.
+# Priority: project-bundled tools/protoc > system PATH (this machine: D:\software\Go\bin\protoc.exe).
 set(PROTOC_PATH "${CMAKE_SOURCE_DIR}/../tools/protoc/bin/protoc.exe")
 if(EXISTS "${PROTOC_PATH}")
     set(Protobuf_PROTOC_EXECUTABLE "${PROTOC_PATH}" CACHE FILEPATH "protoc location")
-    message(STATUS "使用项目自带 protoc: ${PROTOC_PATH}")
+    message(STATUS "Using bundled protoc: ${PROTOC_PATH}")
+else()
+    # fall back to protoc on PATH (this machine's Go bin dir is on PATH)
+    find_program(SYSTEM_PROTOC protoc)
+    if(SYSTEM_PROTOC)
+        set(Protobuf_PROTOC_EXECUTABLE "${SYSTEM_PROTOC}" CACHE FILEPATH "protoc location")
+        message(STATUS "Using system protoc: ${SYSTEM_PROTOC}")
+    else()
+        message(WARNING "protoc not found; ensure it is on PATH (this machine: D:\\software\\Go\\bin)")
+    endif()
 endif()
 
 project(shadow-worker-client LANGUAGES CXX)
@@ -169,20 +179,32 @@ qt_add_qml_module(shadow-worker-client
     URI ShadowWorker
     VERSION 1.0
     QML_FILES
+        # theme (pragma singleton -> auto-registered as singleton in main module)
+        qml/theme/Theme.qml
+        # components
+        qml/components/Card.qml
+        qml/components/Toggle.qml
+        qml/components/Radio.qml
+        qml/components/Chip.qml
+        qml/components/Button.qml
+        qml/components/StatCard.qml
+        qml/components/Toast.qml
+        qml/components/SaveBar.qml
+        qml/components/PlaceholderLabel.qml
+        # pages
         qml/main.qml
-        qml/OverviewPage.qml
-        qml/WhitelistPage.qml
-        qml/Bubble.qml
-        qml/TimelinePage.qml
-        qml/SettingsPage.qml
+        qml/pages/OverviewPage.qml
+        qml/pages/TimelinePage.qml
+        qml/pages/SettingsPage.qml
+        qml/pages/SystemPage.qml
 )
 
-# Windows: DEBUG 构建用控制台(便于看错误),RELEASE 用 WIN32 隐藏控制台
+# Windows: keep console in DEBUG builds (to see errors); RELEASE would use WIN32 to hide it.
 set_target_properties(shadow-worker-client PROPERTIES
     WIN32_EXECUTABLE OFF
 )
 
-# 安装规则(打包时用)
+# Install rules (for packaging)
 install(TARGETS shadow-worker-client
     BUNDLE DESTINATION .
     RUNTIME DESTINATION bin

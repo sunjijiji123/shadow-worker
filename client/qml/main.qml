@@ -1,3 +1,8 @@
+// main.qml - Shadow Worker main window (v2 rewrite)
+// 180px sidebar (Overview/Timeline/Settings/System) + content view switch + global Toast.
+// Source of truth: docs/ui-spec-v2.md section 2.
+// All strings English; Chinese via Qt i18n (.ts/.qm).
+
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -6,163 +11,144 @@ import ShadowWorker
 ApplicationWindow {
     id: mainWindow
     visible: true
-    width: 900
-    height: 600
-    title: "Shadow Worker"
+    width: 1200
+    height: 720
+    minimumWidth: 1024
+    minimumHeight: 600
+    title: qsTr("Shadow Worker")
+    color: Theme.bg
 
-    property bool asrRecording: false
+    property string currentView: "overview"
 
-    header: ToolBar {
-        RowLayout {
-            anchors.fill: parent
-            anchors.margins: 8
-
-            Label {
-                text: "Shadow Worker"
-                font.pixelSize: 18
-                font.bold: true
-            }
-
-            Item { Layout.fillWidth: true }
-
-            Button {
-                text: "概览"
-                flat: stackView.currentItem && stackView.currentItem.title === "概览"
-                onClicked: stackView.replace(overviewPageComponent)
-            }
-            Button {
-                text: "白名单"
-                flat: stackView.currentItem && stackView.currentItem.title === "白名单管理"
-                onClicked: stackView.replace(whitelistPageComponent)
-            }
-            Button {
-                text: "时间线"
-                flat: stackView.currentItem && stackView.currentItem.title === "时间线"
-                onClicked: stackView.replace(timelinePageComponent)
-            }
-            Button {
-                text: "设置"
-                flat: stackView.currentItem && stackView.currentItem.title === "设置"
-                onClicked: stackView.replace(settingsPageComponent)
-            }
-        }
-    }
-
-    StackView {
-        id: stackView
+    RowLayout {
         anchors.fill: parent
-        initialItem: overviewPageComponent
-    }
+        spacing: 0
 
-    Component {
-        id: overviewPageComponent
-        OverviewPage {
-            viewModel: overviewVm
+        // ==================== Sidebar ====================
+        Rectangle {
+            id: sidebar
+            Layout.fillHeight: true
+            Layout.preferredWidth: Theme.sidebarWidth
+            color: Theme.bg2
+            border.color: Theme.rule
+            border.width: 0
+
+            // right divider line
+            Rectangle {
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                width: 1
+                color: Theme.rule
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.topMargin: 16
+                spacing: 0
+
+                Repeater {
+                    model: [
+                        { view: "overview", label: qsTr("Overview") },
+                        { view: "timeline", label: qsTr("Timeline") },
+                        { view: "settings", label: qsTr("Settings") },
+                        { view: "system",   label: qsTr("System")   }
+                    ]
+
+                    delegate: Rectangle {
+                        required property var modelData
+
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 44
+                        color: currentView === modelData.view ? Theme.accentBg : "transparent"
+
+                        // active left border 3px
+                        Rectangle {
+                            visible: currentView === modelData.view
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            width: 3
+                            color: Theme.accent
+                        }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 18
+                            spacing: 10
+
+                            // placeholder icon block (M3 -> real SVG; color follows active state)
+                            Rectangle {
+                                Layout.preferredWidth: 18
+                                Layout.preferredHeight: 18
+                                radius: 4
+                                color: currentView === modelData.view ? Theme.accent : Theme.muted
+                                opacity: currentView === modelData.view ? 1 : 0.4
+                            }
+
+                            Text {
+                                text: modelData.label
+                                color: currentView === modelData.view ? Theme.accent : Theme.muted
+                                font.pixelSize: Theme.fontBody
+                            }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: currentView = modelData.view
+                        }
+                    }
+                }
+
+                Item { Layout.fillHeight: true }
+            }
         }
-    }
 
-    Component {
-        id: whitelistPageComponent
-        WhitelistPage {
-            viewModel: whitelistVm
-            picker: windowPicker
-        }
-    }
+        // ==================== Content ====================
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            color: Theme.bg
 
-    Component {
-        id: timelinePageComponent
-        TimelinePage {
-            viewModel: timelineVm
-        }
-    }
+            StackLayout {
+                id: contentStack
+                anchors.fill: parent
+                currentIndex: ["overview", "timeline", "settings", "system"].indexOf(currentView)
 
-    Component {
-        id: settingsPageComponent
-        SettingsPage {
-            viewModel: settingsVm
-        }
-    }
+                OverviewPage {
+                    viewModel: overviewVm
+                    onManageAppsRequested: currentView = "settings"
+                }
+                TimelinePage {
+                    viewModel: timelineVm
+                }
+                SettingsPage {
+                    viewModel: settingsVm
+                    whitelistViewModel: whitelistVm
+                    windowPicker: windowPicker
+                }
+                SystemPage {}
+            }
 
-    // 全局热键: 录音/截图
-    Connections {
-        target: globalHotkey
-        function onActivatedWithName(name) {
-            if (name === "record") {
-                if (asrRecording) stopRecording(); else startRecording();
-            } else if (name === "screenshot") {
-                bubble.show("触发 VLM 截图理解...");
+            // global toast (top-right)
+            Toast {
+                id: globalToast
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.topMargin: 16
+                anchors.rightMargin: 16
             }
         }
     }
 
-    Connections {
-        target: settingsVm
-        function onHotkeyRecordChanged() { updateHotkeys(); }
-        function onHotkeyScreenshotChanged() { updateHotkeys(); }
+    // global toast helper for child pages
+    function toast(text) {
+        globalToast.show(text)
     }
-
-    function updateHotkeys() {
-        globalHotkey.unregisterAll();
-        if (settingsVm && settingsVm.hotkeyRecord !== "")
-            globalHotkey.registerShortcut(settingsVm.hotkeyRecord, "record");
-        if (settingsVm && settingsVm.hotkeyScreenshot !== "")
-            globalHotkey.registerShortcut(settingsVm.hotkeyScreenshot, "screenshot");
-    }
-
-    function startRecording() {
-        asrRecording = true;
-        bubble.showRecording();
-        asrClient.start();
-        audioRecorder.startRecording();
-    }
-
-    function stopRecording() {
-        asrRecording = false;
-        audioRecorder.stopRecording();
-        asrClient.finish();
-        bubble.text = "识别中...";
-        bubble.show(bubble.text);
-    }
-
-    // 定时把录音数据喂给 ASR
-    Timer {
-        interval: 200
-        running: asrRecording
-        repeat: true
-        onTriggered: {
-            var pcm = audioRecorder.takeAudioData();
-            if (pcm.length > 0)
-                asrClient.feed(pcm);
-        }
-    }
-
-    Connections {
-        target: asrClient
-        function onResultReady(text) {
-            bubble.show(text);
-        }
-        function onErrorChanged() {
-            if (asrClient.error.length > 0)
-                bubble.show("ASR 错误: " + asrClient.error);
-        }
-    }
-
-    Loader {
-        id: bubbleLoader
-        active: true
-        sourceComponent: Bubble {
-            id: bubble
-            x: Screen.desktopAvailableWidth - width - 20
-            y: Screen.desktopAvailableHeight - height - 20
-        }
-    }
-
-    property var bubble: bubbleLoader.item
 
     Component.onCompleted: {
-        if (autostartMode)
-            showMinimized();
-        updateHotkeys();
-        whitelistVm.refresh();
+        // pull overview once on startup
+        if (overviewVm) overviewVm.refresh()
     }
 }

@@ -111,6 +111,25 @@ D:\software\Go\bin\protoc.exe -I proto ^
 - 属性顺序:id → 属性 → 信号 → 函数 → 子元素
 - 组件抽离:`qml/components/`(卡片、chip、状态灯)
 
+### 语言与 i18n(全局强制)
+
+> **代码里不写中文** —— 注释、字符串、UI 显示文字一律用英文。中文通过翻译文件提供。
+> 这条是硬规范,避免编码事故(如 PowerShell `Set-Content` 用 GBK 损坏 UTF-8),也是正式产品的标准做法。
+
+- **所有源码(Go / C++ / QML / proto)注释**:英文
+- **所有字符串字面量(UI 文字、日志、错误信息)**:英文
+  - QML 用 `qsTr("...")` 包裹英文源串,如 `text: qsTr("Overview")`
+  - Go 用英文字符串(日志、error)
+- **中文显示**:走 Qt Linguist 翻译链
+  - 源:`client/i18n/shadow-worker_zh_CN.ts`(XML,人工/linguist 编辑)
+  - 编译:`lrelease` → `shadow-worker_zh_CN.qm`
+  - 加载:`main.cpp` 装 `QTranslator`,按系统 locale 选 zh_CN
+  - CMake:`qt_add_translations()` 或 lrelease 规则生成 .qm
+- **类别/事件中文名等枚举映射**:不放代码里,放翻译文件(英文 key → 中文 value)
+- **禁止**:在 .go/.cpp/.qml/.proto 里直接写中文字符(注释也不行)
+
+> 例外:`docs/*.md`(文档面向中文读者)和 `README.md` 可以中文。
+
 ### proto
 
 - 文件名:小写下划线(`overview.proto`)
