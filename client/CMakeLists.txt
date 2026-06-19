@@ -198,6 +198,8 @@ qt_add_qml_module(shadow-worker-client
         qml/components/HeatmapGrid.qml
         qml/components/RankBar.qml
         qml/components/QuickSwitchRow.qml
+        qml/components/DatePicker.qml
+        qml/components/TimelineTrack.qml
         # pages
         qml/main.qml
         qml/pages/OverviewPage.qml

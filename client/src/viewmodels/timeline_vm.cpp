@@ -1,4 +1,4 @@
-// TimelineViewModel 实现
+// TimelineViewModel implementation.
 
 #include "timeline_vm.h"
 
@@ -25,11 +25,12 @@ void TimelineViewModel::setDate(const QString &date) {
     return;
   m_date = date;
   emit dateChanged();
+  refresh();
 }
 
 void TimelineViewModel::refresh() {
   if (!m_channel) {
-    setError(QStringLiteral("gRPC channel 未初始化"));
+    setError(QStringLiteral("gRPC channel not initialized"));
     return;
   }
   setLoading(true);
@@ -49,14 +50,14 @@ void TimelineViewModel::refresh() {
         setLoading(false);
 
         if (!status.isOk()) {
-          setError(QStringLiteral("gRPC 错误: ") + status.message());
+          setError(QStringLiteral("gRPC error: ") + status.message());
           return;
         }
 
         std::optional<TimelineSnapshot> opt =
             replyPtr->read<TimelineSnapshot>();
         if (!opt.has_value()) {
-          setError(QStringLiteral("解析响应失败"));
+          setError(QStringLiteral("Failed to parse response"));
           return;
         }
 
@@ -70,14 +71,15 @@ void TimelineViewModel::refresh() {
           m["startTs"] = startTs;
           m["endTs"] = endTs;
           m["durationSec"] = (int)(endTs - startTs);
+          m["durationMin"] = (int)((endTs - startTs) / 60);
           m["appName"] = seg.appName();
           m["category"] = seg.category();
           m["windowTitle"] = seg.windowTitle();
           m["state"] = seg.state();
           m["startTime"] =
-              QDateTime::fromSecsSinceEpoch(startTs).toString("HH:mm:ss");
+              QDateTime::fromSecsSinceEpoch(startTs).toString("HH:mm");
           m["endTime"] =
-              QDateTime::fromSecsSinceEpoch(endTs).toString("HH:mm:ss");
+              QDateTime::fromSecsSinceEpoch(endTs).toString("HH:mm");
           m_segments.append(m);
         }
 
@@ -87,7 +89,7 @@ void TimelineViewModel::refresh() {
           QVariantMap m;
           qint64 ts = ev.ts();
           m["ts"] = ts;
-          m["time"] = QDateTime::fromSecsSinceEpoch(ts).toString("HH:mm:ss");
+          m["time"] = QDateTime::fromSecsSinceEpoch(ts).toString("HH:mm");
           m["type"] = ev.type();
           m["text"] = ev.text();
           m["appName"] = ev.appName();

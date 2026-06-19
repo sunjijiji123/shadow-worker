@@ -119,7 +119,7 @@ Item {
                                     if (modelData) {
                                         var mins = modelData.minutes
                                         var txt = modelData.date + "  " + (mins > 0 ? mins + " min" : "no activity")
-                                        var p = parent.mapToItem(root, mouse.x, mouse.y)
+                                        var p = parent.mapToItem(root, parent.width / 2, 0)
                                         tip.show(txt, p.x, p.y)
                                     }
                                 }

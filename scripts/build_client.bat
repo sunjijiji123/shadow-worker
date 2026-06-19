@@ -1,6 +1,6 @@
 @echo off
 REM ============================================================
-REM Shadow Worker Qt 客户端构建脚本
+REM Shadow Worker Qt client build script
 REM ============================================================
 REM 干净的 MSVC 构建环境(排除 MSYS2 干扰)。
 REM
@@ -12,11 +12,12 @@ REM ============================================================
 
 setlocal enabledelayedexpansion
 
-REM --- 路径常量(按需改) ---
-set "QT_PREFIX=C:\Qt\6.11.1\msvc2022_64"
-set "QT_TOOLS=C:\Qt\Tools"
+REM --- path constants (this machine) ---
+set "QT_PREFIX=D:\Qt\6.11.1\msvc2022_64"
+set "QT_TOOLS=D:\Qt\Tools"
 set "VS_VCVARS=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
-set "PROTOC_DIR=%~dp0..\tools\protoc\bin"
+set "PROTOC_DIR=D:\software\Go\bin"
+set "GO_BIN=D:\software\Go\bin"
 set "CLIENT_DIR=%~dp0..\client"
 
 REM --- 1. 清理 PATH(移除 MSYS2/MinGW 干扰) ---
@@ -36,9 +37,9 @@ for %%P in ("%PATH:;=";"%") do (
 set "PATH=%CLEAN_PATH%"
 echo [1/4] PATH 已清理(移除 MSYS2/MinGW)
 
-REM --- 2. 加入 Qt 工具 + 项目 protoc ---
-set "PATH=%QT_TOOLS%\CMake_64\bin;%QT_TOOLS%\Ninja;%PROTOC_DIR%;%PATH%"
-echo [2/4] 已加入 Qt CMake/Ninja + 项目 protoc
+REM --- 2. add Qt tools + Go bin (protoc lives there) ---
+set "PATH=%QT_TOOLS%\CMake_64\bin;%QT_TOOLS%\Ninja;%GO_BIN%;%PATH%"
+echo [2/4] added Qt CMake/Ninja + Go bin (protoc)
 
 REM --- 3. 调用 MSVC 环境 ---
 if not exist "%VS_VCVARS%" (
