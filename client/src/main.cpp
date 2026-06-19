@@ -17,6 +17,7 @@
 #include "viewmodels/timeline_vm.h"
 #include "viewmodels/whitelist_vm.h"
 #include "window/windowpicker.h"
+#include "window/windowhelper.h"
 
 #include <fstream>
 #include <iostream>
@@ -69,6 +70,7 @@ int main(int argc, char *argv[]) {
     const bool autostartMode =
         QCoreApplication::arguments().contains(QLatin1String("--autostart"));
     WindowPicker picker;
+    WindowHelper windowHelper;
     AudioRecorder audioRecorder;
     GlobalHotkey globalHotkey;
     AsrClient asrClient;
@@ -84,6 +86,7 @@ int main(int argc, char *argv[]) {
                                              &autostartManager);
     engine.rootContext()->setContextProperty("autostartMode", autostartMode);
     engine.rootContext()->setContextProperty("windowPicker", &picker);
+    engine.rootContext()->setContextProperty("windowHelper", &windowHelper);
     engine.rootContext()->setContextProperty("audioRecorder", &audioRecorder);
     engine.rootContext()->setContextProperty("globalHotkey", &globalHotkey);
     engine.rootContext()->setContextProperty("asrClient", &asrClient);

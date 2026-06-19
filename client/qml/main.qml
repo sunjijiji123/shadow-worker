@@ -153,6 +153,52 @@ ApplicationWindow {
         globalToast.show(text, type)
     }
 
+    // ================================================================
+    // Recording window (HTML section 2: recording bubble + result bubble)
+    // ================================================================
+    // A standalone top-level Window in the same process: frameless,
+    // stays-on-top, no taskbar entry. Positioned above the taskbar, centered.
+    // Shows even when the main window is minimized to the tray.
+    RecordingWindow {
+        id: recordingWindow
+    }
+
+    // ---- temporary demo trigger (cycle states) ----
+    // TODO: replace with a global hotkey once audio capture is wired.
+    Rectangle {
+        parent: mainWindow.contentItem
+        anchors.bottom: mainWindow.contentItem.bottom
+        anchors.left: mainWindow.contentItem.left
+        anchors.bottomMargin: 24
+        anchors.leftMargin: 24
+        width: demoTxt.implicitWidth + 24
+        height: 32
+        radius: 16
+        color: demoMa.containsMouse ? Theme.accentBg2 : Theme.bg3
+        border.color: demoMa.containsMouse ? Theme.accent : Theme.rule
+        border.width: 1
+        z: 1000
+
+        Text {
+            id: demoTxt
+            anchors.centerIn: parent
+            text: recordingWindow.state === "hidden"
+                  ? qsTr("▶ Demo Record") : qsTr("▶ Next State")
+            color: demoMa.containsMouse ? Theme.ink : Theme.muted
+            font.pixelSize: 12
+        }
+        MouseArea {
+            id: demoMa
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            hoverEnabled: true
+            onClicked: {
+                if (recordingWindow.state === "hidden") recordingWindow.show()
+                else recordingWindow.advance()
+            }
+        }
+    }
+
     Component.onCompleted: {
         // pull overview once on startup
         if (overviewVm) overviewVm.refresh()

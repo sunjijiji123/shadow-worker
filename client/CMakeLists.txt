@@ -131,6 +131,8 @@ qt_add_executable(shadow-worker-client
     src/viewmodels/settings_vm.cpp
     src/window/windowpicker.h
     src/window/windowpicker.cpp
+    src/window/windowhelper.h
+    src/window/windowhelper.cpp
     src/audio/audiorecorder.h
     src/audio/audiorecorder.cpp
     src/hotkey/globalhotkey.h
@@ -211,6 +213,9 @@ qt_add_qml_module(shadow-worker-client
         qml/components/PromptItem.qml
         qml/components/KeyCap.qml
         qml/components/Badge.qml
+        qml/components/RecordingBubble.qml
+        qml/components/ResultBubble.qml
+        qml/RecordingWindow.qml
         # pages
         qml/main.qml
         qml/pages/OverviewPage.qml

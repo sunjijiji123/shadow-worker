@@ -1,8 +1,13 @@
 // TextArea.qml - labeled multiline text area (HTML .field + .label + .textarea).
 // Mirrors TextField styling: bg fill, rule border, 6px radius, 13px text.
 // .textarea CSS: min-height 80px, resize: vertical.
-// A visible drag handle on the bottom edge lets the user resize vertically,
-// matching the browser's `resize: vertical` affordance.
+//
+// A visible drag handle lets the user resize vertically, matching the
+// browser's `resize: vertical` affordance.
+//   resizeEdge: "bottom" (default) -> handle on bottom-right, drag DOWN to grow
+//               "top"             -> handle on top-right,    drag UP to grow
+// The "top" mode is for contexts where growing downward would overlap content
+// below (e.g. the result bubble sitting above the recording pill).
 
 import QtQuick
 import QtQuick.Controls
@@ -22,6 +27,8 @@ ColumnLayout {
     property int maxHeight: 480
     // frame fill color. Default Theme.bg (.textarea); .prompt-textarea uses bg2.
     property color frameColor: Theme.bg
+    // which edge the resize handle sits on: "bottom" | "top"
+    property string resizeEdge: "bottom"
 
     signal textEdited(string newText)
 
@@ -92,20 +99,26 @@ ColumnLayout {
             }
         }
 
-        // ---- vertical resize handle (bottom-right), like CSS resize:vertical ----
+        // ---- vertical resize handle ----
+        // bottom-edge: anchors bottom-right, drag DOWN grows (delta positive)
+        // top-edge:    anchors top-right,    drag UP grows (delta negative -> next = startH - delta)
         Rectangle {
             id: handle
             anchors.right: parent.right
-            anchors.bottom: parent.bottom
+            anchors.top: root.resizeEdge === "top" ? parent.top : undefined
+            anchors.bottom: root.resizeEdge === "bottom" ? parent.bottom : undefined
+            anchors.topMargin: 0
             width: 16
             height: 16
             color: "transparent"
 
-            // diagonal "grip" lines (two short strokes), low-key
+            // diagonal "grip" lines. For the top edge, mirror vertically so the
+            // glyph reads as "grab here to pull up".
             Canvas {
                 id: grip
                 anchors.centerIn: parent
                 width: 8; height: 8
+                rotation: root.resizeEdge === "top" ? 180 : 0
                 onPaint: {
                     var ctx = getContext("2d")
                     ctx.reset()
@@ -127,30 +140,35 @@ ColumnLayout {
                 // Flickable can't steal the drag and scroll the page instead.
                 preventStealing: true
 
-                // Track Y movement relative to root (the stable ColumnLayout)
-                // so dragging the handle grows/shrinks the frame height.
                 property real startY: 0
                 property int startH: 0
                 onPressed: function(mouse) {
-                    var p = mapToItem(root, mouse.x, mouse.y)
-                    startY = p.y
+                    // IMPORTANT: use SCREEN coordinates (mapToGlobal), not local.
+                    // In a floating window the window itself moves during the
+                    // resize (the result window slides up as the textarea grows),
+                    // so a local/mapToItem reference frame drifts and produces
+                    // inverted/jumpy drag direction. Screen coords are stable.
+                    var g = handleMa.mapToGlobal(mouse.x, mouse.y)
+                    startY = g.y
                     startH = frame.height
-                    // grab so onPositionChanged keeps firing beyond the handle box
                     handleMa.grabMouse()
                 }
                 onPositionChanged: function(mouse) {
                     // hoverEnabled makes this fire on mere hover movement too;
                     // only resize while the mouse button is actually held down.
                     if (!handleMa.pressed) return
-                    var p = mapToItem(root, mouse.x, mouse.y)
-                    var delta = p.y - startY
-                    var next = Math.round(startH + delta)
+                    var g = handleMa.mapToGlobal(mouse.x, mouse.y)
+                    var delta = g.y - startY
+                    // top edge: dragging the handle DOWN (delta+) SHRINKS the box;
+                    // dragging UP (delta-) GROWS it.
+                    var next = root.resizeEdge === "top"
+                               ? Math.round(startH - delta)
+                               : Math.round(startH + delta)
                     // clamp to [minHeight, maxHeight]
                     root.userHeight = Math.max(root.minHeight,
                                                Math.min(next, root.maxHeight))
                 }
                 onReleased: handleMa.ungrabMouse()
-                // redraw grip on hover so the accent highlight shows
                 onContainsMouseChanged: grip.requestPaint()
             }
         }
