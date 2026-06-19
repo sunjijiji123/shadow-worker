@@ -1,5 +1,5 @@
-// SaveBar.qml - settings bottom unified save bar, matches HTML .settings-save-bar.
-// Only [Save], no "Reset". Floats at content bottom with gradient bg.
+// SaveBar.qml - settings bottom save bar, matches HTML .settings-save-bar.
+// Spans full content area width; gradient bg matches window bg2.
 
 import QtQuick
 import QtQuick.Layouts
@@ -10,18 +10,17 @@ Rectangle {
 
     signal saveRequested()
 
-    visible: opacity > 0
+    // parent is the content Item (already right of sidebar), so margins are 0 left.
     anchors.left: parent.left
     anchors.right: parent.right
     anchors.bottom: parent.bottom
-    anchors.leftMargin: Theme.sidebarWidth
     height: 64
     z: 10
     gradient: Gradient {
         orientation: Gradient.Vertical
-        GradientStop { position: 0.0; color: "transparent" }
-        GradientStop { position: 0.3; color: Theme.bg }
-        GradientStop { position: 1.0; color: Theme.bg }
+        GradientStop { position: 0.0; color: Qt.rgba(0.094, 0.094, 0.102, 0) }   // transparent bg2
+        GradientStop { position: 0.3; color: Theme.bg2 }
+        GradientStop { position: 1.0; color: Theme.bg2 }
     }
 
     RowLayout {

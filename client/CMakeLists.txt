@@ -200,12 +200,30 @@ qt_add_qml_module(shadow-worker-client
         qml/components/QuickSwitchRow.qml
         qml/components/DatePicker.qml
         qml/components/TimelineTrack.qml
+        qml/components/TextField.qml
+        qml/components/SelectBox.qml
+        qml/components/ModelChipGroup.qml
+        qml/components/VolumeBar.qml
+        qml/components/MicTestButton.qml
+        qml/components/AddModelDialog.qml
         # pages
         qml/main.qml
         qml/pages/OverviewPage.qml
         qml/pages/TimelinePage.qml
         qml/pages/SettingsPage.qml
         qml/pages/SystemPage.qml
+    RESOURCES
+        qml/icons/overview.svg
+        qml/icons/overview_active.svg
+        qml/icons/timeline.svg
+        qml/icons/timeline_active.svg
+        qml/icons/settings.svg
+        qml/icons/settings_active.svg
+        qml/icons/system.svg
+        qml/icons/system_active.svg
+        qml/icons/toast_success.svg
+        qml/icons/toast_error.svg
+        qml/icons/toast_warning.svg
 )
 
 # Windows: keep console in DEBUG builds (to see errors); RELEASE would use WIN32 to hide it.

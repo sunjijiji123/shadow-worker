@@ -366,9 +366,8 @@ Item {
     // ---- helpers ----
     // toast wrapper: walk up to find ApplicationWindow.toast (defined in main.qml)
     function toast(text) {
-        var w = root
-        while (w && !w.toast) { w = w.parent }
-        if (w && w.toast) w.toast(text)
+        var win = ApplicationWindow.window
+        if (win && win.toast) win.toast(text)
     }
     function formatMinutes(min) {
         if (!min || min <= 0) return "0m"

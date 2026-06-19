@@ -52,10 +52,10 @@ ApplicationWindow {
 
                 Repeater {
                     model: [
-                        { view: "overview", label: qsTr("Overview") },
-                        { view: "timeline", label: qsTr("Timeline") },
-                        { view: "settings", label: qsTr("Settings") },
-                        { view: "system",   label: qsTr("System")   }
+                        { view: "overview", label: qsTr("Overview"), icon: "M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" },
+                        { view: "timeline", label: qsTr("Timeline"), icon: "M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm4.2 14.2L11 13V7h2v5l4.5 2.7-.8 1.5z" },
+                        { view: "settings", label: qsTr("Settings"), icon: "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84a.484.484 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.488.488 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.63-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.27.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13.57 1.62.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.03-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z" },
+                        { view: "system",   label: qsTr("System"),   icon: "M20 18c1.1 0 1.99-.9 1.99-2L22 5c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 5h16v11H4V5z" }
                     ]
 
                     delegate: Rectangle {
@@ -80,13 +80,15 @@ ApplicationWindow {
                             anchors.leftMargin: 18
                             spacing: 10
 
-                            // placeholder icon block (M3 -> real SVG; color follows active state)
-                            Rectangle {
+                            // SVG icon (Image loads .svg file; swaps source for active/inactive)
+                            Image {
                                 Layout.preferredWidth: 18
                                 Layout.preferredHeight: 18
-                                radius: 4
-                                color: currentView === modelData.view ? Theme.accent : Theme.muted
-                                opacity: currentView === modelData.view ? 1 : 0.4
+                                sourceSize.width: 18
+                                sourceSize.height: 18
+                                source: currentView === modelData.view
+                                        ? "qrc:/qt/qml/ShadowWorker/qml/icons/" + modelData.view + "_active.svg"
+                                        : "qrc:/qt/qml/ShadowWorker/qml/icons/" + modelData.view + ".svg"
                             }
 
                             Text {
