@@ -50,27 +50,95 @@ service Whitelist {
 ```protobuf
 service Overview {
   rpc GetOverview(OverviewRequest) returns (OverviewData);
-  rpc WatchOverview(OverviewRequest) returns (stream OverviewUpdate);
+  rpc WatchOverview(WatchOverviewRequest) returns (stream OverviewUpdate);
+  rpc GetHeatmap(HeatmapRequest) returns (HeatmapData);          // v2 新增:活跃热力图
+  rpc GetCategoryRank(RankRequest) returns (CategoryRankData);   // v2 新增:类别占比排行
+}
+
+message OverviewRequest {
+  string date = 1;                    // 默认今天;range=day 时用此
+  string range = 2;                   // day(默认)/ week / month,支撑概览页切换
 }
 
 message OverviewData {
-  int32 today_minutes = 1;
+  int32 today_minutes = 1;            // 当前 range 的工作总分钟
   int32 active_segments = 2;
-  repeated AppSummary apps = 3;        // 今日有活动的应用
-  string collection_status = 4;        // running/paused
-  string asr_status = 5;               // ready/error
+  repeated AppSummary apps = 3;       // 有活动的应用(应用排行)
+  string collection_status = 4;       // running/paused
+  string asr_status = 5;
   string vlm_status = 6;
   string mcp_status = 7;
-}
-
-message OverviewUpdate {
-  int32 today_minutes = 1;             // 实时更新
-  string collection_status = 2;
-  string active_app = 3;               // 当前前台白名单应用
+  // v2 新增字段
+  int32 interrupt_count = 8;          // 打断次数(见下方定义)
+  int32 minutes_delta = 9;            // 较上一周期 ±分钟(今日 vs 昨日)
+  int32 interrupt_delta = 10;         // 较上一周期 ±打断次数
+  int32 app_count = 11;               // 涉及应用数
+  string active_app = 12;             // 当前前台白名单应用(当前应用卡)
+  string active_category = 13;        // active_app 的类别
 }
 ```
 
-**职责**:概览页数据。`WatchOverview` 持续推送,Qt 自动刷新。
+**打断次数定义(决策 A,简单实现):**
+- `interrupt_count` = 当天 `activity_segments` 中 **active↔idle 的切换次数**(即用户离开又回来的次数)。
+- SQL 语义:统计 state 字段从 `idle` 变 `active` 的次数(每次"离开后恢复工作"算一次打断)。
+- 不计 active→active 的连续段(同类别/同应用续段不算打断)。
+- 较昨日对比:`minutes_delta` / `interrupt_delta` = 今天 - 昨天。
+
+```protobuf
+message OverviewUpdate {
+  int32 today_minutes = 1;            // 实时更新
+  string collection_status = 2;
+  string active_app = 3;              // 当前前台白名单应用
+}
+```
+
+**热力图 RPC(v2 新增):**
+
+```protobuf
+message HeatmapRequest {
+  int32 months_back = 1;              // 向前回溯几个月(默认 3,即显示近 3 个月)
+}
+
+message HeatmapData {
+  repeated DayActivity days = 1;
+}
+
+message DayActivity {
+  string date = 1;                    // YYYY-MM-DD
+  int32 minutes = 2;                  // 当日活跃分钟
+  int32 level = 3;                    // 0~5 档(0=无数据,5=满格),前端直接映射绿深浅
+}
+```
+
+- 用途:概览页活跃热力图(GitHub 贡献格风格)。
+- `level` 由后端按 minutes 分桶(如 0/30/60/120/180/240+ 对应 0~5),前端不自己算。
+
+**类别占比排行 RPC(v2 新增):**
+
+```protobuf
+message RankRequest {
+  string date = 1;
+  string range = 2;                   // day/week/month
+}
+
+message CategoryRankData {
+  string range = 1;
+  int32 total_minutes = 2;
+  repeated CategoryStat categories = 3;
+}
+
+message CategoryStat {
+  string category = 1;                // coding/browser/chat/office/other
+  int32 minutes = 2;
+  int32 percent = 3;                  // 0~100(四舍五入)
+  string color = 4;                   // 类别固定色 #3B82F6 等(前端也可本地映射)
+}
+```
+
+- 用途:概览页类别占比排行(横条 + 占比% + 时长)。
+- 按占比降序返回。
+
+**职责**:概览页数据。`WatchOverview` 持续推送,Qt 自动刷新。`GetHeatmap`/`GetCategoryRank` 在页面加载和 range 切换时调用。
 
 #### 4. AsrService(Bidirectional Streaming)
 
