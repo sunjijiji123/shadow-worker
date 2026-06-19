@@ -21,6 +21,20 @@
       --danger: #ef4444;
     }
     * { box-sizing: border-box; }
+    html { color-scheme: dark; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+    ::-webkit-scrollbar-corner { background: transparent; }
+    ::-webkit-scrollbar-button { background: var(--bg2); border: 1px solid var(--rule); height: 8px; width: 8px; }
+    ::-webkit-scrollbar-button:hover { background: var(--bg3); }
+    textarea::-webkit-resizer {
+      background:
+        linear-gradient(135deg, transparent 52%, var(--muted) 52%, var(--muted) 58%, transparent 58%),
+        linear-gradient(135deg, transparent 68%, var(--muted) 68%, var(--muted) 74%, transparent 74%);
+      border-bottom-right-radius: 4px;
+    }
     body {
       margin: 0;
       background: var(--bg);
@@ -72,11 +86,32 @@
     .btn-danger { background: rgba(239,68,68,0.15); color: var(--danger); border: 1px solid rgba(239,68,68,0.3); }
     .btn-sm { padding: 4px 10px; font-size: 12px; }
 
+    .mic-test-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 6px; font-size: 13px; cursor: pointer; user-select: none; white-space: nowrap; background: rgba(16,185,129,0.1); border: 1px solid var(--accent); color: var(--accent); transition: .2s; }
+    .mic-test-btn:hover { background: rgba(16,185,129,0.2); color: #fff; }
+    .mic-test-btn.testing { background: rgba(239,68,68,0.12); border-color: var(--danger); color: var(--danger); }
+    .mic-test-btn .pulse-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .mic-test-btn.testing .pulse-dot { animation: pulse-danger 1.2s infinite; }
+    @keyframes pulse-danger { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .45; transform: scale(.85); } }
+
     .chip-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
     .chip { padding: 4px 10px; border-radius: 5px; background: var(--bg); border: 1px solid var(--rule); color: var(--muted); font-size: 12px; cursor: pointer; user-select: none; }
     .chip.active { background: rgba(16,185,129,0.15); border-color: var(--accent); color: var(--accent); }
     .chip.add { border-style: dashed; }
     .chip.star.active { background: rgba(245,158,11,0.15); border-color: #f59e0b; color: #f59e0b; }
+
+    .model-chip-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
+    .model-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: var(--bg); border: 1px solid var(--rule); border-radius: 16px; font-size: 13px; cursor: pointer; color: var(--muted); user-select: none; transition: .15s; }
+    .model-chip:hover { border-color: var(--accent); color: var(--ink); }
+    .model-chip.active { background: rgba(16,185,129,0.15); border-color: var(--accent); color: #fff; }
+    .model-chip .chip-close { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; font-size: 11px; margin-left: 2px; color: var(--muted); }
+    .model-chip .chip-close:hover { background: rgba(239,68,68,0.2); color: var(--danger); }
+    .model-chip.add { background: transparent; border-style: dashed; }
+
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 200; }
+    .modal-overlay.show { display: flex; }
+    .modal { background: var(--bg3); border: 1px solid var(--rule); border-radius: 12px; padding: 20px; width: 420px; max-width: 90vw; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+    .modal-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--ink); }
+    .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 
     .radio-group { display: flex; flex-direction: column; gap: 10px; }
     .radio { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; background: var(--bg); border: 1px solid var(--rule); cursor: pointer; font-size: 14px; }
@@ -185,7 +220,7 @@
     .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; }
     .badge-warn { background: rgba(239,68,68,0.15); color: var(--danger); }
     .badge-ok { background: rgba(16,185,129,0.15); color: var(--accent); }
-    .shortcut-hint { font-size: 11px; color: var(--danger); margin-top: 8px; }
+    .shortcut-hint { font-size: 11px; color: var(--muted); margin-top: 8px; }
 
     .add-provider-form { display: none; background: var(--bg); border: 1px solid var(--rule); border-radius: 8px; padding: 12px; margin-top: 12px; }
     .hidden-field { display: none !important; }
@@ -272,9 +307,13 @@
     #heat-tooltip { position: fixed; z-index: 1000; background: rgba(0,0,0,0.85); color: #fff; font-size: 12px; padding: 6px 10px; border-radius: 6px; pointer-events: none; white-space: nowrap; opacity: 0; transition: opacity 0.15s; border: 1px solid var(--rule); }
     .quick-switch { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--rule); }
     .quick-switch:last-child { border-bottom: none; }
-    .trend-chart { display: flex; align-items: stretch; gap: 8px; height: 120px; padding-top: 20px; }
-    .trend-bar { flex: 1; display: flex; flex-direction: column-reverse; height: 100%; border-radius: 4px 4px 0 0; min-height: 4px; position: relative; overflow: hidden; }
-    .trend-bar::before { content: attr(data-label); position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font-size: 10px; color: var(--muted); white-space: nowrap; }
+    .trend-wrap { display: flex; align-items: stretch; gap: 12px; margin-top: 8px; }
+    .trend-y-axis { display: flex; flex-direction: column; justify-content: space-between; padding-bottom: 24px; font-size: 10px; color: var(--muted); text-align: right; width: 24px; }
+    .trend-chart { flex: 1; display: flex; align-items: flex-end; justify-content: center; gap: 12px; height: 120px; padding-top: 8px; padding-bottom: 24px; position: relative; border-bottom: 1px solid var(--rule); }
+    .trend-grid { position: absolute; top: 8px; left: 0; right: 0; bottom: 24px; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; }
+    .trend-grid-line { width: 100%; border-top: 1px dashed var(--rule); opacity: 0.35; }
+    .trend-bar { flex: 0 0 40px; width: 40px; display: flex; flex-direction: column-reverse; height: 100%; border-radius: 4px 4px 0 0; min-height: 4px; position: relative; overflow: hidden; }
+    .trend-bar::after { content: attr(data-label); position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%); font-size: 10px; color: var(--muted); white-space: nowrap; }
     .trend-seg { width: 100%; }
     .rank-bar { height: 8px; background: var(--accent); border-radius: 4px; margin-top: 6px; }
 
@@ -462,40 +501,56 @@
           <div class="card">
             <div class="card-title">类别趋势</div>
             <div class="card-desc">近 7 天各类别活跃分钟</div>
-            <div class="trend-chart">
-              <div class="trend-bar" data-label="周一">
-                <div class="trend-seg coding" style="height:38%"></div>
-                <div class="trend-seg browser" style="height:14%"></div>
-                <div class="trend-seg chat" style="height:8%"></div>
+            <div class="trend-wrap">
+              <div class="trend-y-axis">
+                <span>8h</span>
+                <span>6h</span>
+                <span>4h</span>
+                <span>2h</span>
+                <span>0</span>
               </div>
-              <div class="trend-bar" data-label="周二">
-                <div class="trend-seg coding" style="height:22%"></div>
-                <div class="trend-seg browser" style="height:14%"></div>
-                <div class="trend-seg office" style="height:4%"></div>
-              </div>
-              <div class="trend-bar" data-label="周三">
-                <div class="trend-seg coding" style="height:48%"></div>
-                <div class="trend-seg chat" style="height:12%"></div>
-                <div class="trend-seg browser" style="height:10%"></div>
-                <div class="trend-seg office" style="height:5%"></div>
-              </div>
-              <div class="trend-bar" data-label="周四">
-                <div class="trend-seg coding" style="height:32%"></div>
-                <div class="trend-seg chat" style="height:10%"></div>
-                <div class="trend-seg browser" style="height:8%"></div>
-              </div>
-              <div class="trend-bar" data-label="周五">
-                <div class="trend-seg coding" style="height:18%"></div>
-                <div class="trend-seg browser" style="height:12%"></div>
-                <div class="trend-seg chat" style="height:5%"></div>
-              </div>
-              <div class="trend-bar" data-label="周六">
-                <div class="trend-seg browser" style="height:8%"></div>
-                <div class="trend-seg chat" style="height:2%"></div>
-              </div>
-              <div class="trend-bar" data-label="周日">
-                <div class="trend-seg browser" style="height:10%"></div>
-                <div class="trend-seg chat" style="height:5%"></div>
+              <div class="trend-chart">
+                <div class="trend-grid">
+                  <div class="trend-grid-line"></div>
+                  <div class="trend-grid-line"></div>
+                  <div class="trend-grid-line"></div>
+                  <div class="trend-grid-line"></div>
+                  <div class="trend-grid-line"></div>
+                </div>
+                <div class="trend-bar" data-label="周一">
+                  <div class="trend-seg coding" style="height:38%"></div>
+                  <div class="trend-seg browser" style="height:14%"></div>
+                  <div class="trend-seg chat" style="height:8%"></div>
+                </div>
+                <div class="trend-bar" data-label="周二">
+                  <div class="trend-seg coding" style="height:22%"></div>
+                  <div class="trend-seg browser" style="height:14%"></div>
+                  <div class="trend-seg office" style="height:4%"></div>
+                </div>
+                <div class="trend-bar" data-label="周三">
+                  <div class="trend-seg coding" style="height:48%"></div>
+                  <div class="trend-seg chat" style="height:12%"></div>
+                  <div class="trend-seg browser" style="height:10%"></div>
+                  <div class="trend-seg office" style="height:5%"></div>
+                </div>
+                <div class="trend-bar" data-label="周四">
+                  <div class="trend-seg coding" style="height:32%"></div>
+                  <div class="trend-seg chat" style="height:10%"></div>
+                  <div class="trend-seg browser" style="height:8%"></div>
+                </div>
+                <div class="trend-bar" data-label="周五">
+                  <div class="trend-seg coding" style="height:18%"></div>
+                  <div class="trend-seg browser" style="height:12%"></div>
+                  <div class="trend-seg chat" style="height:5%"></div>
+                </div>
+                <div class="trend-bar" data-label="周六">
+                  <div class="trend-seg browser" style="height:8%"></div>
+                  <div class="trend-seg chat" style="height:2%"></div>
+                </div>
+                <div class="trend-bar" data-label="周日">
+                  <div class="trend-seg browser" style="height:10%"></div>
+                  <div class="trend-seg chat" style="height:5%"></div>
+                </div>
               </div>
             </div>
             <div style="display:flex;gap:16px;margin-top:12px;font-size:12px;color:var(--muted);">
@@ -1014,80 +1069,74 @@
               </div>
             </div>
 
-            <div class="card">
+            <div class="card asr-service-card" data-kind="asr">
               <div class="card-title">ASR 模型服务</div>
-              <div class="chip-group" style="margin-top:12px;">
-                <span class="chip active star" data-group="asr-provider" data-val="xiaomi" data-cloud="true" data-name="小米" data-base="wss://speech.xiaomi.com/v1" data-model="xiaomi-asr">小米</span>
-                <span class="chip star" data-group="asr-provider" data-val="zhipu" data-cloud="true" data-name="智谱" data-base="wss://asr.zhipuai.com/v1" data-model="zhipu-asr">智谱</span>
-                <span class="chip star" data-group="asr-provider" data-val="custom" data-cloud="true" data-name="" data-base="" data-model="">自定义</span>
-                <span class="chip star" data-group="asr-provider" data-val="local" data-cloud="false" data-path="C:\Models\ggml-base.bin">本地模型</span>
-                <span class="chip add" data-group="asr-provider" data-val="add">+ 添加</span>
+              <div class="model-chip-group" data-kind="asr">
+                <span class="model-chip active" data-provider="Xiaomi MIMO" data-type="cloud" data-base="wss://speech.xiaomi.com/v1" data-model="xiaomi-asr">小米-ASR-1<span class="chip-close">×</span></span>
+                <span class="model-chip" data-provider="DeepSeek" data-type="cloud" data-base="https://api.deepseek.com/v1/asr" data-model="deepseek-asr">DeepSeek-ASR<span class="chip-close">×</span></span>
+                <span class="model-chip" data-provider="local" data-type="local" data-path="C:\Models\ggml-base.bin">本地-whisper<span class="chip-close">×</span></span>
+                <span class="model-chip add" data-action="add">+ 添加模型</span>
               </div>
-              <div class="add-provider-form">
-                <div class="form-row" style="margin-bottom:0;align-items:flex-end;">
-                  <div class="field"><div class="label">服务商名称</div><input class="input provider-name" placeholder="自定义厂商"></div>
-                  <div class="field" style="flex:0 0 auto;display:flex;gap:8px;">
-                    <span class="btn btn-primary btn-sm save-provider">保存</span>
-                    <span class="btn btn-ghost btn-sm cancel-provider">取消</span>
-                  </div>
-                </div>
-              </div>
-              <div class="card-desc">切换厂商会重置为该厂商的默认配置；本地模型使用本地 whisper.cpp 二进制。</div>
+              <div class="card-desc">切换模型查看或编辑对应配置；可添加多个模型用于对比效果。</div>
 
-              <div id="asr-cloud-fields" class="two-col" style="margin-top:16px;">
-                <div class="field"><div class="label">服务商名称</div><input class="input asr-vendor-name" value="小米"></div>
-                <div class="field"><div class="label">Base URL</div><input class="input asr-base-url" value="wss://speech.xiaomi.com/v1"></div>
-                <div class="field"><div class="label">模型</div><input class="input asr-cloud-model" value="xiaomi-asr"></div>
-                <div class="field">
-                  <div class="label">识别语言</div>
-                  <div class="select-wrap" data-options="中文 (zh),英语 (en),日语 (ja),中英混合 (zh+en),自动检测 (auto)"><div class="select">中文 (zh)</div></div>
-                </div>
-                <div class="field"><div class="label">API Format</div><div class="select-wrap" data-options="OpenAI,Anthropic messages"><div class="select">OpenAI</div></div></div>
-                <div class="field">
-                  <div class="label">认证方式</div>
-                  <div class="select-wrap" data-options="Bearer,api-key 头,无认证"><div class="select">Bearer</div></div>
-                </div>
-                <div class="field apikey-only" style="grid-column:1/-1;">
-                  <div class="label">API Key</div>
-                  <div style="display:flex;gap:8px;">
-                    <input class="input apikey-input" type="password" value="sk-xxxxxxxx" style="flex:1;">
-                    <span class="btn btn-ghost toggle-key">显示</span>
-                  </div>
-                </div>
-              </div>
-              <div id="asr-cloud-test" style="margin-top:16px;"><span class="btn btn-primary test-btn">测试连接<span class="latency">延迟 86 ms</span></span></div>
-
-              <div id="asr-local-fields" class="hidden-field" style="margin-top:16px;">
-                <div class="field">
-                  <div class="label">模型路径</div>
-                  <div style="display:flex;gap:8px;">
-                    <input class="input asr-model-path" style="flex:1;" value="C:\Models\ggml-base.bin">
-                    <span class="btn btn-ghost asr-browse-btn">浏览…</span>
-                  </div>
-                </div>
-                <div class="two-col" style="margin-top:12px;">
-                  <div class="field">
-                    <div class="label">模型名称 <span style="color:var(--muted);font-weight:normal;">(从路径自动识别)</span></div>
-                    <input class="input asr-model-name" readonly value="ggml-base">
-                  </div>
+              <div id="asr-config" class="model-config" style="margin-top:16px;">
+                <div class="two-col" id="asr-cloud-fields">
+                  <div class="field"><div class="label">服务商名称</div><input class="input asr-vendor-name" value="Xiaomi MIMO" readonly></div>
+                  <div class="field"><div class="label">Base URL</div><input class="input asr-base-url" value="wss://speech.xiaomi.com/v1"></div>
+                  <div class="field"><div class="label">模型</div><input class="input asr-cloud-model" value="xiaomi-asr"></div>
                   <div class="field">
                     <div class="label">识别语言</div>
                     <div class="select-wrap" data-options="中文 (zh),英语 (en),日语 (ja),中英混合 (zh+en),自动检测 (auto)"><div class="select">中文 (zh)</div></div>
                   </div>
+                  <div class="field"><div class="label">API Format</div><div class="select-wrap" data-options="OpenAI,Anthropic messages"><div class="select">OpenAI</div></div></div>
+                  <div class="field">
+                    <div class="label">认证方式</div>
+                    <div class="select-wrap" data-options="Bearer,api-key 头,无认证"><div class="select">Bearer</div></div>
+                  </div>
+                  <div class="field apikey-only" style="grid-column:1/-1;">
+                    <div class="label">API Key</div>
+                    <div style="display:flex;gap:8px;">
+                      <input class="input apikey-input" type="password" value="sk-xxxxxxxx" style="flex:1;">
+                      <span class="btn btn-ghost toggle-key">显示</span>
+                    </div>
+                  </div>
                 </div>
-                <div class="card-desc">本地 whisper.cpp 模型，识别语言用于解码提示与初始 token。</div>
+                <div id="asr-local-fields" class="hidden-field" style="margin-top:16px;">
+                  <div class="field">
+                    <div class="label">模型路径</div>
+                    <div style="display:flex;gap:8px;">
+                      <input class="input asr-model-path" style="flex:1;" value="C:\Models\ggml-base.bin">
+                      <span class="btn btn-ghost asr-browse-btn">浏览…</span>
+                    </div>
+                  </div>
+                  <div class="two-col" style="margin-top:12px;">
+                    <div class="field">
+                      <div class="label">模型名称 <span style="color:var(--muted);font-weight:normal;">(从路径自动识别)</span></div>
+                      <input class="input asr-model-name" readonly value="ggml-base">
+                    </div>
+                    <div class="field">
+                      <div class="label">识别语言</div>
+                      <div class="select-wrap" data-options="中文 (zh),英语 (en),日语 (ja),中英混合 (zh+en),自动检测 (auto)"><div class="select">中文 (zh)</div></div>
+                    </div>
+                  </div>
+                  <div class="card-desc">本地 whisper.cpp 模型，识别语言用于解码提示与初始 token。</div>
+                </div>
+                <div style="margin-top:16px;"><span class="btn btn-primary test-btn">测试连接<span class="latency">延迟 86 ms</span></span></div>
               </div>
             </div>
 
             <div class="card">
               <div class="card-title">音频设备</div>
-              <div class="form-row">
+              <div class="form-row" style="align-items:flex-end;">
                 <div class="field" style="flex:2;">
                   <div class="label">输入设备</div>
                   <div class="select-wrap" data-options="默认麦克风,麦克风 (Realtek),麦克风 (USB)"><div class="select">默认麦克风</div></div>
                 </div>
-                <div class="field" style="flex:1;display:flex;align-items:flex-end;">
-                  <span class="btn btn-ghost" id="mic-test" style="width:100%;">测试麦克风</span>
+                <div class="field" style="flex:0 0 auto;justify-content:flex-end;">
+                  <span class="mic-test-btn" id="mic-test">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+                    测试麦克风
+                  </span>
                 </div>
               </div>
               <div style="display:flex;align-items:center;gap:12px;margin-top:12px;">
@@ -1128,43 +1177,43 @@
               </div>
             </div>
 
-            <div class="card vlm-card" data-kind="vlm">
+            <div class="card vlm-card vlm-service-card" data-kind="vlm">
               <div class="card-title">VLM 模型服务</div>
-              <div class="chip-group" style="margin-top:12px;">
-                <span class="chip active star" data-group="vlm-provider" data-val="openai">OpenAI 兼容</span>
-                <span class="chip star" data-group="vlm-provider" data-val="ollama">Ollama</span>
-                <span class="chip star" data-group="vlm-provider" data-val="anthropic">Anthropic</span>
-                <span class="chip add" data-group="vlm-provider" data-val="custom">+ 添加</span>
+              <div class="model-chip-group" data-kind="vlm">
+                <span class="model-chip active" data-provider="Xiaomi MIMO" data-type="cloud" data-base="https://api.xiaomi.com/v1/vlm" data-model="mimo-vl">小米-VLM-1<span class="chip-close">×</span></span>
+                <span class="model-chip" data-provider="DeepSeek" data-type="cloud" data-base="https://api.deepseek.com/v1" data-model="deepseek-vl">DeepSeek-VL<span class="chip-close">×</span></span>
+                <span class="model-chip" data-provider="local" data-type="local" data-base="http://localhost:11434" data-model="llava">本地-ollama<span class="chip-close">×</span></span>
+                <span class="model-chip add" data-action="add">+ 添加模型</span>
               </div>
-              <div class="add-provider-form">
-                <div class="form-row" style="margin-bottom:0;align-items:flex-end;">
-                  <div class="field"><div class="label">服务商名称</div><input class="input provider-name" placeholder="自定义厂商"></div>
-                  <div class="field" style="flex:0 0 auto;display:flex;gap:8px;">
-                    <span class="btn btn-primary btn-sm save-provider">保存</span>
-                    <span class="btn btn-ghost btn-sm cancel-provider">取消</span>
+              <div class="card-desc">切换模型查看或编辑对应配置；可添加多个模型用于对比效果。</div>
+
+              <div id="vlm-config" class="model-config" style="margin-top:16px;">
+                <div class="two-col" id="vlm-cloud-fields">
+                  <div class="field"><div class="label">服务商名称</div><input class="input vlm-vendor-name" value="Xiaomi MIMO" readonly></div>
+                  <div class="field"><div class="label">Base URL</div><input class="input vlm-base-url" value="https://api.xiaomi.com/v1/vlm"></div>
+                  <div class="field"><div class="label">模型</div><input class="input vlm-cloud-model" value="mimo-vl"></div>
+                  <div class="field"><div class="label">API Format</div><div class="select-wrap" data-options="OpenAI,Anthropic messages"><div class="select">OpenAI</div></div></div>
+                  <div class="field"><div class="label">认证方式</div><div class="select-wrap" data-options="Bearer,api-key 头,无认证"><div class="select">Bearer</div></div></div>
+                  <div class="field" style="grid-column:1/-1;">
+                    <div class="label">API Key</div>
+                    <div style="display:flex;gap:8px;">
+                      <input class="input apikey-input" type="password" value="sk-xxxxxxxx" style="flex:1;">
+                      <span class="btn btn-ghost toggle-key">显示</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div class="card-desc">VLM 本地模式走 Ollama HTTP 服务；云端模式需 API Key。</div>
-              <div class="two-col">
-                <div class="field"><div class="label">服务商名称</div><input class="input" value="OpenAI 兼容"></div>
-                <div class="field">
-                  <div class="label">部署类型</div>
-                  <div class="select-wrap" data-options="云端 API,本地 Ollama" data-kind="vlm"><div class="select">云端 API</div></div>
-                </div>
-                <div class="field"><div class="label">Base URL</div><input class="input" value="https://api.openai.com/v1"></div>
-                <div class="field"><div class="label">模型</div><input class="input" value="gpt-4o"></div>
-                <div class="field"><div class="label">API Format</div><div class="select-wrap" data-options="OpenAI,Anthropic messages"><div class="select">OpenAI</div></div></div>
-                <div class="field"><div class="label">认证方式</div><div class="select-wrap" data-options="Bearer,api-key 头,无认证"><div class="select">Bearer</div></div></div>
-                <div class="field apikey-only" style="grid-column:1/-1;">
-                  <div class="label">API Key</div>
-                  <div style="display:flex;gap:8px;">
-                    <input class="input apikey-input" type="password" value="sk-xxxxxxxx" style="flex:1;">
-                    <span class="btn btn-ghost toggle-key">显示</span>
+                <div id="vlm-local-fields" class="hidden-field" style="margin-top:16px;">
+                  <div class="field">
+                    <div class="label">Ollama 服务地址</div>
+                    <input class="input vlm-local-base" value="http://localhost:11434">
+                  </div>
+                  <div class="two-col" style="margin-top:12px;">
+                    <div class="field"><div class="label">模型</div><input class="input vlm-local-model" value="llava"></div>
+                    <div class="field"><div class="label">认证方式</div><div class="select-wrap" data-options="Bearer,无认证"><div class="select">无认证</div></div></div>
                   </div>
                 </div>
+                <div style="margin-top:16px;"><span class="btn btn-primary test-btn">测试连接<span class="latency">延迟 142 ms</span></span></div>
               </div>
-              <div style="margin-top:16px;"><span class="btn btn-primary test-btn">测试连接<span class="latency">延迟 142 ms</span></span></div>
             </div>
 
             <div class="card">
@@ -1197,49 +1246,55 @@
               <div class="card-desc">开启后，ASR 识别结果会先经过 LLM 润色再显示/注入。</div>
             </div>
 
-            <div class="card llm-card" data-kind="llm">
+            <div class="card llm-card llm-service-card" data-kind="llm">
               <div class="card-title">LLM 模型服务</div>
-              <div class="chip-group" style="margin-top:12px;">
-                <span class="chip active star" data-group="llm-provider" data-val="deepseek">DeepSeek</span>
-                <span class="chip star" data-group="llm-provider" data-val="openai">OpenAI 兼容</span>
-                <span class="chip star" data-group="llm-provider" data-val="ollama">Ollama</span>
-                <span class="chip add" data-group="llm-provider" data-val="custom">+ 添加</span>
+              <div class="model-chip-group" data-kind="llm">
+                <span class="model-chip active" data-provider="DeepSeek" data-type="cloud" data-base="https://api.deepseek.com/v1" data-model="deepseek-chat">DeepSeek-LLM<span class="chip-close">×</span></span>
+                <span class="model-chip" data-provider="Xiaomi MIMO" data-type="cloud" data-base="https://api.xiaomi.com/v1/llm" data-model="mimo-chat">小米-LLM-1<span class="chip-close">×</span></span>
+                <span class="model-chip" data-provider="local" data-type="local" data-base="http://localhost:11434" data-model="qwen2.5">本地-ollama<span class="chip-close">×</span></span>
+                <span class="model-chip add" data-action="add">+ 添加模型</span>
               </div>
-              <div class="add-provider-form">
-                <div class="form-row" style="margin-bottom:0;align-items:flex-end;">
-                  <div class="field"><div class="label">服务商名称</div><input class="input provider-name" placeholder="自定义厂商"></div>
-                  <div class="field" style="flex:0 0 auto;display:flex;gap:8px;">
-                    <span class="btn btn-primary btn-sm save-provider">保存</span>
-                    <span class="btn btn-ghost btn-sm cancel-provider">取消</span>
+              <div class="card-desc">切换模型查看或编辑对应配置；可添加多个模型用于对比效果。</div>
+
+              <div id="llm-config" class="model-config" style="margin-top:16px;">
+                <div class="two-col" id="llm-cloud-fields">
+                  <div class="field"><div class="label">服务商名称</div><input class="input llm-vendor-name" value="DeepSeek" readonly></div>
+                  <div class="field"><div class="label">Base URL</div><input class="input llm-base-url" value="https://api.deepseek.com/v1"></div>
+                  <div class="field"><div class="label">模型</div><input class="input llm-cloud-model" value="deepseek-chat"></div>
+                  <div class="field"><div class="label">API Format</div><div class="select-wrap" data-options="OpenAI,Anthropic messages"><div class="select">OpenAI</div></div></div>
+                  <div class="field"><div class="label">认证方式</div><div class="select-wrap" data-options="Bearer,api-key 头,无认证"><div class="select">Bearer</div></div></div>
+                  <div class="field" style="grid-column:1/-1;">
+                    <div class="label">API Key</div>
+                    <div style="display:flex;gap:8px;">
+                      <input class="input apikey-input" type="password" value="sk-xxxxxxxx" style="flex:1;">
+                      <span class="btn btn-ghost toggle-key">显示</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div class="card-desc">LLM 用于 ASR 结果润色和提示词注入。本地模式走 Ollama HTTP 服务。</div>
-              <div class="two-col">
-                <div class="field"><div class="label">服务商名称</div><input class="input" value="DeepSeek"></div>
-                <div class="field">
-                  <div class="label">部署类型</div>
-                  <div class="select-wrap" data-options="云端 API,本地 Ollama" data-kind="llm"><div class="select">云端 API</div></div>
-                </div>
-                <div class="field"><div class="label">Base URL</div><input class="input" value="https://api.deepseek.com/v1"></div>
-                <div class="field"><div class="label">模型</div><input class="input" value="deepseek-chat"></div>
-                <div class="field"><div class="label">API Format</div><div class="select-wrap" data-options="OpenAI,Anthropic messages"><div class="select">OpenAI</div></div></div>
-                <div class="field"><div class="label">认证方式</div><div class="select-wrap" data-options="Bearer,api-key 头,无认证"><div class="select">Bearer</div></div></div>
-                <div class="field apikey-only" style="grid-column:1/-1;">
-                  <div class="label">API Key</div>
-                  <div style="display:flex;gap:8px;">
-                    <input class="input apikey-input" type="password" value="sk-xxxxxxxx" style="flex:1;">
-                    <span class="btn btn-ghost toggle-key">显示</span>
+                <div id="llm-local-fields" class="hidden-field" style="margin-top:16px;">
+                  <div class="field">
+                    <div class="label">Ollama 服务地址</div>
+                    <input class="input llm-local-base" value="http://localhost:11434">
+                  </div>
+                  <div class="two-col" style="margin-top:12px;">
+                    <div class="field"><div class="label">模型</div><input class="input llm-local-model" value="qwen2.5"></div>
+                    <div class="field"><div class="label">认证方式</div><div class="select-wrap" data-options="Bearer,无认证"><div class="select">无认证</div></div></div>
                   </div>
                 </div>
+                <div style="margin-top:16px;"><span class="btn btn-primary test-btn">测试连接<span class="latency">延迟 98 ms</span></span></div>
               </div>
-              <div style="margin-top:16px;"><span class="btn btn-primary test-btn">测试连接<span class="latency">延迟 98 ms</span></span></div>
             </div>
 
             <div class="card">
               <div class="card-title">润色提示词</div>
               <div class="card-desc">系统默认提示词 + 用户自定义内容，保存到 Go 管理的 config.yaml。</div>
-              <textarea class="textarea">请修正下面这段语音识别结果中的错别字和口语化表达，保持原意，输出更自然流畅的书面文本。</textarea>
+              <textarea class="textarea">你是中文口语润色专家。将语音识别文本整理为自然流畅的文字，要求：
+1. 保留说话人的语气、情绪和表达风格
+2. 去除无意义的口语填充词（嗯、啊、呃、那个、就是说、然后呢）
+3. 处理重复和自我修正
+4. 添加合适的标点符号，让阅读更顺畅
+5. 不要添加说话人没说的内容，不要改写或总结
+直接输出整理后的文本，不要加任何解释。</textarea>
             </div>
           </div>
 
@@ -1252,7 +1307,7 @@
               </div>
               <div class="card-desc">开启后，前缀键 + 自定义字母/数字可把对应提示词注入到 ASR 结果前。</div>
               <div class="form-row" style="margin-top:14px;">
-                <div class="field" style="max-width:200px;"><div class="label">提示词前缀键</div><div class="select-wrap" data-options="Ctrl,Alt,Win"><div class="select">Ctrl</div></div></div>
+                <div class="field" style="max-width:200px;"><div class="label">提示词前缀键</div><div class="select-wrap" id="prompt-prefix" data-options="Ctrl,Alt,Win"><div class="select">Ctrl</div></div></div>
               </div>
             </div>
 
@@ -1263,24 +1318,49 @@
               </div>
               <div class="card-desc">每条提示词对应一个快捷键，注入时会替换为完整提示词内容。</div>
               <div id="personal-prompt-list">
-                <div class="simple-prompt-row">
-                  <input class="name-input" value="整理成会议纪要">
-                  <input class="key-input" value="1" maxlength="1">
-                  <span class="btn btn-danger btn-sm delete-prompt">删除</span>
+                <div class="prompt-item">
+                  <div class="prompt-header">
+                    <input class="prompt-name" value="整理成会议纪要" placeholder="提示词名称">
+                    <div class="prompt-shortcut">
+                      <span class="key-cap prefix-cap">Ctrl</span>
+                      <span class="key-plus">+</span>
+                      <span class="key-cap"><input class="key-input" value="1" maxlength="1" placeholder="键"></span>
+                    </div>
+                    <span class="btn btn-danger btn-sm delete-prompt">删除</span>
+                  </div>
+                  <textarea class="prompt-textarea" placeholder="输入完整提示词内容...">请把这份需求文档整理成结构化的会议纪要。</textarea>
+                  <div class="prompt-hint">按 <b class="hint-combo">Ctrl + 1</b> 注入此提示词</div>
                 </div>
-                <div class="simple-prompt-row">
-                  <input class="name-input" value="英文翻译">
-                  <input class="key-input" value="2" maxlength="1">
-                  <span class="btn btn-danger btn-sm delete-prompt">删除</span>
+                <div class="prompt-item">
+                  <div class="prompt-header">
+                    <input class="prompt-name" value="英文翻译" placeholder="提示词名称">
+                    <div class="prompt-shortcut">
+                      <span class="key-cap prefix-cap">Ctrl</span>
+                      <span class="key-plus">+</span>
+                      <span class="key-cap"><input class="key-input" value="2" maxlength="1" placeholder="键"></span>
+                    </div>
+                    <span class="btn btn-danger btn-sm delete-prompt">删除</span>
+                  </div>
+                  <textarea class="prompt-textarea" placeholder="输入完整提示词内容...">请将以下中文翻译成地道、专业的英文，保持原意。</textarea>
+                  <div class="prompt-hint">按 <b class="hint-combo">Ctrl + 2</b> 注入此提示词</div>
                 </div>
               </div>
-              <div class="shortcut-hint">提示：快捷键可自定义 0-9 / A-Z；若与其他软件冲突，按键将无效。</div>
+              <div class="shortcut-hint">提示：快捷键格式为“前缀键 + 0-9 / A-Z”，例如 <b>Ctrl + 1</b>；若与其他软件冲突，按键将无效。</div>
             </div>
             <style>
-              .simple-prompt-row { display: flex; align-items: center; gap: 10px; padding: 10px; background: var(--bg); border: 1px solid var(--rule); border-radius: 8px; margin-bottom: 8px; }
-              .simple-prompt-row input { background: transparent; border: none; color: var(--ink); font-size: 13px; }
-              .simple-prompt-row .name-input { flex: 1; }
-              .simple-prompt-row .key-input { width: 40px; text-align: center; font-family: monospace; }
+              .prompt-item { display: flex; flex-direction: column; gap: 10px; padding: 12px; background: var(--bg); border: 1px solid var(--rule); border-radius: 8px; margin-bottom: 10px; }
+              .prompt-header { display: flex; align-items: center; gap: 10px; }
+              .prompt-name { flex: 1; background: transparent; border: none; color: var(--ink); font-size: 14px; font-weight: 600; outline: none; }
+              .prompt-name::placeholder { color: var(--muted); font-weight: normal; }
+              .prompt-shortcut { display: flex; align-items: center; gap: 6px; }
+              .key-cap { min-width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; background: var(--bg2); border: 1px solid var(--rule); border-radius: 6px; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink); box-shadow: 0 2px 0 var(--rule); padding: 0 6px; }
+              .key-input { width: 28px; height: 18px; text-align: center; background: transparent; border: none; color: var(--ink); font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; outline: none; padding: 0; }
+              .key-input::placeholder { color: var(--muted); }
+              .key-plus { color: var(--muted); font-size: 12px; }
+              .prompt-textarea { background: var(--bg2); border: 1px solid var(--rule); border-radius: 6px; padding: 8px 10px; color: var(--ink); font-size: 13px; line-height: 1.5; min-height: 64px; resize: vertical; outline: none; }
+              .prompt-textarea:focus { border-color: var(--accent); }
+              .prompt-hint { font-size: 12px; color: var(--muted); }
+              .prompt-hint b { color: var(--accent); font-weight: 600; }
             </style>
           </div>
 
@@ -1449,7 +1529,7 @@
             <path d="M6 15c.15.85.85 1.55 1.7 1.7-.85.15-1.55.85-1.7 1.7-.15-.85-.85-1.55-1.7-1.7.85-.15 1.55-.85 1.7-1.7z"/>
           </svg>
         </div>
-        <textarea class="textarea" id="polish-result" style="min-height:80px;border:none;background:transparent;padding:0;width:100%;">请把这份需求文档整理成结构化的会议纪要。</textarea>
+        <textarea class="textarea" id="polish-result" style="min-height:80px;background:var(--bg2);border:1px solid var(--rule);border-radius:6px;padding:8px 10px;width:100%;margin-top:8px;">请把这份需求文档整理成结构化的会议纪要。</textarea>
         <div class="bubble-actions">
           <span class="btn btn-ghost">复制</span>
           <span class="btn btn-ghost">关闭</span>
@@ -1489,6 +1569,33 @@
 
 <div id="heat-tooltip"></div>
 
+  <!-- 添加模型弹窗 -->
+  <div class="modal-overlay" id="add-model-modal">
+    <div class="modal">
+      <div class="modal-title">添加模型</div>
+      <div class="field">
+        <div class="label">模型显示名称</div>
+        <input class="input" id="modal-model-name" placeholder="例如：小米 ASR 测试">
+      </div>
+      <div class="field" style="margin-top:12px;">
+        <div class="label">服务商</div>
+        <div class="select-wrap" id="modal-provider" data-options="Xiaomi MIMO,DeepSeek,BigModel Z.ai,MiniMax,自定义"><div class="select">Xiaomi MIMO</div></div>
+      </div>
+      <div class="field" style="margin-top:12px;">
+        <div class="label">部署类型</div>
+        <div class="select-wrap" id="modal-deploy" data-options="云端 API,本地模型"><div class="select">云端 API</div></div>
+      </div>
+      <div class="field" id="modal-custom-name-wrap" style="margin-top:12px;display:none;">
+        <div class="label">自定义服务商名称</div>
+        <input class="input" id="modal-custom-name" placeholder="例如：我的私有服务">
+      </div>
+      <div class="modal-footer">
+        <span class="btn btn-ghost" id="modal-cancel">取消</span>
+        <span class="btn btn-primary" id="modal-save">保存</span>
+      </div>
+    </div>
+  </div>
+
 <script>
 (function() {
   // main nav
@@ -1511,43 +1618,13 @@
     });
   });
 
-  // ASR 厂商切换：重置对应厂商的默认配置，并切换本地/云端配置区
-  function applyAsrProvider(chip) {
-    const card = chip.closest('.card');
-    const cloudFields = document.getElementById('asr-cloud-fields');
-    const cloudTest = document.getElementById('asr-cloud-test');
-    const localFields = document.getElementById('asr-local-fields');
-    const isCloud = chip.dataset.cloud === 'true';
-
-    if (isCloud) {
-      if (cloudFields) cloudFields.style.display = '';
-      if (cloudTest) cloudTest.style.display = '';
-      if (localFields) localFields.classList.add('hidden-field');
-      const vendorInput = card.querySelector('.asr-vendor-name');
-      if (vendorInput) vendorInput.value = chip.dataset.name || '';
-      const baseInput = card.querySelector('.asr-base-url');
-      if (baseInput) baseInput.value = chip.dataset.base || '';
-      const modelInput = card.querySelector('.asr-cloud-model');
-      if (modelInput) modelInput.value = chip.dataset.model || '';
-    } else {
-      if (cloudFields) cloudFields.style.display = 'none';
-      if (cloudTest) cloudTest.style.display = 'none';
-      if (localFields) localFields.classList.remove('hidden-field');
-      const pathInput = card.querySelector('.asr-model-path');
-      if (pathInput && chip.dataset.path) {
-        pathInput.value = chip.dataset.path;
-        pathInput.dispatchEvent(new Event('input'));
-      }
-    }
-  }
-
-  // asr local model: auto-recognize model name from path
+  // ================= 模型服务（ASR/VLM/LLM）chip + 添加弹窗 =================
   function deriveModelName(path) {
     if (!path) return '';
-    // 兼容 Windows / POSIX 路径分隔符
     const seg = path.split(/[\\\/]/).pop() || path;
     return seg.replace(/\.(bin|gguf|onnx|pt|pth|safetensors|model)$/i, '');
   }
+
   const asrPathInput = document.querySelector('.asr-model-path');
   const asrNameInput = document.querySelector('.asr-model-name');
   if (asrPathInput && asrNameInput) {
@@ -1555,7 +1632,6 @@
       asrNameInput.value = deriveModelName(asrPathInput.value.trim());
     });
   }
-  // 浏览按钮: wireframe 演示, 模拟弹出一个文件选择对话框
   const asrBrowseBtn = document.querySelector('.asr-browse-btn');
   if (asrBrowseBtn && asrPathInput) {
     asrBrowseBtn.addEventListener('click', () => {
@@ -1571,6 +1647,123 @@
     });
   }
 
+  function getSelectValue(wrap) {
+    return wrap ? wrap.querySelector('.select').textContent : '';
+  }
+
+  function applyModelChip(chip) {
+    const group = chip.closest('.model-chip-group');
+    const kind = group.dataset.kind;
+    const card = chip.closest('.card');
+    group.querySelectorAll('.model-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+
+    const type = chip.dataset.type;
+    const provider = chip.dataset.provider;
+    const base = chip.dataset.base || '';
+    const model = chip.dataset.model || '';
+
+    const cloudFields = card.querySelector(`#${kind}-cloud-fields`);
+    const localFields = card.querySelector(`#${kind}-local-fields`);
+    const vendorInput = card.querySelector(`.${kind}-vendor-name`);
+    const baseInput = card.querySelector(`.${kind}-base-url`);
+    const modelInput = card.querySelector(`.${kind}-cloud-model`);
+    const localBaseInput = card.querySelector(`.${kind}-local-base`);
+    const localModelInput = card.querySelector(`.${kind}-local-model`);
+
+    if (type === 'local') {
+      if (cloudFields) cloudFields.style.display = 'none';
+      if (localFields) localFields.classList.remove('hidden-field');
+      if (localBaseInput) localBaseInput.value = base;
+      if (localModelInput) localModelInput.value = model;
+      if (vendorInput) vendorInput.value = '本地模型';
+    } else {
+      if (cloudFields) cloudFields.style.display = '';
+      if (localFields) localFields.classList.add('hidden-field');
+      if (vendorInput) vendorInput.value = provider;
+      if (baseInput) baseInput.value = base;
+      if (modelInput) modelInput.value = model;
+    }
+  }
+
+  document.querySelectorAll('.model-chip-group').forEach(group => {
+    group.addEventListener('click', (e) => {
+      const chip = e.target.closest('.model-chip');
+      if (!chip) return;
+      if (chip.classList.contains('add')) {
+        openAddModelModal(group.dataset.kind);
+        return;
+      }
+      if (e.target.closest('.chip-close')) {
+        chip.remove();
+        const remaining = group.querySelectorAll('.model-chip:not(.add)');
+        if (remaining.length && !group.querySelector('.model-chip.active')) {
+          applyModelChip(remaining[0]);
+        }
+        return;
+      }
+      applyModelChip(chip);
+    });
+  });
+
+  // 添加模型弹窗
+  const modal = document.getElementById('add-model-modal');
+  const modalProvider = document.getElementById('modal-provider');
+  const modalDeploy = document.getElementById('modal-deploy');
+  const modalCustomWrap = document.getElementById('modal-custom-name-wrap');
+  const modalCustomName = document.getElementById('modal-custom-name');
+  const modalModelName = document.getElementById('modal-model-name');
+  let modalKind = '';
+
+  function openAddModelModal(kind) {
+    modalKind = kind;
+    modal.classList.add('show');
+    modalModelName.value = '';
+    modalCustomName.value = '';
+    updateModalCustomVisibility();
+  }
+  function closeAddModelModal() {
+    modal.classList.remove('show');
+    modalKind = '';
+  }
+  function updateModalCustomVisibility() {
+    const isCustom = getSelectValue(modalProvider) === '自定义';
+    modalCustomWrap.style.display = isCustom ? 'block' : 'none';
+  }
+
+  if (modalProvider) {
+    modalProvider.addEventListener('click', () => setTimeout(updateModalCustomVisibility, 0));
+  }
+
+  document.getElementById('modal-cancel').addEventListener('click', closeAddModelModal);
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeAddModelModal();
+  });
+  document.getElementById('modal-save').addEventListener('click', () => {
+    if (!modalKind) return;
+    const displayName = modalModelName.value.trim() || '新模型';
+    const provider = getSelectValue(modalProvider);
+    const deploy = getSelectValue(modalDeploy);
+    const isLocal = deploy === '本地模型';
+    const customName = modalCustomName.value.trim();
+    const finalProvider = provider === '自定义' ? (customName || '自定义厂商') : provider;
+
+    const group = document.querySelector(`.model-chip-group[data-kind="${modalKind}"]`);
+    if (!group) return;
+    const chip = document.createElement('span');
+    chip.className = 'model-chip';
+    chip.dataset.provider = finalProvider;
+    chip.dataset.type = isLocal ? 'local' : 'cloud';
+    chip.dataset.base = isLocal ? 'http://localhost:11434' : `https://api.${finalProvider.toLowerCase().replace(/\s+/g, '')}.com/v1`;
+    chip.dataset.model = isLocal ? (modalKind === 'asr' ? 'ggml-base' : 'model-name') : `${finalProvider.toLowerCase().replace(/\s+/g, '')}-${modalKind}`;
+    if (isLocal && modalKind === 'asr') chip.dataset.path = 'C:\\Models\\ggml-base.bin';
+    chip.innerHTML = `${displayName}<span class="chip-close">×</span>`;
+    const addChip = group.querySelector('.model-chip.add');
+    group.insertBefore(chip, addChip);
+    applyModelChip(chip);
+    closeAddModelModal();
+  });
+
   // toggles
   document.querySelectorAll('[data-toggle]').forEach(toggle => {
     toggle.addEventListener('click', () => {
@@ -1582,60 +1775,13 @@
     });
   });
 
-  // chips (single select per group + add form)
+  // chips (single select per group)
   document.querySelectorAll('.chip[data-group]').forEach(chip => {
     chip.addEventListener('click', () => {
-      if (chip.classList.contains('add')) {
-        const form = chip.closest('.card').querySelector('.add-provider-form');
-        if (form) form.style.display = form.style.display === 'block' ? 'none' : 'block';
-        return;
-      }
+      if (chip.classList.contains('add')) return;
       const group = chip.dataset.group;
       chip.closest('.chip-group').querySelectorAll('.chip[data-group="' + group + '"]').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
-      if (group === 'asr-provider') applyAsrProvider(chip);
-    });
-  });
-
-  // save/cancel custom provider
-  document.querySelectorAll('.save-provider').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const form = btn.closest('.add-provider-form');
-      const input = form.querySelector('.provider-name');
-      const name = input.value.trim();
-      if (!name) return;
-      const group = form.closest('.card').querySelector('.chip.add').dataset.group;
-      const chip = document.createElement('span');
-      chip.className = 'chip star';
-      chip.dataset.group = group;
-      chip.dataset.val = name.toLowerCase();
-      chip.textContent = name;
-      if (group === 'asr-provider') {
-        chip.dataset.cloud = 'true';
-        chip.dataset.name = name;
-        chip.dataset.base = '';
-        chip.dataset.model = '';
-      }
-      const addChip = form.closest('.card').querySelector('.chip.add');
-      addChip.parentNode.insertBefore(chip, addChip);
-      chip.addEventListener('click', () => {
-        const g = chip.dataset.group;
-        chip.closest('.chip-group').querySelectorAll('.chip[data-group="' + g + '"]').forEach(c => c.classList.remove('active'));
-        chip.classList.add('active');
-        if (g === 'asr-provider') applyAsrProvider(chip);
-      });
-      // 切到新添加的厂商并清空配置
-      chip.closest('.chip-group').querySelectorAll('.chip[data-group="' + group + '"]').forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
-      if (group === 'asr-provider') applyAsrProvider(chip);
-      input.value = '';
-      form.style.display = 'none';
-    });
-  });
-  document.querySelectorAll('.cancel-provider').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const form = btn.closest('.add-provider-form');
-      if (form) form.style.display = 'none';
     });
   });
 
@@ -1719,22 +1865,55 @@
     });
   });
 
-  // personal prompt list add/delete
+  // personal prompt list add/delete/sync
   const addPromptBtn = document.getElementById('add-personal-prompt');
   const promptList = document.getElementById('personal-prompt-list');
+  const prefixSelect = document.getElementById('prompt-prefix');
+  function getPrefix() { return prefixSelect ? prefixSelect.querySelector('.select').textContent : 'Ctrl'; }
+  function updatePromptShortcuts() {
+    const prefix = getPrefix();
+    document.querySelectorAll('.prompt-item').forEach(item => {
+      item.querySelectorAll('.prefix-cap').forEach(cap => cap.textContent = prefix);
+      const key = (item.querySelector('.key-input').value || '').toUpperCase();
+      item.querySelectorAll('.hint-combo').forEach(hint => hint.textContent = key ? `${prefix} + ${key}` : `${prefix} + ?`);
+    });
+  }
   if (addPromptBtn && promptList) {
     addPromptBtn.addEventListener('click', () => {
-      const row = document.createElement('div');
-      row.className = 'simple-prompt-row';
-      row.innerHTML = '<input class="name-input" value="新提示词" placeholder="提示词名称"><input class="key-input" value="" maxlength="1" placeholder="键"><span class="btn btn-danger btn-sm delete-prompt">删除</span>';
-      promptList.appendChild(row);
-      bindDelete(row.querySelector('.delete-prompt'));
+      const prefix = getPrefix();
+      const item = document.createElement('div');
+      item.className = 'prompt-item';
+      item.innerHTML = `
+        <div class="prompt-header">
+          <input class="prompt-name" value="新提示词" placeholder="提示词名称">
+          <div class="prompt-shortcut">
+            <span class="key-cap prefix-cap">${prefix}</span>
+            <span class="key-plus">+</span>
+            <span class="key-cap"><input class="key-input" value="" maxlength="1" placeholder="键"></span>
+          </div>
+          <span class="btn btn-danger btn-sm delete-prompt">删除</span>
+        </div>
+        <textarea class="prompt-textarea" placeholder="输入完整提示词内容..."></textarea>
+        <div class="prompt-hint">按 <b class="hint-combo">${prefix} + ?</b> 注入此提示词</div>
+      `;
+      promptList.appendChild(item);
+      bindDelete(item.querySelector('.delete-prompt'));
+      bindKeyInput(item.querySelector('.key-input'));
     });
     function bindDelete(btn) {
-      btn.addEventListener('click', () => btn.closest('.simple-prompt-row').remove());
+      btn.addEventListener('click', () => btn.closest('.prompt-item').remove());
+    }
+    function bindKeyInput(input) {
+      input.addEventListener('input', updatePromptShortcuts);
     }
     promptList.querySelectorAll('.delete-prompt').forEach(bindDelete);
+    promptList.querySelectorAll('.key-input').forEach(bindKeyInput);
   }
+  if (prefixSelect) {
+    const observer = new MutationObserver(updatePromptShortcuts);
+    observer.observe(prefixSelect.querySelector('.select'), { childList: true, subtree: true, characterData: true });
+  }
+  updatePromptShortcuts();
 
   // polish icon behavior
   const polishIcon = document.querySelector('.polish-icon');
@@ -1774,18 +1953,28 @@
   const micTestBtn = document.getElementById('mic-test');
   const volumeFill = document.getElementById('volume-fill');
   const volumeValue = document.getElementById('volume-value');
+  const micIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>';
   let micInterval;
+  function setMicTesting(testing) {
+    if (testing) {
+      micTestBtn.classList.add('testing');
+      micTestBtn.innerHTML = '<span class="pulse-dot"></span> 停止测试';
+    } else {
+      micTestBtn.classList.remove('testing');
+      micTestBtn.innerHTML = micIcon + ' 测试麦克风';
+    }
+  }
   if (micTestBtn) {
     micTestBtn.addEventListener('click', () => {
       if (micInterval) {
         clearInterval(micInterval);
         micInterval = null;
-        micTestBtn.textContent = '测试麦克风';
+        setMicTesting(false);
         volumeFill.style.width = '0%';
         volumeValue.textContent = '0%';
         return;
       }
-      micTestBtn.textContent = '停止测试';
+      setMicTesting(true);
       micInterval = setInterval(() => {
         const v = Math.floor(Math.random() * 80) + 10;
         volumeFill.style.width = v + '%';
@@ -1795,7 +1984,7 @@
         if (micInterval) {
           clearInterval(micInterval);
           micInterval = null;
-          micTestBtn.textContent = '测试麦克风';
+          setMicTesting(false);
           volumeFill.style.width = '0%';
           volumeValue.textContent = '0%';
         }
