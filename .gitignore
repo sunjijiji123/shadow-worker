@@ -1,5 +1,12 @@
 .devkit/
 .trae/
+.zcode/
+
+# Temp scripts (Python generators used during dev)
+.scan_*.py
+.gen_*.py
+.fix_*.py
+.inject_*.py
 
 # Build artifacts
 backend/shadow-worker.exe
