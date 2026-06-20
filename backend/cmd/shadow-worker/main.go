@@ -105,6 +105,7 @@ func runBackgroundService() {
 	pb.RegisterOverviewServiceServer(grpcServer, pb.NewOverviewServer(db, coll))
 	pb.RegisterWhitelistServiceServer(grpcServer, pb.NewWhitelistServer(db))
 	pb.RegisterAsrServiceServer(grpcServer, pb.NewAsrServer(db, asrEngine, nil))
+	pb.RegisterVoiceServiceServer(grpcServer, pb.NewVoiceServer(db, asrEngine))
 	pb.RegisterCollectionServiceServer(grpcServer, pb.NewCollectionServer(db, coll, vlmCapturer))
 	pb.RegisterConfigServiceServer(grpcServer, pb.NewConfigServer(cfg))
 

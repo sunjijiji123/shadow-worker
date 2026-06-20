@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package shadowworker;
+
+// Voice recording control service. The Go backend captures microphone audio
+// (waveIn) in-process, streams 16-band FFT levels to the client for live
+// spectrum visualization, and runs ASR on stop — the PCM never leaves the
+// backend process.
+//
+// Qt client → Go backend.
+
+option go_package = "shadow-worker/backend/internal/grpcapi;grpcapi";
+
+service VoiceService {
+  // Begin capturing from the given input device (empty = system default).
+  rpc StartRecording(StartRequest) returns (StartResponse);
+  // Stop capturing, run ASR on the accumulated PCM, return the text.
+  rpc StopRecording(StopRequest) returns (VoiceResult);
+  // Live spectrum stream: the server pushes AudioLevel frames (16 bands + RMS)
+  // while recording is active, until the client cancels or StopRecording runs.
+  rpc StreamLevels(LevelsRequest) returns (stream AudioLevel);
+}
+
+message StartRequest {
+  string device_id = 1;  // empty = WAVE_MAPPER (system default)
+}
+
+message StartResponse {
+  bool ok = 1;
+  string error = 2;       // e.g. "device not found", "waveInOpen failed"
+}
+
+message StopRequest {}
+
+message VoiceResult {
+  string text = 1;        // recognized text (empty on error)
+  string error = 2;       // non-empty if ASR failed
+  int32 duration_ms = 3;  // captured audio duration
+}
+
+message LevelsRequest {}
+
+message AudioLevel {
+  // 16 normalized frequency-band energies in [0,1] (Hann-windowed FFT,
+  // rolling-max normalized, log-compressed, envelope-smoothed).
+  repeated float bands = 1;
+  // overall RMS amplitude 0..100 (for a simple volume bar if needed).
+  int32 rms = 2;
+}
