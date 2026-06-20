@@ -27,7 +27,8 @@ Rectangle {
     // state: "listening" | "transcribing" | "polishing" | "completed"
     property string state: "listening"
     property string transcript: ""
-    property bool showWave: state === "listening" || state === "transcribing"
+    // idle(Ready) 也显示装饰性波形，和 listening 无音频输入时一样的脉动效果
+    property bool showWave: state === "listening" || state === "transcribing" || state === "idle"
     // live 16-band spectrum from the backend (array of floats [0..1]).
     // When non-empty, the 7 visible bars are driven by mapped bands; otherwise
     // a decorative staggered animation plays (idle / no capture).
@@ -218,6 +219,7 @@ Rectangle {
                         anchors.centerIn: parent
                         visible: root.state !== "transcribing"
                         text: {
+                            if (root.state === "idle") return qsTr("Ready")
                             if (root.state === "polishing") return qsTr("Polishing")
                             if (root.state === "completed") return qsTr("Done")
                             return qsTr("Listening...")

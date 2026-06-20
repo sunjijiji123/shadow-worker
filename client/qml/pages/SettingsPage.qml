@@ -5,6 +5,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 import ShadowWorker
 
 Item {
@@ -16,12 +17,25 @@ Item {
 
     property string activeTab: "voice"
 
-    // ---- Voice tab local state (will bind to viewModel later) ----
+    // ---- Voice tab state (bound to viewModel) ----
     property bool recordEnabled: true
     property string recordMode: "hold"   // hold | press
-    property string asrActiveModel: "xiaomi"
-    property string asrModelType: "cloud"  // cloud | local (from active chip)
+    property string asrMode: "cloud"     // cloud | local (整体 ASR 模式，由 active provider type 推导)
+    property string asrActiveModel: ""   // 当前选中 provider 的 key
+    property string asrModelType: "cloud"  // cloud | local (active provider 的类型)
+    property string asrLocalModelPath: ""
+    property string asrLocalModelName: ""
+    property string asrLocalLanguage: "zh"
     property int micTestLevel: 0
+
+    // 云端字段暂存（直接双向绑定 TextField，Save 时一次性写入 viewModel）
+    property string cloudName: ""
+    property string cloudBaseUrl: ""
+    property string cloudModel: ""
+    property string cloudApiKey: ""
+    property string cloudLang: "zh"
+    property string cloudApiFmt: "openai"
+    property string cloudAuth: "bearer"
 
     // ---- record hotkey: modifier + key, parsed from settingsVm.hotkeyRecord ----
     // e.g. "Ctrl+Shift+R" -> modifier="Ctrl + Shift" (UI label), key="R"
@@ -35,7 +49,14 @@ Item {
         return m === "" ? key : (m + "+" + key)
     }
     // (re)register the record hotkey with the OS whenever modifier/key changes.
+    // 防抖注册热键：ViewModel 异步加载时多个 changed 信号会密集触发，
+    // 用户快速切换 mode/key 也会连续触发。短时间内的多次注册（尤其 hold
+    // 模式涉及低级键盘钩子）可能让系统键盘输入卡顿。统一用 150ms 防抖，
+    // 只有最后一次调用后 150ms 才真正执行注册。
     function registerRecordHotkey() {
+        hotkeyRegTimer.restart()
+    }
+    function doRegisterRecordHotkey() {
         if (!globalHotkey) return
         if (!recordEnabled) {
             globalHotkey.unregisterAll()
@@ -44,7 +65,15 @@ Item {
         var sc = hotkeyString(hotkeyModifier, hotkeyKey)
         globalHotkey.unregisterAll()
         if (settingsVm) settingsVm.hotkeyRecord = sc
-        globalHotkey.registerShortcut(sc, "record")
+        // 根据 recordMode 选择注册模式：hold（按住录音）或 press（toggle）
+        var mode = recordMode === "hold" ? "hold" : "press"
+        globalHotkey.registerShortcut(sc, "record", mode)
+    }
+    Timer {
+        id: hotkeyRegTimer
+        interval: 150
+        repeat: false
+        onTriggered: doRegisterRecordHotkey()
     }
     // parse settingsVm.hotkeyRecord ("Ctrl+Shift+R") into modifier label + key.
     // Called once on completed to seed the UI fields.
@@ -60,12 +89,9 @@ Item {
             hotkeyModifier = mods.join(" + ")
         }
     }
-    // ASR model list (mutable so chips can be removed at runtime)
-    property var asrModels: [
-        { key: "xiaomi",   label: "Xiaomi-ASR",    type: "cloud", deletable: true },
-        { key: "deepseek", label: "DeepSeek-ASR",  type: "cloud", deletable: true },
-        { key: "local",    label: "Local-whisper", type: "local", deletable: true }
-    ]
+    // ASR model chip list (derived from viewModel.asrProviders on load).
+    // Structure: { key, label, type: "cloud"|"local", deletable: true }
+    property var asrModels: []
 
     // ---- Vision tab local state (will bind to viewModel later) ----
     property bool vlmEnabled: true
@@ -211,38 +237,188 @@ Item {
     }
 
     // Load config from the backend on entry, then sync the local UI props
-    // (recordMode + hotkey) from the viewModel once loaded. Also seed the
-    // OS hotkey registration.
+    // from the viewModel once loaded. Also seed the OS hotkey registration.
     Component.onCompleted: {
         if (viewModel) {
             viewModel.load()
             // sync local props when the async load completes. We watch the
-            // hotkeyRecord + recordMode notify signals as a "load done" cue.
-            var conn1 = viewModel.hotkeyRecordChanged
-            viewModel.hotkeyRecordChanged.connect(function() {
-                root.syncFromViewModel()
-            })
-            viewModel.recordModeChanged.connect(function() {
-                root.syncFromViewModel()
-            })
+            // notify signals of key properties as a "load done" cue.
+            // 用 Qt.callLater 延迟到下一事件循环，避免在 componentComplete
+            // 阶段修改子组件属性触发 QQuickItem 的 m_componentComplete 断言。
+            viewModel.hotkeyRecordChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
+            viewModel.recordModeChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
+            viewModel.asrActiveProviderChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
+            viewModel.asrProvidersChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
+            viewModel.asrLocalModelPathChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
+            viewModel.asrLocalLanguageChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
         }
-        // seed from whatever the viewModel already holds (defaults until load)
-        syncFromViewModel()
+        // seed from whatever the viewModel already holds (defaults until load).
+        Qt.callLater(syncFromViewModel)
+        // 先用默认值注册一次，确保热键可用。等异步 syncFromViewModel 加载完
+        // 真实 recordMode 后，由 Radio 切换或 key/modifier 改变时按需重注册。
         registerRecordHotkey()
     }
 
-    // pull recordMode + hotkey string from viewModel into the local UI props.
+    // Test Connection 的响应改由 main.qml 的全局 Connections 处理
+    // （这里曾用 Connections 但收不到信号，疑似 import ShadowWorker 的
+    //  VoiceClient 类型注册干扰了 context property 的信号查找）
+
+
+    // 把 viewModel.asrProviders（QVariantList）映射成 chip 结构。
+    function providersToChips(providers) {
+        var chips = []
+        console.log("[ASR] providersToChips: count=" + providers.length)
+        for (var i = 0; i < providers.length; i++) {
+            var p = providers[i]
+            console.log("[ASR]   provider[" + i + "]: key=" + p.key + " name=" + p.name + " type=" + p.type)
+            chips.push({
+                key: p.key || "",
+                label: p.name || p.key || "",
+                type: p.type || "cloud",
+                deletable: true
+            })
+        }
+        return chips
+    }
+
+    // 从 viewModel 拉数据到本地 UI property。
     function syncFromViewModel() {
         if (!viewModel) return
         if (viewModel.recordMode) recordMode = viewModel.recordMode
         initHotkeyFromSettings()
+
+        // ASR providers → chip 列表
+        var providers = viewModel.asrProviders || []
+        asrModels = providersToChips(providers)
+
+        // active provider
+        asrActiveModel = viewModel.asrActiveProvider || ""
+        asrMode = viewModel.asrMode || "cloud"
+
+        // 根据 active provider 的 type 推导 asrModelType
+        asrModelType = activeProviderType(asrActiveModel)
+
+        // 本地模型字段
+        asrLocalModelPath = viewModel.asrLocalModelPath || ""
+        asrLocalModelName = viewModel.asrLocalModelName || deriveModelName(asrLocalModelPath)
+        asrLocalLanguage = viewModel.asrLocalLanguage || "zh"
+
+        // 灌入云端字段（无 binding，显式赋值）
+        updateCloudFields()
     }
 
-    // push local UI props back into the viewModel before save.
+    // 查找当前 active provider 的 type。
+    function activeProviderType(key) {
+        if (!viewModel) return "cloud"
+        var providers = viewModel.asrProviders || []
+        for (var i = 0; i < providers.length; i++) {
+            if (providers[i].key === key) return providers[i].type || "cloud"
+        }
+        return "cloud"
+    }
+
+    // 从模型路径推导显示名（文件名去扩展名）。
+    function deriveModelName(path) {
+        if (!path) return ""
+        var base = path.replace(/\\/g, "/").split("/").pop()
+        return base.replace(/\.bin$/i, "")
+    }
+
+    // 读取当前 active provider 的某个字段。
+    function providerField(key, field) {
+        if (!viewModel) return ""
+        var providers = viewModel.asrProviders || []
+        for (var i = 0; i < providers.length; i++) {
+            if (providers[i].key === key) return providers[i][field] || ""
+        }
+        return ""
+    }
+
+    // chip 列表名 → viewModel category。
+    function listNameToCategory(listName) {
+        if (listName === "asrModels") return "asr"
+        if (listName === "vlmModels") return "vlm"
+        if (listName === "llmModels") return "llm"
+        return ""
+    }
+
+    // 语言字符串 ↔ SelectBox index 映射。
+    // 选项: 0=zh, 1=en, 2=ja, 3=mixed, 4=auto
+    function langToIndex(lang) {
+        switch (lang) {
+            case "zh": return 0
+            case "en": return 1
+            case "ja": return 2
+            case "mixed": return 3
+            case "auto": return 4
+            default: return 0
+        }
+    }
+    function indexToLang(idx) {
+        return ["zh", "en", "ja", "mixed", "auto"][idx] || "zh"
+    }
+
+    // auth 字符串 ↔ SelectBox index。
+    // 0=bearer, 1=api-key, 2=""(no auth)
+    function authToIndex(auth) {
+        switch (auth) {
+            case "bearer": return 0
+            case "api-key": return 1
+            case "": return 2
+            default: return 0
+        }
+    }
+    function indexToAuth(idx) {
+        return ["bearer", "api-key", ""][idx] || "bearer"
+    }
+
+    // 把本地 UI property 推回 viewModel（保存前调用）。
     function pushToViewModel() {
         if (!viewModel) return
         viewModel.recordMode = recordMode
         viewModel.hotkeyRecord = hotkeyString(hotkeyModifier, hotkeyKey)
+        viewModel.asrMode = asrModelType
+        viewModel.asrActiveProvider = asrActiveModel
+        // 保存前：把当前 UI 字段的值 Write-Through 到 viewModel，确保不丢
+        flushCloudFields()
+        viewModel.asrLocalModelPath = asrLocalModelPath
+        viewModel.asrLocalModelName = deriveModelName(asrLocalModelPath)
+        viewModel.asrLocalLanguage = asrLocalLanguage
+    }
+
+    // 把本地暂存的云端字段 Write-Through 到 viewModel。
+    function flushCloudFields() {
+        if (!viewModel || !asrActiveModel) { console.log("[flush] skip, model=" + asrActiveModel); return }
+        console.log("[flush] baseUrl=" + cloudBaseUrl + " model=" + cloudModel + " key=" + cloudApiKey)
+        viewModel.updateProvider("asr", asrActiveModel, {
+            name: cloudName, baseUrl: cloudBaseUrl, model: cloudModel,
+            apiKey: cloudApiKey, language: cloudLang,
+            apiFormat: cloudApiFmt, authType: cloudAuth
+        })
+    }
+
+    // 从 viewModel 读取当前 provider 数据，灌入本地暂存属性 + UI 控件。
+    function updateCloudFields() {
+        if (!viewModel || !asrActiveModel) {
+            cloudName = ""; cloudBaseUrl = ""; cloudModel = ""; cloudApiKey = ""
+            cloudLang = "zh"; cloudApiFmt = "openai"; cloudAuth = "bearer"
+        } else {
+            cloudName = providerField(asrActiveModel, "name") || asrActiveModel
+            cloudBaseUrl = providerField(asrActiveModel, "baseUrl")
+            cloudModel = providerField(asrActiveModel, "model")
+            cloudApiKey = providerField(asrActiveModel, "apiKey")
+            cloudLang = providerField(asrActiveModel, "language") || "zh"
+            cloudApiFmt = providerField(asrActiveModel, "apiFormat") || "openai"
+            cloudAuth = providerField(asrActiveModel, "authType") || "bearer"
+        }
+        // 命令式更新 UI（无 binding）
+        if (cloudNameField) cloudNameField.text = cloudName
+        if (cloudBaseUrlField) cloudBaseUrlField.text = cloudBaseUrl
+        if (cloudModelField) cloudModelField.text = cloudModel
+        if (cloudKeyField) cloudKeyField.text = cloudApiKey
+        if (cloudLangBox) cloudLangBox.currentIndex = langToIndex(cloudLang)
+        if (cloudApiFormatBox) cloudApiFormatBox.currentIndex = cloudApiFmt === "anthropic" ? 1 : 0
+        if (cloudAuthBox) cloudAuthBox.currentIndex = authToIndex(cloudAuth)
     }
 
     Flickable {
@@ -344,12 +520,18 @@ Item {
                         Radio {
                             text: qsTr("Hold to Record")
                             checked: recordMode === "hold"
-                            onClicked: recordMode = "hold"
+                            onClicked: {
+                                recordMode = "hold"
+                                registerRecordHotkey()
+                            }
                         }
                         Radio {
                             text: qsTr("Press to Record")
                             checked: recordMode === "press"
-                            onClicked: recordMode = "press"
+                            onClicked: {
+                                recordMode = "press"
+                                registerRecordHotkey()
+                            }
                         }
                     }
 
@@ -410,8 +592,8 @@ Item {
                         chips: asrModels
                         onChipClicked: function(key) {
                             asrActiveModel = key
-                            if (key === "local") asrModelType = "local"
-                            else asrModelType = "cloud"
+                            asrModelType = activeProviderType(key)
+                            updateCloudFields()
                         }
                         onChipClosed: function(key) {
                             requestDeleteModel("asrModels", key, "asrActiveModel", "asrModelType")
@@ -420,7 +602,10 @@ Item {
                             var win = ApplicationWindow.window
                             if (win && win.toast) win.toast(qsTr("At least one model must be kept"), "warning")
                         }
-                        onAddClicked: addModelDialog.open()
+                        onAddClicked: {
+                            addModelDialog.targetCategory = "asr"
+                            addModelDialog.open()
+                        }
                     }
 
                     Text {
@@ -431,8 +616,9 @@ Item {
                         Layout.fillWidth: true
                     }
 
-                    // ---- Cloud fields (visible when asrModelType === "cloud") ----
+                    // ---- Cloud fields (visible when active provider is cloud) ----
                     GridLayout {
+                        id: cloudGrid
                         Layout.fillWidth: true
                         visible: asrModelType === "cloud"
                         columns: 2
@@ -440,48 +626,59 @@ Item {
                         columnSpacing: 16
 
                         TextField {
-                            label: qsTr("Vendor Name")
-                            text: "Xiaomi MIMO"
-                            readOnly: true
+                            id: cloudNameField
+                            label: qsTr("Display Name")
+                            onTextEdited: function(newText) { cloudName = newText }
                             Layout.fillWidth: true
                         }
                         TextField {
+                            id: cloudBaseUrlField
                             label: qsTr("Base URL")
-                            text: "wss://speech.xiaomi.com/v1"
+                            onTextEdited: function(newText) {
+                                cloudBaseUrl = newText
+                                console.log("[cloudBaseUrl]=" + cloudBaseUrl)
+                            }
                             Layout.fillWidth: true
                         }
                         TextField {
+                            id: cloudModelField
                             label: qsTr("Model")
-                            text: "xiaomi-asr"
+                            onTextEdited: function(newText) { cloudModel = newText }
                             Layout.fillWidth: true
                         }
                         SelectBox {
+                            id: cloudLangBox
                             label: qsTr("Language")
                             options: [qsTr("Chinese (zh)"), qsTr("English (en)"), qsTr("Japanese (ja)"), qsTr("Zh+En mixed"), qsTr("Auto-detect")]
+                            onSelected: function(index, value) { cloudLang = indexToLang(index) }
                             Layout.fillWidth: true
                         }
                         SelectBox {
+                            id: cloudApiFormatBox
                             label: qsTr("API Format")
                             options: ["OpenAI", "Anthropic messages"]
+                            onSelected: function(index, value) { cloudApiFmt = index === 1 ? "anthropic" : "openai" }
                             Layout.fillWidth: true
                         }
                         SelectBox {
+                            id: cloudAuthBox
                             label: qsTr("Auth Method")
                             options: ["Bearer", "api-key header", qsTr("No auth")]
+                            onSelected: function(index, value) { cloudAuth = indexToAuth(index) }
                             Layout.fillWidth: true
                         }
-
                         // API Key (span full width)
                         TextField {
+                            id: cloudKeyField
                             label: qsTr("API Key")
-                            text: "sk-xxxxxxxx"
                             isPassword: true
+                            onTextEdited: function(newText) { cloudApiKey = newText }
                             Layout.columnSpan: 2
                             Layout.fillWidth: true
                         }
                     }
 
-                    // ---- Local fields (visible when asrModelType === "local") ----
+                    // ---- Local fields (visible when active provider is local) ----
                     ColumnLayout {
                         Layout.fillWidth: true
                         visible: asrModelType === "local"
@@ -492,14 +689,20 @@ Item {
                             spacing: 8
 
                             TextField {
+                                id: localModelPathField
                                 Layout.fillWidth: true
                                 label: qsTr("Model Path")
-                                text: "C:\\Models\\ggml-base.bin"
+                                text: asrLocalModelPath
+                                onTextEdited: {
+                                    asrLocalModelPath = text
+                                    asrLocalModelName = deriveModelName(text)
+                                }
                             }
                             Button {
                                 text: qsTr("Browse...")
                                 kind: "ghost"
                                 Layout.alignment: Qt.AlignBottom
+                                onClicked: modelFileDialog.open()
                             }
                         }
 
@@ -510,13 +713,17 @@ Item {
                             TextField {
                                 Layout.fillWidth: true
                                 label: qsTr("Model Name (auto from path)")
-                                text: "ggml-base"
+                                text: asrLocalModelName
                                 readOnly: true
                             }
                             SelectBox {
                                 Layout.fillWidth: true
                                 label: qsTr("Language")
                                 options: [qsTr("Chinese (zh)"), qsTr("English (en)"), qsTr("Japanese (ja)"), qsTr("Zh+En mixed"), qsTr("Auto-detect")]
+                                currentIndex: langToIndex(asrLocalLanguage)
+                                onSelected: function(index, value) {
+                                    asrLocalLanguage = indexToLang(index)
+                                }
                             }
                         }
 
@@ -529,18 +736,39 @@ Item {
                         }
                     }
 
-                    // test connection button
-                    Row {
-                        spacing: 8
-                        Button {
-                            text: qsTr("Test Connection")
-                            kind: "primary"
-                        }
-                        Text {
-                            text: qsTr("86 ms latency")
-                            color: Theme.muted
-                            font.pixelSize: 12
-                            anchors.verticalCenter: parent.verticalCenter
+                    // test connection button（紧跟在字段区下方，Save 之前）
+                    Button {
+                        text: qsTr("Test Connection")
+                        kind: "primary"
+                        Layout.topMargin: 4
+                        onClicked: {
+                            if (!voiceClient) {
+                                var win0 = ApplicationWindow.window
+                                if (win0 && win0.toast) win0.toast(qsTr("voiceClient not available"), "error")
+                                return
+                            }
+                            if (asrModelType === "local") {
+                                if (!asrLocalModelPath) {
+                                    var win1 = ApplicationWindow.window
+                                    if (win1 && win1.toast) win1.toast(qsTr("Model path is empty"), "error")
+                                } else {
+                                    voiceClient.testConnection("local", {modelPath: asrLocalModelPath})
+                                }
+                            } else {
+                                if (!cloudBaseUrl) {
+                                    var win2 = ApplicationWindow.window
+                                    if (win2 && win2.toast) win2.toast(qsTr("No base URL filled"), "error")
+                                } else {
+                                    voiceClient.testConnection("cloud", {
+                                        baseUrl: cloudBaseUrl,
+                                        model: cloudModel,
+                                        apiKey: cloudApiKey,
+                                        apiFormat: cloudApiFmt,
+                                        authType: cloudAuth,
+                                        language: cloudLang
+                                    })
+                                }
+                            }
                         }
                     }
                 }
@@ -1525,10 +1753,50 @@ Item {
     AddModelDialog {
         id: addModelDialog
         parent: Overlay.overlay
+        property string targetCategory: "asr"
         onSaved: function(name, provider, deployType, customName) {
-            var msg = qsTr("Model added: ") + name
+            if (!viewModel) return
+            var rawKey = customName || name || provider || ("model-" + Date.now())
+            var key = rawKey.replace(/\s+/g, "-").toLowerCase()
+            var isLocal = deployType === qsTr("Local Model") || deployType === "Local Model"
+            var cat = addModelDialog.targetCategory || "asr"
+            var displayName = name || customName || rawKey
+
+            // 如果 key 已存在，追加数字后缀（防覆盖已有 provider）
+            var provs = viewModel.asrProviders || []
+            var suffix = 1
+            var baseKey = key
+            while (true) {
+                var dup = false
+                for (var i = 0; i < provs.length; i++) {
+                    if (provs[i].key === key) { dup = true; break }
+                }
+                if (!dup) break
+                key = baseKey + "-" + suffix
+                suffix++
+            }
+
+            viewModel.addProvider(cat, key)
+            viewModel.updateProvider(cat, key, {name: displayName, type: isLocal ? "local" : "cloud"})
+            viewModel.setActiveProvider(cat, key)
+            // 直接同步刷新（C++ 数据已更新，syncFromViewModel 从 C++ 读取最新值）
+            syncFromViewModel()
             var win = ApplicationWindow.window
-            if (win && win.toast) win.toast(msg)
+            if (win && win.toast) win.toast(qsTr("Model added: ") + displayName)
+        }
+    }
+
+    // 文件选择对话框（本地模型路径 Browse 按钮）
+    FileDialog {
+        id: modelFileDialog
+        title: qsTr("Select whisper model (.bin)")
+        nameFilters: ["whisper model (*.bin)", qsTr("All files") + " (*)"]
+        onAccepted: {
+            var path = selectedFile.toString()
+            // file URL → 本地路径
+            path = path.replace(/^file:\/\//, "").replace(/^\//, "")
+            asrLocalModelPath = path
+            asrLocalModelName = deriveModelName(path)
         }
     }
 
@@ -1544,6 +1812,11 @@ Item {
         onConfirmed: {
             root.removeModel(root.pendingListName, root.pendingKey,
                              root.pendingActiveName, root.pendingTypeName)
+            // 同步删除后端 provider
+            if (viewModel) {
+                var cat = listNameToCategory(root.pendingListName)
+                if (cat) viewModel.removeProvider(cat, root.pendingKey)
+            }
             var win = ApplicationWindow.window
             if (win && win.toast) win.toast(qsTr("Model deleted: ") + root.pendingLabel)
         }

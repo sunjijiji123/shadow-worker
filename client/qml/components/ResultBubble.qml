@@ -18,10 +18,23 @@ Rectangle {
     // auto-polish on -> starts as "done" and locked
     property string polishState: "off"   // off | done
     property bool autoPolish: false      // when true, icon is done + non-interactive
+    // model info shown at bottom-right
+    property string asrModelName: ""     // e.g. "ggml-small" or "mimo-v2.5-asr"
+    property string polishModelName: ""  // e.g. "gpt-4o" (empty = no polish)
 
     signal copyRequested()
     signal closeRequested()
     signal polishRequested()   // manual polish (icon clicked, only when not done/auto)
+
+    // 把结果文字复制到系统剪贴板。用一个隐藏的 TextEdit 调用 copy()：
+    // QML 没有直接的 clipboard API，这是桌面平台最可靠的纯 QML 方式。
+    // 复制的是 resultEdit 当前显示的文字（与 root.text 一致，单向绑定）。
+    // 复制反馈由 Copy 按钮自身状态变化呈现（不弹 toast）。
+    function copyToClipboard() {
+        clipHelper.text = resultEdit.text
+        clipHelper.selectAll()
+        clipHelper.copy()
+    }
 
     // .result-bubble
     width: 320
@@ -34,6 +47,14 @@ Rectangle {
 
     // effective polish state: autoPolish forces "done"
     property bool polishDone: autoPolish || polishState === "done"
+
+    // 隐藏的 TextEdit，仅用于 copy() 把文字送进系统剪贴板。
+    // visible:false 但不能 enabled:false（copy 需要它可操作）。
+    TextEdit {
+        id: clipHelper
+        visible: false
+        text: ""
+    }
 
     // NOTE: NO anchors.fill — that would pin the layout to the parent's size and
     // stop implicitHeight from reflecting the children's real heights (which
@@ -157,12 +178,11 @@ Rectangle {
             }
         }
 
-        // ---- textarea (the result text, editable + resizable) ----
-        // Resize handle on the TOP-RIGHT (resizeEdge: "top"): drag UP to grow.
-        // The result window's y is bound to pill.y - gap - height, so as the
-        // textarea grows the window auto-grows UPWARD while its bottom edge
-        // (actions row) stays glued just above the pill — it never overlaps.
-        // Dimmed + locked while polishing.
+        // ---- textarea (the result text, display + copy) ----
+        // 单向显示：text 绑定到 root.text（即 RecordingWindow.result）。
+        // 不回写 onTextEdited —— 双向回写会和外部清空 result 冲突，导致第二次
+        // 识别/close 后仍显示旧文字（AGENTS.md 坑 #2）。用户如需修改，复制后改。
+        // resize 仍用自定义 TextArea（handle 在右上角，向上拖动放大）。
         TextArea {
             id: resultEdit
             Layout.fillWidth: true
@@ -172,27 +192,85 @@ Rectangle {
             frameColor: Theme.bg2
             resizeEdge: "top"
             opacity: root.polishing ? 0.35 : 1.0
-            onTextEdited: function(newText) { root.text = newText }
+            // 注意：不加 onTextEdited 回写。
         }
 
-        // ---- actions: Copy / Close (right-aligned) ----
-        Row {
+        // ---- actions row: model info (left) + Copy/Close (right) ----
+        RowLayout {
             Layout.fillWidth: true
             Layout.topMargin: 12
             spacing: 8
-            layoutDirection: Qt.RightToLeft
 
-            Button {
-                text: qsTr("Close")
-                kind: "ghost"
-                small: true
-                onClicked: root.closeRequested()
+            // left: model info (ASR + Polish)
+            ColumnLayout {
+                Layout.alignment: Qt.AlignLeft | Qt.AlignBottom
+                spacing: 2
+
+                Row {
+                    spacing: 4
+                    visible: root.asrModelName !== ""
+                    Text {
+                        text: "ASR:"
+                        color: Theme.muted
+                        font.pixelSize: 10
+                        font.weight: Font.DemiBold
+                    }
+                    Text {
+                        text: root.asrModelName
+                        color: Theme.muted
+                        font.pixelSize: 10
+                    }
+                }
+                Row {
+                    spacing: 4
+                    Text {
+                        text: "Polish:"
+                        color: Theme.muted
+                        font.pixelSize: 10
+                        font.weight: Font.DemiBold
+                    }
+                    Text {
+                        text: root.polishModelName !== "" ? root.polishModelName : qsTr("(disabled)")
+                        color: Theme.muted
+                        font.pixelSize: 10
+                    }
+                }
             }
-            Button {
-                text: qsTr("Copy")
-                kind: "ghost"
-                small: true
-                onClicked: root.copyRequested()
+
+            Item { Layout.fillWidth: true }
+
+            // right: Copy / Close
+            Row {
+                spacing: 8
+                layoutDirection: Qt.RightToLeft
+                Layout.alignment: Qt.AlignRight | Qt.AlignTop
+
+                Button {
+                    text: qsTr("Close")
+                    kind: "ghost"
+                    small: true
+                    onClicked: root.closeRequested()
+                }
+                Button {
+                    // 点击后文字短暂变成 "Copied" 并高亮，1.2s 后恢复。
+                    // 用按钮自身状态做反馈，不弹 toast。
+                    id: copyBtn
+                    text: copyBtn.copied ? qsTr("Copied!") : qsTr("Copy")
+                    kind: copyBtn.copied ? "primary" : "ghost"
+                    small: true
+                    property bool copied: false
+                    onClicked: {
+                        root.copyToClipboard()
+                        copyBtn.copied = true
+                        copyResetTimer.restart()
+                    }
+                    Timer {
+                        id: copyResetTimer
+                        interval: 1200
+                        repeat: false
+                        onTriggered: copyBtn.copied = false
+                    }
+                }
             }
         }
     }

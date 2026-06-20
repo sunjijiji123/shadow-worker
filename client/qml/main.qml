@@ -203,6 +203,14 @@ import ShadowWorker
         // backend opens the mic; the device id is read from QSettings by the
         // backend (we pass empty = default for now; device routing TBD).
         voiceClient.start("")
+        // 设置当前使用的模型名（显示在结果气泡右下角）
+        if (settingsVm) {
+            if (settingsVm.asrMode === "local") {
+                recordingWindow.asrModelName = settingsVm.asrLocalModelName || "local"
+            } else {
+                recordingWindow.asrModelName = settingsVm.asrActiveProvider || "cloud"
+            }
+        }
         recordingWindow.startRealRecording()
     }
     function stopRealRecording() {
@@ -218,22 +226,49 @@ import ShadowWorker
             recordingWindow.setBands(bands, rms)
         }
         function onResultReady(text, error) {
+            // 用户已放弃（点了 ×），忽略后端返回的 ASR 结果
+            if (recordingWindow.abandoned) return
             if (error && error !== "") {
                 recordingWindow.applyTranscriptionError(error)
             } else {
                 recordingWindow.applyTranscription(text)
             }
         }
+        // test connection 结果也在这里处理（main.qml 已验证能收到 voiceClient 信号）
+        function onConnectionTested(message, error) {
+            if (error && error !== "") {
+                toast(qsTr("Connection failed: ") + error, "error")
+            } else {
+                toast(qsTr("Connection OK: ") + message, "success")
+            }
+        }
     }
 
     Connections {
         target: globalHotkey
+        // press 模式：toggle（按一次开始，再按一次停止）
         function onActivatedWithName(name) {
             if (name === "record") {
-                if (recordingWindow.state === "hidden")
-                    startRealRecording()
+                if (recordingWindow.state === "listening")
+                    stopRealRecording()
                 else
-                    stopRealRecording()   // toggle off
+                    startRealRecording()
+            }
+        }
+        // hold 模式：按下开始录音。防重入：用 recordingWindow.state 同步判断
+        // （它在 startRealRecording 里立即变 "listening"）。RegisterHotKey 在
+        // 按住期间可能重复触发 WM_HOTKEY（按键重复），若不挡会导致反复 start
+        // → 后端反复重建采集器/频谱流，主线程过载卡顿。voiceClient.recording
+        // 是 gRPC 异步回调后才置位，挡不住快速重复触发，故用本地 state。
+        function onPressed(name) {
+            if (name === "record" && recordingWindow.state !== "listening")
+                startRealRecording()
+        }
+        // hold 模式：松开停止录音
+        function onReleased(name) {
+            if (name === "record") {
+                if (recordingWindow.state === "listening")
+                    stopRealRecording()
             }
         }
     }
@@ -267,10 +302,10 @@ import ShadowWorker
             cursorShape: Qt.PointingHandCursor
             hoverEnabled: true
             onClicked: {
-                if (recordingWindow.state === "hidden")
-                    startRealRecording()
-                else
+                if (recordingWindow.state === "listening")
                     stopRealRecording()
+                else
+                    startRealRecording()
             }
         }
     }

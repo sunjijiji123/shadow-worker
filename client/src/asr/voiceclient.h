@@ -33,6 +33,10 @@ public:
   Q_INVOKABLE void stop();
   // start the live spectrum stream (call after start())
   Q_INVOKABLE void streamLevels();
+  // test ASR config connectivity (cloud endpoint or local model file).
+  // fields: map<string,string> of provider config fields.
+  // resultReady is repurposed: on success, text=message; on failure, error=message.
+  Q_INVOKABLE void testConnection(const QString &mode, const QVariantMap &fields);
 
 signals:
   void recordingChanged();
@@ -41,6 +45,9 @@ signals:
   void levelsReady(const QVariantList &bands, int rms);
   // final recognized text after stop()
   void resultReady(const QString &text, const QString &error);
+  // test connection result (separate from resultReady to avoid triggering the
+  // recording bubble)
+  void connectionTested(const QString &message, const QString &error);
 
 private:
   void setRecording(bool v);

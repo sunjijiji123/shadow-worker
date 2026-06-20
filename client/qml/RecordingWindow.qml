@@ -26,8 +26,16 @@ Item {
     property string state: "hidden"
     property string transcript: ""
     property string result: ""
-    property bool autoPolish: true
+    // 润色功能后端尚未实现（无 polish RPC / LLM 调用）。默认关闭，避免
+    // 识别完成后播放 1.8s 的假 loading 动画误导用户。
+    // 待接通真实润色后，改为读 settingsVm.llmEnabled。
+    property bool autoPolish: false
     property bool resultPolishing: false
+    // abandoned=true 表示用户点了 × 放弃，后续的 ASR 结果应被忽略
+    property bool abandoned: false
+    // 当前使用的模型名（显示在结果气泡右下角）
+    property string asrModelName: ""
+    property string polishModelName: ""
     // live 16-band spectrum from the backend (empty when idle)
     property var bands: []
     property int rmsLevel: 0
@@ -85,6 +93,10 @@ Item {
     }
     function hide() {
         state = "hidden"
+        // 清空上次的数据，下次打开时是干净的（避免残留旧文字）
+        transcript = ""
+        result = ""
+        resultPolishing = false
     }
     // close = ABANDON at any state: discard recording/partial result, just hide.
     // Distinct from stopRealRecording (which transcribes + polishes).
@@ -131,6 +143,7 @@ Item {
     property real recordStartMs: 0
     function startRealRecording() {
         recordStartMs = Date.now()
+        abandoned = false
         state = "listening"
         transcript = ""
         result = ""
@@ -224,14 +237,14 @@ Item {
             // live 16-band spectrum from the backend drives the wave heights
             bands: root.bands
             onCloseRequested: function() {
-                // × = ABANDON: discard the recording, just hide.
-                // Stop backend capture (its ASR result is ignored on abandon).
+                // 录音气泡 × = 彻底关闭整个浮窗（pill + result），放弃一切。
+                // 标记 abandoned，后续 ASR 结果会被忽略（不会触发浮窗/润色）。
+                root.abandoned = true
                 if (voiceClient && voiceClient.recording) {
                     voiceClient.stop()
                 }
                 polishTimer.stop()
                 finishTimer.stop()
-                root.resultPolishing = false
                 root.hide()
             }
         }
@@ -265,7 +278,7 @@ Item {
     // ================================================================
     Window {
         id: resultWindow
-        visible: root.anyVisible && root.state !== "listening"
+        visible: root.anyVisible && root.state !== "listening" && root.state !== "idle"
         flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
         color: "transparent"
         width: 320
@@ -294,7 +307,16 @@ Item {
             polishing: root.resultPolishing
             autoPolish: root.autoPolish
             polishState: root.autoPolish ? "done" : "off"
-            onCloseRequested: root.close()
+            asrModelName: root.asrModelName
+            polishModelName: root.polishModelName
+            onCloseRequested: {
+                // 结果气泡 × = 只关闭结果气泡，pill 回到 idle（等待下次录音）
+                root.result = ""
+                root.resultPolishing = false
+                root.bands = []
+                root.rmsLevel = 0
+                root.state = "idle"
+            }
             onPolishRequested: {
                 root.resultPolishing = true
                 polishTimer.restart()

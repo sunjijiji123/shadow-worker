@@ -106,3 +106,43 @@ void VoiceClient::setError(const QString &e) {
   m_error = e;
   emit errorChanged();
 }
+
+void VoiceClient::testConnection(const QString &mode, const QVariantMap &fields) {
+  if (!m_channel) {
+    emit connectionTested(QString(), QStringLiteral("gRPC channel not initialized"));
+    return;
+  }
+  shadowworker::TestConnectionRequest req;
+  req.setMode(mode);
+  // Build a new FieldsEntry map from QVariantMap. Each value is a string.
+  shadowworker::TestConnectionRequest::FieldsEntry entries;
+  for (auto it = fields.cbegin(); it != fields.cend(); ++it) {
+    entries.insert(it.key(), it.value().toString());
+  }
+  req.setFields(entries);
+  auto reply = m_client.TestConnection(req);
+  auto *replyPtr = reply.get();
+  reply.release();
+  QObject::connect(replyPtr, &QGrpcCallReply::finished, this,
+                   [this, replyPtr](const QGrpcStatus &status) {
+                     replyPtr->deleteLater();
+                     if (!status.isOk()) {
+                       emit connectionTested(QString(), status.message());
+                       return;
+                     }
+                     auto opt = replyPtr->read<shadowworker::TestConnectionResponse>();
+                     if (!opt.has_value()) {
+                       emit connectionTested(QString(), QStringLiteral("empty response"));
+                       return;
+                     }
+                     const auto &r = *opt;
+                     if (r.ok()) {
+                       QString msg = r.message();
+                       if (r.latencyMs() > 0)
+                         msg += QStringLiteral(" (%1ms)").arg(static_cast<qulonglong>(r.latencyMs()));
+                       emit connectionTested(msg, QString());
+                     } else {
+                       emit connectionTested(QString(), r.message());
+                     }
+                   });
+}
