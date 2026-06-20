@@ -37,6 +37,8 @@ public:
   // fields: map<string,string> of provider config fields.
   // resultReady is repurposed: on success, text=message; on failure, error=message.
   Q_INVOKABLE void testConnection(const QString &mode, const QVariantMap &fields);
+  // polish recognized text via the backend LLM. result arrives via polishReady.
+  Q_INVOKABLE void polish(const QString &text);
 
 signals:
   void recordingChanged();
@@ -48,6 +50,9 @@ signals:
   // test connection result (separate from resultReady to avoid triggering the
   // recording bubble)
   void connectionTested(const QString &message, const QString &error);
+  // polish result: originalText 是请求时的原文（供失败时回退显示），
+  // polishedText 是润色后文字（失败时为空），error 非空表示失败。
+  void polishReady(const QString &originalText, const QString &polishedText, const QString &error);
 
 private:
   void setRecording(bool v);

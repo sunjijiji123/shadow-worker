@@ -23,6 +23,7 @@ import (
 	"shadow-worker/backend/internal/collector"
 	"shadow-worker/backend/internal/config"
 	pb "shadow-worker/backend/internal/grpcapi"
+	"shadow-worker/backend/internal/llm"
 	mcpServer "shadow-worker/backend/internal/mcp"
 	"shadow-worker/backend/internal/storage"
 )
@@ -74,12 +75,25 @@ func runBackgroundService() {
 	coll.Start()
 	defer coll.Stop()
 
-	// 4. 创建 ASR 引擎
+	// 4. 创建 ASR 引擎（用 holder 包装，支持配置变更后热重载）
 	asrEngine, err := asr.New(cfg)
 	if err != nil {
 		log.Fatalf("创建 ASR 引擎失败: %v", err)
 	}
+	holder := asr.NewEngineHolder(asrEngine)
 	log.Printf("ASR 引擎: %s", asrEngine.Name())
+
+	// 4b. 创建润色引擎（LLM 未启用时为 nil，holder 仍可后续热重载启用）
+	llmEngine, err := llm.New(cfg)
+	if err != nil {
+		log.Printf("创建 LLM 引擎失败（润色不可用）: %v", err)
+	}
+	llmHolder := llm.NewEngineHolder(llmEngine)
+	if llmEngine != nil {
+		log.Printf("LLM 引擎: %s", llmEngine.Name())
+	} else {
+		log.Printf("LLM 引擎: 未启用（润色关闭）")
+	}
 
 	// 5. 启动 VLM 截图理解(可选)
 	var vlmCapturer *collector.VLMCapturer
@@ -104,10 +118,10 @@ func runBackgroundService() {
 	grpcServer := grpc.NewServer()
 	pb.RegisterOverviewServiceServer(grpcServer, pb.NewOverviewServer(db, coll))
 	pb.RegisterWhitelistServiceServer(grpcServer, pb.NewWhitelistServer(db))
-	pb.RegisterAsrServiceServer(grpcServer, pb.NewAsrServer(db, asrEngine, nil))
-	pb.RegisterVoiceServiceServer(grpcServer, pb.NewVoiceServer(db, asrEngine))
+	pb.RegisterAsrServiceServer(grpcServer, pb.NewAsrServer(db, holder, nil))
+	pb.RegisterVoiceServiceServer(grpcServer, pb.NewVoiceServer(db, holder, llmHolder))
 	pb.RegisterCollectionServiceServer(grpcServer, pb.NewCollectionServer(db, coll, vlmCapturer))
-	pb.RegisterConfigServiceServer(grpcServer, pb.NewConfigServer(cfg))
+	pb.RegisterConfigServiceServer(grpcServer, pb.NewConfigServer(cfg, holder, llmHolder))
 
 	log.Printf("Shadow Worker 后台服务已启动,gRPC 监听 %s", grpcAddr)
 	log.Printf("Qt 客户端请连接 %s", grpcAddr)

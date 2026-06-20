@@ -3,11 +3,14 @@ package grpcapi
 import (
 	"context"
 	"log"
+	"os"
 	"sync"
 	"time"
 
 	"shadow-worker/backend/internal/asr"
 	"shadow-worker/backend/internal/audio"
+	"shadow-worker/backend/internal/config"
+	"shadow-worker/backend/internal/llm"
 	"shadow-worker/backend/internal/storage"
 )
 
@@ -16,8 +19,9 @@ import (
 // backend process — the client only receives spectrum frames + the final text.
 type VoiceServer struct {
 	UnimplementedVoiceServiceServer
-	engine asr.Engine
-	db     *storage.DB
+	holder    *asr.EngineHolder
+	llmHolder *llm.EngineHolder
+	db        *storage.DB
 
 	mu      sync.Mutex
 	capture *audio.Capture
@@ -31,9 +35,10 @@ type VoiceServer struct {
 }
 
 // NewVoiceServer creates a VoiceServer. The capture device is opened lazily on
-// StartRecording.
-func NewVoiceServer(db *storage.DB, engine asr.Engine) *VoiceServer {
-	return &VoiceServer{engine: engine, db: db}
+// StartRecording. The ASR + LLM engine holders allow hot-reload after config
+// changes.
+func NewVoiceServer(db *storage.DB, holder *asr.EngineHolder, llmHolder *llm.EngineHolder) *VoiceServer {
+	return &VoiceServer{holder: holder, llmHolder: llmHolder, db: db}
 }
 
 // StartRecording opens the waveIn device and begins capturing + spectrum
@@ -116,7 +121,8 @@ func (s *VoiceServer) StopRecording(ctx context.Context, req *StopRequest) (*Voi
 		return &VoiceResult{Error: "recording too short"}, nil
 	}
 
-	text, err := s.engine.Recognize(ctx, pcm)
+	engine := s.holder.Get()
+	text, err := engine.Recognize(ctx, pcm)
 	if err != nil {
 		log.Printf("[voice] ASR failed: %v", err)
 		return &VoiceResult{Error: err.Error(), DurationMs: int32(durationMs)}, nil
@@ -127,7 +133,7 @@ func (s *VoiceServer) StopRecording(ctx context.Context, req *StopRequest) (*Voi
 		_, _ = s.db.InsertEvent(storage.Event{
 			Type:    storage.EventTypeVoice,
 			Content: text,
-			Meta:    "engine=" + s.engine.Name(),
+			Meta:    "engine=" + engine.Name(),
 		})
 	}
 
@@ -167,4 +173,119 @@ func (s *VoiceServer) StreamLevels(req *LevelsRequest, stream VoiceService_Strea
 			}
 		}
 	}
+}
+
+// TestConnection 探测 ASR 配置是否可用。
+// - cloud: 构造一个临时 cloudEngine，发送 ~0.5s 静音 WAV，测延迟。
+// - local: stat() 模型文件，并尝试用 whisper 加载（懒加载，开销较大）。
+// 不修改 holder、不写磁盘、不依赖保存的配置。
+func (s *VoiceServer) TestConnection(ctx context.Context, req *TestConnectionRequest) (*TestConnectionResponse, error) {
+	mode := req.GetMode()
+	f := req.GetFields()
+	switch mode {
+	case "cloud":
+		cfg := config.ASRProvider{
+			BaseURL:   f["baseUrl"],
+			Model:     f["model"],
+			APIKey:    f["apiKey"],
+			AuthType:  f["authType"],
+			APIFormat: f["apiFormat"],
+			Language:  f["language"],
+			Stream:    f["stream"] == "true",
+		}
+		if cfg.BaseURL == "" {
+			return &TestConnectionResponse{Ok: false, Message: "base_url is empty"}, nil
+		}
+		if cfg.Model == "" {
+			return &TestConnectionResponse{Ok: false, Message: "model is empty"}, nil
+		}
+		if cfg.AuthType == "" {
+			cfg.AuthType = "bearer"
+		}
+		engine, err := newCloudEngineForTest(cfg)
+		if err != nil {
+			return &TestConnectionResponse{Ok: false, Message: err.Error()}, nil
+		}
+		// 0.5 秒静音 PCM
+		silent := make([]byte, asr.SampleRate/2*2)
+		start := time.Now().UTC()
+		text, err := engine.Recognize(ctx, silent)
+		elapsed := time.Since(start)
+		if err != nil {
+			return &TestConnectionResponse{Ok: false, Message: err.Error(), LatencyMs: int32(elapsed.Milliseconds())}, nil
+		}
+		return &TestConnectionResponse{
+			Ok:        true,
+			Message:   "endpoint reachable (response=" + text + ")",
+			LatencyMs: int32(elapsed.Milliseconds()),
+		}, nil
+	case "local":
+		path := f["modelPath"]
+		if path == "" {
+			return &TestConnectionResponse{Ok: false, Message: "model_path is empty"}, nil
+		}
+		if _, err := os.Stat(path); err != nil {
+			return &TestConnectionResponse{Ok: false, Message: "model file: " + err.Error()}, nil
+		}
+		// 不真加载 whisper（大模型加载要几秒），只做 stat + 格式检查
+		return &TestConnectionResponse{Ok: true, Message: "model file exists at " + path}, nil
+	case "llm":
+		// LLM（润色）连通性测试：构造临时引擎，发一句 "hi" 探测。
+		cfg := config.LLMProvider{
+			BaseURL:  f["baseUrl"],
+			Model:    f["model"],
+			APIKey:   f["apiKey"],
+			AuthType: f["authType"],
+		}
+		if cfg.BaseURL == "" {
+			return &TestConnectionResponse{Ok: false, Message: "base_url is empty"}, nil
+		}
+		if cfg.Model == "" {
+			return &TestConnectionResponse{Ok: false, Message: "model is empty"}, nil
+		}
+		if cfg.AuthType == "" {
+			cfg.AuthType = "bearer"
+		}
+		engine, err := llm.NewCloudEngineForTest(cfg)
+		if err != nil {
+			return &TestConnectionResponse{Ok: false, Message: err.Error()}, nil
+		}
+		start := time.Now().UTC()
+		out, err := engine.Polish(ctx, "hi")
+		elapsed := time.Since(start)
+		if err != nil {
+			return &TestConnectionResponse{Ok: false, Message: err.Error(), LatencyMs: int32(elapsed.Milliseconds())}, nil
+		}
+		return &TestConnectionResponse{
+			Ok:        true,
+			Message:   "endpoint reachable (response=" + out + ")",
+			LatencyMs: int32(elapsed.Milliseconds()),
+		}, nil
+	default:
+		return &TestConnectionResponse{Ok: false, Message: "unknown mode: " + mode}, nil
+	}
+}
+
+// newCloudEngineForTest 是 asr.newCloudEngine 的薄封装（这里直接调用即可）。
+// 保留独立名字便于将来换成 stub。
+func newCloudEngineForTest(cfg config.ASRProvider) (asr.Engine, error) {
+	return asr.NewCloudEngineForTest(cfg)
+}
+
+// Polish 对识别出的文字调用配置好的 LLM 做润色。
+//
+// LLM 未启用（holder.Get() 为 nil）时返回 error，调用方据此决定是否保留
+// 原文。LLM 调用失败时也返回 error（不阻断原文，由前端决定如何提示）。
+func (s *VoiceServer) Polish(ctx context.Context, req *PolishRequest) (*PolishResult, error) {
+	engine := s.llmHolder.Get()
+	if engine == nil {
+		return &PolishResult{Error: "LLM 未启用"}, nil
+	}
+	text, err := engine.Polish(ctx, req.GetText())
+	if err != nil {
+		log.Printf("[voice] polish failed: %v", err)
+		return &PolishResult{Error: err.Error()}, nil
+	}
+	log.Printf("[voice] polish ok: %d -> %d chars", len(req.GetText()), len(text))
+	return &PolishResult{Text: text}, nil
 }

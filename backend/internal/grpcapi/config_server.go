@@ -3,19 +3,24 @@ package grpcapi
 import (
 	"context"
 	"fmt"
+	"log"
 
+	"shadow-worker/backend/internal/asr"
 	"shadow-worker/backend/internal/config"
+	"shadow-worker/backend/internal/llm"
 )
 
 // ConfigServer 实现 ConfigService。
 type ConfigServer struct {
 	UnimplementedConfigServiceServer
-	cfg *config.Config
+	cfg       *config.Config
+	holder    *asr.EngineHolder // 保存配置后热重载 ASR 引擎
+	llmHolder *llm.EngineHolder // 保存配置后热重载润色引擎
 }
 
-// NewConfigServer 创建 ConfigServer。
-func NewConfigServer(cfg *config.Config) *ConfigServer {
-	return &ConfigServer{cfg: cfg}
+// NewConfigServer 创建 ConfigServer。holder/llmHolder 用于配置变更后热重载引擎。
+func NewConfigServer(cfg *config.Config, holder *asr.EngineHolder, llmHolder *llm.EngineHolder) *ConfigServer {
+	return &ConfigServer{cfg: cfg, holder: holder, llmHolder: llmHolder}
 }
 
 // GetConfig 返回当前配置。
@@ -23,13 +28,29 @@ func (s *ConfigServer) GetConfig(ctx context.Context, req *GetConfigRequest) (*C
 	return configToProto(s.cfg), nil
 }
 
-// SaveConfig 保存配置。
+// SaveConfig 保存配置。落盘 + 更新内存配置 + 热重载 ASR 引擎。
+//
+// 引擎重建失败（如模型路径无效）不会阻断保存：配置已写入 YAML 和内存，
+// 用户下次修正配置后再次保存即可重建。旧引擎继续服务直到重建成功。
 func (s *ConfigServer) SaveConfig(ctx context.Context, req *ConfigData) (*Result, error) {
 	newCfg := protoToConfig(req)
 	if err := newCfg.Save(); err != nil {
 		return nil, fmt.Errorf("保存配置失败: %w", err)
 	}
 	*s.cfg = *newCfg
+
+	// 热重载 ASR 引擎（失败仅记录，不阻断保存）。
+	if s.holder != nil {
+		if err := s.holder.Rebuild(s.cfg); err != nil {
+			log.Printf("[config] ASR 引擎热重载失败（配置已保存）: %v", err)
+		}
+	}
+	// 热重载润色引擎（失败仅记录，不阻断保存）。
+	if s.llmHolder != nil {
+		if err := s.llmHolder.Rebuild(s.cfg); err != nil {
+			log.Printf("[config] LLM 引擎热重载失败（配置已保存）: %v", err)
+		}
+	}
 	return &Result{Ok: true}, nil
 }
 
@@ -42,6 +63,9 @@ func providerToProto(p config.ASRProvider) *ProviderConfig {
 		AuthType:  p.AuthType,
 		ApiFormat: p.APIFormat,
 		NumCtx:    int32(p.NumCtx),
+		Type:      p.Type,
+		Language:  p.Language,
+		Stream:    p.Stream,
 	}
 }
 
@@ -54,6 +78,7 @@ func vlmProviderToProto(p config.VLMProvider) *ProviderConfig {
 		AuthType:  p.AuthType,
 		ApiFormat: p.APIFormat,
 		NumCtx:    int32(p.NumCtx),
+		Type:      p.Type,
 	}
 }
 
@@ -66,6 +91,7 @@ func llmProviderToProto(p config.LLMProvider) *ProviderConfig {
 		AuthType:  p.AuthType,
 		ApiFormat: p.APIFormat,
 		NumCtx:    int32(p.NumCtx),
+		Type:      p.Type,
 	}
 }
 
@@ -125,6 +151,10 @@ func protoToConfig(data *ConfigData) *config.Config {
 	if data.AsrProviders != nil {
 		cfg.ASR.Providers = make(map[string]config.ASRProvider)
 		for k, p := range data.AsrProviders {
+			ptype := p.Type
+			if ptype == "" {
+				ptype = "cloud" // 兼容旧配置（无 type 字段时默认云端）
+			}
 			cfg.ASR.Providers[k] = config.ASRProvider{
 				Name:      p.Name,
 				BaseURL:   p.BaseUrl,
@@ -133,6 +163,9 @@ func protoToConfig(data *ConfigData) *config.Config {
 				AuthType:  p.AuthType,
 				APIFormat: p.ApiFormat,
 				NumCtx:    int(p.NumCtx),
+				Type:      ptype,
+				Language:  p.Language,
+				Stream:    p.Stream,
 			}
 		}
 	}
@@ -143,6 +176,10 @@ func protoToConfig(data *ConfigData) *config.Config {
 	if data.VlmProviders != nil {
 		cfg.VLM.Providers = make(map[string]config.VLMProvider)
 		for k, p := range data.VlmProviders {
+			ptype := p.Type
+			if ptype == "" {
+				ptype = "cloud"
+			}
 			cfg.VLM.Providers[k] = config.VLMProvider{
 				Name:      p.Name,
 				BaseURL:   p.BaseUrl,
@@ -151,6 +188,7 @@ func protoToConfig(data *ConfigData) *config.Config {
 				AuthType:  p.AuthType,
 				APIFormat: p.ApiFormat,
 				NumCtx:    int(p.NumCtx),
+				Type:      ptype,
 			}
 		}
 	}
@@ -165,6 +203,10 @@ func protoToConfig(data *ConfigData) *config.Config {
 	if data.PolishProviders != nil {
 		cfg.LLM.Providers = make(map[string]config.LLMProvider)
 		for k, p := range data.PolishProviders {
+			ptype := p.Type
+			if ptype == "" {
+				ptype = "cloud"
+			}
 			cfg.LLM.Providers[k] = config.LLMProvider{
 				Name:      p.Name,
 				BaseURL:   p.BaseUrl,
@@ -173,6 +215,7 @@ func protoToConfig(data *ConfigData) *config.Config {
 				AuthType:  p.AuthType,
 				APIFormat: p.ApiFormat,
 				NumCtx:    int(p.NumCtx),
+				Type:      ptype,
 			}
 		}
 	}

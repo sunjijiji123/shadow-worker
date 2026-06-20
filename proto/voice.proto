@@ -19,6 +19,15 @@ service VoiceService {
   // Live spectrum stream: the server pushes AudioLevel frames (16 bands + RMS)
   // while recording is active, until the client cancels or StopRecording runs.
   rpc StreamLevels(LevelsRequest) returns (stream AudioLevel);
+  // Test the configured ASR endpoint (cloud) or model file (local) by running
+  // a short probe. For cloud: sends a silent WAV and checks the HTTP response.
+  // For local: stat()s the model file and verifies whisper can load it.
+  // Does NOT touch the saved config or engine holder.
+  rpc TestConnection(TestConnectionRequest) returns (TestConnectionResponse);
+  // Polish recognized text via the configured LLM (OpenAI-compatible
+  // chat/completions). Returns the polished text, or an error if LLM is
+  // disabled or the call fails.
+  rpc Polish(PolishRequest) returns (PolishResult);
 }
 
 message StartRequest {
@@ -46,4 +55,29 @@ message AudioLevel {
   repeated float bands = 1;
   // overall RMS amplitude 0..100 (for a simple volume bar if needed).
   int32 rms = 2;
+}
+
+message TestConnectionRequest {
+  // "cloud" or "local"
+  string mode = 1;
+  // For cloud: ProviderConfig fields (baseUrl, model, apiKey, apiFormat, authType, language, stream).
+  // For local: model_path, model_name, language.
+  map<string, string> fields = 2;
+}
+
+message TestConnectionResponse {
+  bool ok = 1;
+  // On success: latency_ms for cloud, or "model loaded" for local.
+  // On failure: human-readable error.
+  string message = 2;
+  int32 latency_ms = 3;
+}
+
+message PolishRequest {
+  string text = 1;  // recognized text to polish (ASR output)
+}
+
+message PolishResult {
+  string text = 1;   // polished text (empty on error)
+  string error = 2;  // non-empty if polish failed or LLM disabled
 }

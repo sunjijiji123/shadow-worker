@@ -26,10 +26,9 @@ Item {
     property string state: "hidden"
     property string transcript: ""
     property string result: ""
-    // 润色功能后端尚未实现（无 polish RPC / LLM 调用）。默认关闭，避免
-    // 识别完成后播放 1.8s 的假 loading 动画误导用户。
-    // 待接通真实润色后，改为读 settingsVm.llmEnabled。
-    property bool autoPolish: false
+    // 自动润色开关：读配置里的 LLM 启用状态。settingsVm 是全局 context property。
+    // 开启时，ASR 识别出文字后自动调 voiceClient.polish() 润色。
+    property bool autoPolish: settingsVm ? settingsVm.llmEnabled : false
     property bool resultPolishing: false
     // abandoned=true 表示用户点了 × 放弃，后续的 ASR 结果应被忽略
     property bool abandoned: false
@@ -101,7 +100,6 @@ Item {
     // close = ABANDON at any state: discard recording/partial result, just hide.
     // Distinct from stopRealRecording (which transcribes + polishes).
     function close() {
-        polishTimer.stop()
         finishTimer.stop()
         resultPolishing = false
         // stop backend capture (result is ignored on abandon)
@@ -118,10 +116,10 @@ Item {
                 break
             case "transcribing":
                 state = "polishing"
-                if (autoPolish) {
+                if (autoPolish && voiceClient && result.length > 0) {
                     result = demoResult
                     resultPolishing = true
-                    polishTimer.restart()
+                    voiceClient.polish(result)
                 }
                 break
             case "polishing":
@@ -180,16 +178,28 @@ Item {
         rmsLevel = 0
         // no timer here — the result arrives async via the gRPC stream
     }
-    // backend returned recognized text -> run polish (if auto) then done.
+    // backend returned recognized text -> 若开启自动润色则调 LLM，否则直接完成。
     function applyTranscription(text) {
         result = text
-        if (autoPolish) {
+        if (autoPolish && voiceClient) {
             state = "polishing"
             resultPolishing = true
-            polishTimer.restart()
+            voiceClient.polish(text)
         } else {
             state = "completed"
         }
+    }
+    // 润色结果回调（由 main.qml 的 onPolishReady 转发）。
+    // 成功：替换 result 为润色文字；失败：保留原文 + 提示。
+    function applyPolishResult(originalText, polishedText, error) {
+        if (error && error.length > 0) {
+            // 润色失败：保留原文，结果气泡仍显示 ASR 文字
+            result = originalText
+        } else {
+            result = polishedText
+        }
+        resultPolishing = false
+        state = "completed"
     }
     // backend reported an ASR error -> pill 显示红色叉叉 error 状态，
     // 结果气泡显示错误信息（不走 polish）。
@@ -198,27 +208,17 @@ Item {
         resultPolishing = false
         state = "error"
     }
-    // drives transcribing -> polishing -> completed
+    // finishTimer 保留用于 demo 流程（finishRecording）；真实录音不走它。
     Timer {
         id: finishTimer
         interval: 600
         repeat: false
         onTriggered: {
             state = "polishing"
-            if (autoPolish) {
+            if (autoPolish && voiceClient && result.length > 0) {
                 resultPolishing = true
-                polishTimer.restart()
+                voiceClient.polish(result)
             }
-        }
-    }
-
-    Timer {
-        id: polishTimer
-        interval: 1800
-        repeat: false
-        onTriggered: {
-            resultPolishing = false
-            state = "completed"
         }
     }
 
@@ -323,8 +323,15 @@ Item {
                 root.state = "idle"
             }
             onPolishRequested: {
+                // 手动润色：对当前 result 调 LLM
                 root.resultPolishing = true
-                polishTimer.restart()
+                root.state = "polishing"
+                if (voiceClient && root.result.length > 0) {
+                    voiceClient.polish(root.result)
+                } else {
+                    root.resultPolishing = false
+                    root.state = "completed"
+                }
             }
         }
     }

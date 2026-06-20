@@ -146,3 +146,35 @@ void VoiceClient::testConnection(const QString &mode, const QVariantMap &fields)
                      }
                    });
 }
+
+void VoiceClient::polish(const QString &text) {
+  if (!m_channel) {
+    emit polishReady(text, QString(), QStringLiteral("gRPC channel not initialized"));
+    return;
+  }
+  shadowworker::PolishRequest req;
+  req.setText(text);
+  QString orig = text;  // 捕获原文，回调里失败时回传给前端
+  auto reply = m_client.Polish(req);
+  auto *replyPtr = reply.get();
+  reply.release();
+  QObject::connect(replyPtr, &QGrpcCallReply::finished, this,
+                   [this, replyPtr, orig](const QGrpcStatus &status) {
+                     replyPtr->deleteLater();
+                     if (!status.isOk()) {
+                       emit polishReady(orig, QString(), status.message());
+                       return;
+                     }
+                     auto opt = replyPtr->read<shadowworker::PolishResult>();
+                     if (!opt.has_value()) {
+                       emit polishReady(orig, QString(), QStringLiteral("empty response"));
+                       return;
+                     }
+                     const auto &r = *opt;
+                     if (r.error().isEmpty()) {
+                       emit polishReady(orig, r.text(), QString());
+                     } else {
+                       emit polishReady(orig, QString(), r.error());
+                     }
+                   });
+}

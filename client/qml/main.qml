@@ -210,6 +210,9 @@ import ShadowWorker
             } else {
                 recordingWindow.asrModelName = settingsVm.asrActiveProvider || "cloud"
             }
+            // 润色模型名：未启用时留空（ResultBubble 显示 "(disabled)"）
+            recordingWindow.polishModelName = settingsVm.llmEnabled
+                ? (settingsVm.llmActiveProvider || "llm") : ""
         }
         recordingWindow.startRealRecording()
     }
@@ -240,6 +243,15 @@ import ShadowWorker
                 toast(qsTr("Connection failed: ") + error, "error")
             } else {
                 toast(qsTr("Connection OK: ") + message, "success")
+            }
+        }
+        // 润色结果：转给 RecordingWindow 更新 result。
+        // 用户已放弃则忽略（和 onResultReady 一致）。
+        function onPolishReady(originalText, polishedText, error) {
+            if (recordingWindow.abandoned) return
+            recordingWindow.applyPolishResult(originalText, polishedText, error)
+            if (error && error !== "") {
+                toast(qsTr("Polish failed: ") + error, "warning")
             }
         }
     }

@@ -106,19 +106,21 @@ Item {
         { key: "local",    label: "Local-ollama", type: "local", deletable: true }
     ]
 
-    // ---- Polish tab local state (will bind to viewModel later) ----
-    property bool polishEnabled: true
-    property string llmActiveModel: "deepseek"
+    // ---- Polish tab local state (synced from viewModel.llm*) ----
+    property bool polishEnabled: false
+    property string llmActiveModel: ""
     property string llmModelType: "cloud"  // cloud | local (from active chip)
     // LLM model list (mutable so chips can be removed at runtime)
-    property var llmModels: [
-        { key: "deepseek", label: "DeepSeek-LLM", type: "cloud", deletable: true },
-        { key: "xiaomi",   label: "Xiaomi-LLM-1", type: "cloud", deletable: true },
-        { key: "local",    label: "Local-ollama", type: "local", deletable: true }
-    ]
-    // polish prompt content. Default comes from the backend (default_prompt.txt)
-    // via viewModel at runtime; empty here so no Chinese literals live in code.
+    property var llmModels: []
+    // polish prompt content（从 viewModel.llmPrompt 同步，后端默认值见 default_prompt.txt）
     property string polishPrompt: ""
+    // LLM 云端字段暂存（仿 ASR 的 cloud* 字段，无 binding，显式赋值）
+    property string llmName: ""
+    property string llmBaseUrl: ""
+    property string llmModel: ""
+    property string llmApiKey: ""
+    property string llmApiFmt: "openai"
+    property string llmAuth: "bearer"
 
     // ---- Personal Prompts tab local state (will bind to viewModel later) ----
     property bool quickInjectEnabled: true
@@ -251,6 +253,11 @@ Item {
             viewModel.asrProvidersChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
             viewModel.asrLocalModelPathChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
             viewModel.asrLocalLanguageChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
+            // LLM/Polish 信号
+            viewModel.llmEnabledChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
+            viewModel.llmActiveProviderChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
+            viewModel.llmProvidersChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
+            viewModel.llmPromptChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
         }
         // seed from whatever the viewModel already holds (defaults until load).
         Qt.callLater(syncFromViewModel)
@@ -305,12 +312,52 @@ Item {
 
         // 灌入云端字段（无 binding，显式赋值）
         updateCloudFields()
+
+        // ---- LLM/Polish 同步（仿 ASR）----
+        polishEnabled = viewModel.llmEnabled || false
+        polishPrompt = viewModel.llmPrompt || ""
+        llmModels = providersToChips(viewModel.llmProviders || [])
+        llmActiveModel = viewModel.llmActiveProvider || ""
+        llmModelType = activeProviderType(llmActiveModel, "llm")
+        updateLlmFields()
     }
 
-    // 查找当前 active provider 的 type。
-    function activeProviderType(key) {
+    // 从 viewModel 读取当前 LLM provider 数据，灌入本地暂存 + UI 控件（仿 updateCloudFields）。
+    function updateLlmFields() {
+        if (!viewModel || !llmActiveModel) {
+            llmName = ""; llmBaseUrl = ""; llmModel = ""; llmApiKey = ""
+            llmApiFmt = "openai"; llmAuth = "bearer"
+        } else {
+            llmName = providerField(llmActiveModel, "name", "llm") || llmActiveModel
+            llmBaseUrl = providerField(llmActiveModel, "baseUrl", "llm")
+            llmModel = providerField(llmActiveModel, "model", "llm")
+            llmApiKey = providerField(llmActiveModel, "apiKey", "llm")
+            llmApiFmt = providerField(llmActiveModel, "apiFormat", "llm") || "openai"
+            llmAuth = providerField(llmActiveModel, "authType", "llm") || "bearer"
+        }
+        // 命令式更新 UI（无 binding）
+        if (llmNameField) llmNameField.text = llmName
+        if (llmBaseUrlField) llmBaseUrlField.text = llmBaseUrl
+        if (llmModelField) llmModelField.text = llmModel
+        if (llmKeyField) llmKeyField.text = llmApiKey
+        if (llmApiFormatBox) llmApiFormatBox.currentIndex = (llmApiFmt === "anthropic") ? 1 : 0
+        if (llmAuthBox) llmAuthBox.currentIndex = authToIndex(llmAuth)
+    }
+
+    // 把本地暂存的 LLM 云端字段 Write-Through 到 viewModel（保存前调用，仿 flushCloudFields）。
+    function flushLlmFields() {
+        if (!viewModel || !llmActiveModel) return
+        viewModel.updateProvider("llm", llmActiveModel, {
+            name: llmName, baseUrl: llmBaseUrl, model: llmModel,
+            apiKey: llmApiKey, apiFormat: llmApiFmt, authType: llmAuth
+        })
+    }
+
+    // 查找指定 category 下某个 provider key 的 type。
+    function activeProviderType(key, category) {
         if (!viewModel) return "cloud"
-        var providers = viewModel.asrProviders || []
+        var providers = (category === "llm") ? (viewModel.llmProviders || [])
+                    : (viewModel.asrProviders || [])
         for (var i = 0; i < providers.length; i++) {
             if (providers[i].key === key) return providers[i].type || "cloud"
         }
@@ -324,10 +371,11 @@ Item {
         return base.replace(/\.bin$/i, "")
     }
 
-    // 读取当前 active provider 的某个字段。
-    function providerField(key, field) {
+    // 读取指定 category 下某个 provider 的某个字段。
+    function providerField(key, field, category) {
         if (!viewModel) return ""
-        var providers = viewModel.asrProviders || []
+        var providers = (category === "llm") ? (viewModel.llmProviders || [])
+                    : (viewModel.asrProviders || [])
         for (var i = 0; i < providers.length; i++) {
             if (providers[i].key === key) return providers[i][field] || ""
         }
@@ -384,6 +432,11 @@ Item {
         viewModel.asrLocalModelPath = asrLocalModelPath
         viewModel.asrLocalModelName = deriveModelName(asrLocalModelPath)
         viewModel.asrLocalLanguage = asrLocalLanguage
+        // LLM/Polish 推送
+        viewModel.llmEnabled = polishEnabled
+        viewModel.llmPrompt = polishPrompt
+        viewModel.llmActiveProvider = llmActiveModel
+        flushLlmFields()
     }
 
     // 把本地暂存的云端字段 Write-Through 到 viewModel。
@@ -1419,8 +1472,8 @@ Item {
                         chips: llmModels
                         onChipClicked: function(key) {
                             llmActiveModel = key
-                            if (key === "local") llmModelType = "local"
-                            else llmModelType = "cloud"
+                            llmModelType = activeProviderType(key, "llm")
+                            updateLlmFields()
                         }
                         onChipClosed: function(key) {
                             requestDeleteModel("llmModels", key, "llmActiveModel", "llmModelType")
@@ -1429,7 +1482,10 @@ Item {
                             var win = ApplicationWindow.window
                             if (win && win.toast) win.toast(qsTr("At least one model must be kept"), "warning")
                         }
-                        onAddClicked: addModelDialog.open()
+                        onAddClicked: {
+                            addModelDialog.targetCategory = "llm"
+                            addModelDialog.open()
+                        }
                     }
 
                     Text {
@@ -1440,110 +1496,100 @@ Item {
                         Layout.fillWidth: true
                     }
 
-                    // ---- Cloud fields (visible when llmModelType === "cloud") ----
+                    // ---- Cloud fields（LLM 都是云端 HTTP 调用，含本地 ollama）----
+                    // 仿 ASR Card 2：无 text 绑定，用 onTextEdited 回写本地暂存 +
+                    // updateLlmFields() 命令式赋值（避免绑定冲突，AGENTS.md 坑 #2）。
                     GridLayout {
                         Layout.fillWidth: true
-                        visible: llmModelType === "cloud"
                         columns: 2
                         rowSpacing: 12
                         columnSpacing: 16
 
                         TextField {
-                            label: qsTr("Vendor Name")
-                            text: "DeepSeek"
-                            readOnly: true
+                            id: llmNameField
+                            label: qsTr("Display Name")
+                            onTextEdited: function(newText) { llmName = newText }
                             Layout.fillWidth: true
                         }
                         TextField {
+                            id: llmBaseUrlField
                             label: qsTr("Base URL")
-                            text: "https://api.deepseek.com/v1"
+                            onTextEdited: function(newText) { llmBaseUrl = newText }
                             Layout.fillWidth: true
                         }
                         TextField {
+                            id: llmModelField
                             label: qsTr("Model")
-                            text: "deepseek-chat"
+                            onTextEdited: function(newText) { llmModel = newText }
                             Layout.fillWidth: true
                         }
                         SelectBox {
+                            id: llmApiFormatBox
                             label: qsTr("API Format")
                             options: ["OpenAI", "Anthropic messages"]
+                            onSelected: function(index, value) { llmApiFmt = index === 1 ? "anthropic" : "openai" }
                             Layout.fillWidth: true
                         }
                         SelectBox {
+                            id: llmAuthBox
                             label: qsTr("Auth Method")
                             options: ["Bearer", "api-key header", qsTr("No auth")]
+                            onSelected: function(index, value) { llmAuth = indexToAuth(index) }
                             Layout.fillWidth: true
                         }
 
                         // API Key (span full width)
                         TextField {
+                            id: llmKeyField
                             label: qsTr("API Key")
-                            text: "sk-xxxxxxxx"
                             isPassword: true
+                            onTextEdited: function(newText) { llmApiKey = newText }
                             Layout.columnSpan: 2
                             Layout.fillWidth: true
                         }
                     }
 
-                    // ---- Local fields (visible when llmModelType === "local") ----
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        visible: llmModelType === "local"
-                        spacing: 12
-
-                        TextField {
-                            Layout.fillWidth: true
-                            label: qsTr("Ollama Server URL")
-                            text: "http://localhost:11434"
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 16
-
-                            TextField {
-                                Layout.fillWidth: true
-                                label: qsTr("Model")
-                                text: "qwen2.5"
+                    // test connection button（复用 voiceClient.testConnection，mode="llm"）
+                    Button {
+                        text: qsTr("Test Connection")
+                        kind: "primary"
+                        Layout.topMargin: 4
+                        onClicked: {
+                            if (!voiceClient) {
+                                var win0 = ApplicationWindow.window
+                                if (win0 && win0.toast) win0.toast(qsTr("voiceClient not available"), "error")
+                                return
                             }
-                            SelectBox {
-                                Layout.fillWidth: true
-                                label: qsTr("Auth Method")
-                                options: ["Bearer", qsTr("No auth")]
-                                currentIndex: 1
+                            if (!llmBaseUrl) {
+                                var win1 = ApplicationWindow.window
+                                if (win1 && win1.toast) win1.toast(qsTr("No base URL filled"), "error")
+                            } else {
+                                voiceClient.testConnection("llm", {
+                                    baseUrl: llmBaseUrl,
+                                    model: llmModel,
+                                    apiKey: llmApiKey,
+                                    authType: llmAuth
+                                })
                             }
-                        }
-                    }
-
-                    // test connection button
-                    Row {
-                        spacing: 8
-                        Button {
-                            text: qsTr("Test Connection")
-                            kind: "primary"
-                        }
-                        Text {
-                            text: qsTr("98 ms latency")
-                            color: Theme.muted
-                            font.pixelSize: 12
-                            anchors.verticalCenter: parent.verticalCenter
                         }
                     }
                 }
             }
 
             // ---- Card 3: Polish Prompt ----
-            // HTML: title + desc + .textarea (min-height 80px, resize vertical)
+            // 提示词从 viewModel.llmPrompt 同步（含后端默认 default_prompt.txt），
+            // onTextEdited 回写 polishPrompt，保存时 pushToViewModel 推回。
             Card {
                 Layout.fillWidth: true
                 visible: activeTab === "polish"
                 title: qsTr("Polish Prompt")
-                description: qsTr("System default prompt + your custom content. Saved to the Go-managed config.yaml.")
+                description: qsTr("System prompt used to polish ASR results. Defaults to the built-in prompt; edit to customize.")
 
                 TextArea {
                     Layout.fillWidth: true
                     text: polishPrompt
                     placeholder: qsTr("Enter the system prompt used to polish ASR results...")
+                    onTextEdited: function(newText) { polishPrompt = newText }
                 }
             }
             // ================================================================
@@ -1763,7 +1809,10 @@ Item {
             var displayName = name || customName || rawKey
 
             // 如果 key 已存在，追加数字后缀（防覆盖已有 provider）
-            var provs = viewModel.asrProviders || []
+            // 按 category 取对应的 provider 列表去重
+            var provs = (cat === "llm") ? (viewModel.llmProviders || [])
+                      : (cat === "vlm") ? (viewModel.vlmProviders || [])
+                      : (viewModel.asrProviders || [])
             var suffix = 1
             var baseKey = key
             while (true) {
