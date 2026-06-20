@@ -91,7 +91,11 @@ ColumnLayout {
                 color: Theme.ink
                 placeholderTextColor: Theme.muted
                 font.pixelSize: 13
-                wrapMode: TextArea.Wrap
+                // 用 TextEdit.Wrap 而非 TextArea.Wrap：本文件自定义组件也叫
+                // TextArea，会遮蔽 QtQuick.Controls 的 TextArea 类型，导致
+                // TextArea.Wrap 解析为 undefined（QML warning + 不换行）。
+                // TextEdit 是 QtQuick 内置类型，没被遮蔽，枚举值可靠。
+                wrapMode: TextEdit.Wrap
                 selectByMouse: true
                 // flat look: no background (the parent Rectangle is the bg)
                 background: null

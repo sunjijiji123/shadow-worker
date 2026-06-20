@@ -27,8 +27,9 @@ Rectangle {
     // state: "listening" | "transcribing" | "polishing" | "completed"
     property string state: "listening"
     property string transcript: ""
-    // idle(Ready) 也显示装饰性波形，和 listening 无音频输入时一样的脉动效果
-    property bool showWave: state === "listening" || state === "transcribing" || state === "idle"
+    // idle(Ready) 也显示装饰性波形，和 listening 无音频输入时一样的脉动效果。
+    // transcribing 不显示波形——改用转圈 loading（见 transcribing spinner）。
+    property bool showWave: state === "listening" || state === "idle"
     // live 16-band spectrum from the backend (array of floats [0..1]).
     // When non-empty, the 7 visible bars are driven by mapped bands; otherwise
     // a decorative staggered animation plays (idle / no capture).
@@ -148,6 +149,41 @@ Rectangle {
                         }
                     }
 
+                    // transcribing spinner: 转写期间的转圈 loading（accent 色，
+                    // 24px ring 缺口，0.8s 一圈）。借鉴 ResultBubble 的 polishing
+                    // overlay spinner 样式。
+                    Item {
+                        id: transcribingSpinner
+                        width: 24; height: 24
+                        anchors.centerIn: parent
+                        visible: root.state === "transcribing"
+
+                        RotationAnimation on rotation {
+                            running: transcribingSpinner.visible
+                            loops: Animation.Infinite
+                            from: 0; to: 360; duration: 800
+                        }
+
+                        Canvas {
+                            anchors.fill: parent
+                            onPaint: {
+                                var ctx = getContext("2d")
+                                ctx.reset()
+                                // 底圈：暗色完整圆（中心 12,12，半径 9）
+                                ctx.strokeStyle = Theme.rule
+                                ctx.lineWidth = 2.5
+                                ctx.beginPath()
+                                ctx.arc(12, 12, 9, 0, 2 * Math.PI)
+                                ctx.stroke()
+                                // 上层：accent 色 1/4 弧（缺口），随父 Item 旋转
+                                ctx.strokeStyle = Theme.accent
+                                ctx.beginPath()
+                                ctx.arc(12, 12, 9, 0, 0.5 * Math.PI)
+                                ctx.stroke()
+                            }
+                        }
+                    }
+
                     // polish-dots: 3 blue bouncing dots (polishing state only).
                     // The dot Rectangle has NO anchors so its y can be animated.
                     Row {
@@ -184,25 +220,42 @@ Rectangle {
                         }
                     }
 
-                    // completed check icon (green, completed state only)
+                    // completed check icon (accent, 识别成功)
                     Canvas {
                         id: checkIcon
                         anchors.centerIn: parent
-                        width: 18; height: 18
+                        width: 24; height: 24
                         visible: root.state === "completed"
                         onPaint: {
                             var ctx = getContext("2d")
                             ctx.reset()
                             ctx.strokeStyle = Theme.accent
-                            ctx.lineWidth = 2.5
+                            ctx.lineWidth = 3
                             ctx.lineCap = "round"
                             ctx.lineJoin = "round"
                             ctx.beginPath()
-                            // polyline points="20 6 9 17 4 12" scaled to 18x18
-                            ctx.moveTo(15, 4.5)
-                            ctx.lineTo(6.75, 12.75)
-                            ctx.lineTo(3, 9)
+                            // 对勾，缩放到 24x24（原 18x18 的 ×4/3）
+                            ctx.moveTo(20, 6)
+                            ctx.lineTo(9, 17)
+                            ctx.lineTo(4, 12)
                             ctx.stroke()
+                        }
+                    }
+
+                    // error icon (danger/red, 识别失败)
+                    Canvas {
+                        id: errorIcon
+                        anchors.centerIn: parent
+                        width: 24; height: 24
+                        visible: root.state === "error"
+                        onPaint: {
+                            var ctx = getContext("2d")
+                            ctx.reset()
+                            ctx.strokeStyle = Theme.danger
+                            ctx.lineWidth = 3
+                            ctx.lineCap = "round"
+                            ctx.beginPath(); ctx.moveTo(7, 7); ctx.lineTo(17, 17); ctx.stroke()
+                            ctx.beginPath(); ctx.moveTo(17, 7); ctx.lineTo(7, 17); ctx.stroke()
                         }
                     }
                 }
@@ -217,11 +270,16 @@ Rectangle {
                     Text {
                         id: staticText
                         anchors.centerIn: parent
-                        visible: root.state !== "transcribing"
+                        // transcribing 也用 staticText 显示"正在识别"（cloud ASR
+                        // 一次性返回结果，不是流式，所以转写期间 transcript 为空，
+                        // 滚动文字没意义，改用静态 loading 提示）。
+                        visible: root.state !== "transcribing" || root.transcript === ""
                         text: {
                             if (root.state === "idle") return qsTr("Ready")
+                            if (root.state === "transcribing") return qsTr("Recognizing...")
                             if (root.state === "polishing") return qsTr("Polishing")
                             if (root.state === "completed") return qsTr("Done")
+                            if (root.state === "error") return qsTr("Failed")
                             return qsTr("Listening...")
                         }
                         color: Theme.ink
@@ -230,7 +288,9 @@ Rectangle {
 
                     Text {
                         id: scrollText
-                        visible: root.state === "transcribing"
+                        // 仅在转写且有流式 transcript 时滚动显示（当前 cloud ASR
+                        // 一次性返回，transcript 为空，走 staticText 的"正在识别"）。
+                        visible: root.state === "transcribing" && root.transcript !== ""
                         anchors.verticalCenter: parent.verticalCenter
                         x: parent.width
                         text: root.transcript

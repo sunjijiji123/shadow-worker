@@ -174,6 +174,10 @@ Item {
         result = ""
         resultPolishing = false
         state = "transcribing"
+        // 清空频谱数据：转写期间不再有 live 数据，清空后波形回退到装饰性
+        // 脉动动画（waveAnim），避免冻结在最后一帧的画面上。
+        bands = []
+        rmsLevel = 0
         // no timer here — the result arrives async via the gRPC stream
     }
     // backend returned recognized text -> run polish (if auto) then done.
@@ -187,11 +191,12 @@ Item {
             state = "completed"
         }
     }
-    // backend reported an ASR error -> show it in the result bubble, no polish.
+    // backend reported an ASR error -> pill 显示红色叉叉 error 状态，
+    // 结果气泡显示错误信息（不走 polish）。
     function applyTranscriptionError(errorMsg) {
         result = qsTr("Transcription failed: %1").arg(errorMsg)
         resultPolishing = false
-        state = "completed"
+        state = "error"
     }
     // drives transcribing -> polishing -> completed
     Timer {
