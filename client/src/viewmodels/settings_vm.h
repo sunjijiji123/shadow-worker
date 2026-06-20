@@ -30,6 +30,9 @@ class SettingsViewModel : public QObject {
                  setAsrLocalModelName NOTIFY asrLocalModelNameChanged)
   Q_PROPERTY(QString asrLocalLanguage READ asrLocalLanguage WRITE
                  setAsrLocalLanguage NOTIFY asrLocalLanguageChanged)
+  // recording trigger mode: hold | press
+  Q_PROPERTY(QString recordMode READ recordMode WRITE setRecordMode NOTIFY
+                 recordModeChanged)
 
   // VLM
   Q_PROPERTY(
@@ -89,6 +92,8 @@ public:
   void setAsrLocalModelName(const QString &v);
   QString asrLocalLanguage() const { return m_asrLocalLanguage; }
   void setAsrLocalLanguage(const QString &v);
+  QString recordMode() const { return m_recordMode; }
+  void setRecordMode(const QString &v);
 
   // VLM
   QString vlmMode() const { return m_vlmMode; }
@@ -146,6 +151,7 @@ signals:
   void asrLocalModelPathChanged();
   void asrLocalModelNameChanged();
   void asrLocalLanguageChanged();
+  void recordModeChanged();
 
   void vlmModeChanged();
   void vlmActiveProviderChanged();
@@ -189,6 +195,7 @@ private:
   QString m_asrLocalModelPath;
   QString m_asrLocalModelName;
   QString m_asrLocalLanguage;
+  QString m_recordMode = "hold";
 
   QString m_vlmMode;
   QString m_vlmActiveProvider;

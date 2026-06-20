@@ -56,6 +56,13 @@ void SettingsViewModel::setAsrLocalLanguage(const QString &v) {
   emit asrLocalLanguageChanged();
 }
 
+void SettingsViewModel::setRecordMode(const QString &v) {
+  if (m_recordMode == v)
+    return;
+  m_recordMode = v;
+  emit recordModeChanged();
+}
+
 // VLM setters
 void SettingsViewModel::setVlmMode(const QString &v) {
   if (m_vlmMode == v)
@@ -366,6 +373,7 @@ void SettingsViewModel::applyConfig(const ConfigData &data) {
   setAsrLocalModelPath(data.asrLocalModelPath());
   setAsrLocalModelName(data.asrLocalModelName());
   setAsrLocalLanguage(data.asrLocalLanguage());
+  setRecordMode(data.asrRecordMode());
 
   QVariantList asrList;
   const auto asrMap = data.asrProviders();
@@ -413,6 +421,7 @@ ConfigData SettingsViewModel::buildConfig() const {
   data.setAsrLocalModelPath(m_asrLocalModelPath);
   data.setAsrLocalModelName(m_asrLocalModelName);
   data.setAsrLocalLanguage(m_asrLocalLanguage);
+  data.setAsrRecordMode(m_recordMode);
   data.setAsrProviders(providersFromList(m_asrProviders));
 
   data.setVlmMode(m_vlmMode);

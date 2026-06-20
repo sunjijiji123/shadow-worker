@@ -88,9 +88,8 @@ Rectangle {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
         hoverEnabled: true
-        onClicked: {
-            root.testing = !root.testing
-            root.clicked()
-        }
+        onClicked: root.clicked()
+        // NOTE: testing state is driven externally (bound to audioRecorder.recording)
+        // so we don't toggle it here — a controlled component.
     }
 }

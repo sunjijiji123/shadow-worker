@@ -26,6 +26,7 @@ message ConfigData {
   string asr_local_model_path = 23;
   string asr_local_model_name = 24;
   string asr_local_language = 25;
+  string asr_record_mode = 26;      // hold | press (recording trigger mode)
 
   // Polish
   bool polish_enabled = 4;

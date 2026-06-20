@@ -77,6 +77,7 @@ func configToProto(cfg *config.Config) *ConfigData {
 		AsrLocalModelPath:     cfg.ASR.Local.ModelPath,
 		AsrLocalModelName:     cfg.ASR.Local.ModelName,
 		AsrLocalLanguage:      cfg.ASR.Local.Language,
+		AsrRecordMode:         cfg.ASR.RecordMode,
 		PolishEnabled:         cfg.LLM.Enabled == "on",
 		PolishActiveProvider:  cfg.LLM.ActiveProvider,
 		PolishProviders:       make(map[string]*ProviderConfig),
@@ -120,6 +121,7 @@ func protoToConfig(data *ConfigData) *config.Config {
 	cfg.ASR.Local.ModelPath = data.AsrLocalModelPath
 	cfg.ASR.Local.ModelName = data.AsrLocalModelName
 	cfg.ASR.Local.Language = data.AsrLocalLanguage
+	cfg.ASR.RecordMode = data.AsrRecordMode
 	if data.AsrProviders != nil {
 		cfg.ASR.Providers = make(map[string]config.ASRProvider)
 		for k, p := range data.AsrProviders {

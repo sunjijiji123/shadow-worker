@@ -15,47 +15,17 @@ Item {
     property string catFilter: "all"
     property string evFilter: "all"
 
-    // TEMP fake data (replace with viewModel when backend ready).
-    // startTs/endTs are real unix seconds for TODAY so the timeline track
-    // (which uses secOfDay(ts)) positions the color blocks correctly.
-    function fakeSegments() {
-        var today = new Date()
-        var y = today.getFullYear(), mo = today.getMonth(), d = today.getDate()
-        function ts(h, m) {
-            return Math.floor(new Date(y, mo, d, h, m).getTime() / 1000)
-        }
-        var data = [
-            {startTime:"09:00", endTime:"09:42", startTs:ts(9,0),  endTs:ts(9,42), appName:"", appIcon:"", category:"idle", state:"idle", durationMin:0, summary:""},
-            {startTime:"09:00", endTime:"09:42", startTs:ts(9,0),  endTs:ts(9,42), appName:"Cursor", appIcon:"Cr", category:"coding", durationMin:42, summary:"VLM: refactoring ASR module, editing cloud.go for Whisper interface"},
-            {startTime:"09:42", endTime:"10:15", startTs:ts(9,42), endTs:ts(10,15),appName:"Cursor", appIcon:"Cr", category:"coding", durationMin:33, summary:"VLM: writing shadow-worker config module config.go"},
-            {startTime:"10:15", endTime:"10:48", startTs:ts(10,15),endTs:ts(10,48),appName:"Chrome", appIcon:"Ch", category:"browser", durationMin:33, summary:"VLM: reading MCP protocol docs and go-sdk examples"},
-            {startTime:"10:48", endTime:"11:03", startTs:ts(10,48),endTs:ts(11,3), appName:"WeChat", appIcon:"We", category:"chat", durationMin:15, summary:"VLM: discussing API design with colleague"},
-            {startTime:"11:03", endTime:"11:28", startTs:ts(11,3), endTs:ts(11,28),appName:"Cursor", appIcon:"Cr", category:"coding", durationMin:25, summary:"VLM: refactoring ASR engine, splitting asr engine"},
-            {startTime:"11:28", endTime:"12:00", startTs:ts(11,28),endTs:ts(12,0), appName:"Word", appIcon:"Wd", category:"office", durationMin:32, summary:"VLM: writing requirements doc and meeting notes"},
-            {startTime:"12:00", endTime:"13:30", startTs:ts(12,0), endTs:ts(13,30),appName:"", appIcon:"", category:"idle", state:"idle", durationMin:0, summary:""},
-            {startTime:"13:30", endTime:"14:10", startTs:ts(13,30),endTs:ts(14,10),appName:"Chrome", appIcon:"Ch", category:"browser", durationMin:40, summary:"VLM: searching SQLite optimization and index strategies"},
-            {startTime:"14:10", endTime:"15:30", startTs:ts(14,10),endTs:ts(15,30),appName:"Cursor", appIcon:"Cr", category:"coding", durationMin:80, summary:"VLM: implementing activity_segments storage and query"},
-            {startTime:"15:30", endTime:"15:50", startTs:ts(15,30),endTs:ts(15,50),appName:"WeChat", appIcon:"We", category:"chat", durationMin:20, summary:"VLM: replying work messages, confirming schedule"},
-            {startTime:"15:50", endTime:"17:00", startTs:ts(15,50),endTs:ts(17,0), appName:"Cursor", appIcon:"Cr", category:"coding", durationMin:70, summary:"VLM: writing gRPC interface and protobuf definitions"},
-            {startTime:"17:00", endTime:"18:00", startTs:ts(17,0), endTs:ts(18,0), appName:"", appIcon:"", category:"idle", state:"idle", durationMin:0, summary:""}
-        ]
-        return data
+    // segments/events come from the viewModel (backend). Empty until data is
+    // collected; the UI shows an empty-state hint in that case.
+    function allSegments() {
+        return viewModel && viewModel.segments ? viewModel.segments : []
     }
-    function fakeEvents() {
-        return [
-            {time:"09:12", type:"voice", text:"help me refactor this code"},
-            {time:"10:05", type:"prompt_inject", text:"organize into meeting notes"},
-            {time:"11:28", type:"screenshot", text:"VLM understanding current screen"},
-            {time:"11:35", type:"vlm_summary", text:"editing config.go"},
-            {time:"14:10", type:"voice", text:"send this to xiaoming directly"},
-            {time:"14:30", type:"prompt_inject", text:"translate to english"},
-            {time:"15:45", type:"screenshot", text:"recording current UI state"},
-            {time:"16:20", type:"voice", text:"generate unit tests"}
-        ]
+    function allEvents() {
+        return viewModel && viewModel.events ? viewModel.events : []
     }
 
     function filteredSegments() {
-        var segs = fakeSegments()
+        var segs = allSegments()
         if (catFilter === "all") return segs
         var out = []
         for (var i = 0; i < segs.length; i++) {
@@ -64,7 +34,7 @@ Item {
         return out
     }
     function filteredEvents() {
-        var evs = fakeEvents()
+        var evs = allEvents()
         if (evFilter === "all") return evs
         var out = []
         for (var j = 0; j < evs.length; j++) {
@@ -158,7 +128,22 @@ Item {
                         font.weight: Font.DemiBold
                     }
                     Text {
-                        text: qsTr("Work 3h 20m  ·  10 active segments")
+                        // total active (non-idle) minutes + segment count
+                        text: {
+                            var segs = root.allSegments()
+                            var mins = 0
+                            var count = 0
+                            for (var i = 0; i < segs.length; i++) {
+                                if (segs[i].category !== "idle") {
+                                    mins += segs[i].durationMin || 0
+                                    count++
+                                }
+                            }
+                            var h = Math.floor(mins / 60)
+                            var m = mins % 60
+                            return qsTr("Work %1h %2m  ·  %3 active segments")
+                                   .arg(h).arg(m).arg(count)
+                        }
                         color: Theme.muted
                         font.pixelSize: 12
                     }
@@ -167,7 +152,7 @@ Item {
                 // timeline track
                 TimelineTrack {
                     Layout.fillWidth: true
-                    segments: fakeSegments()
+                    segments: filteredSegments()
                 }
 
                 // legend
@@ -341,6 +326,15 @@ Item {
                                         }
                                     }
                                 }
+                            // empty-state hint when there are no segments
+                            Text {
+                                Layout.fillWidth: true
+                                Layout.topMargin: 24
+                                visible: root.filteredSegments().length === 0
+                                text: qsTr("No activity recorded for this day yet.")
+                                color: Theme.muted
+                                font.pixelSize: 13
+                                horizontalAlignment: Text.AlignHCenter
                             }
                     }
 
@@ -408,10 +402,21 @@ Item {
                                         }
                                     }
                                 }
+                            // empty-state hint when there are no events
+                            Text {
+                                Layout.fillWidth: true
+                                Layout.topMargin: 24
+                                visible: root.filteredEvents().length === 0
+                                text: qsTr("No events recorded for this day yet.")
+                                color: Theme.muted
+                                font.pixelSize: 13
+                                horizontalAlignment: Text.AlignHCenter
                             }
+                        }
                     }
                 }
             }
         }
+    }
     }
 }

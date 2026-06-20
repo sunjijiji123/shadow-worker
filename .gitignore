@@ -17,6 +17,7 @@ backend/shadow-worker.exe
 backend/shadow-worker
 backend/data.db
 backend/data.db-*
+build/
 client/build/
 client/build-*/
 bin/
@@ -65,3 +66,7 @@ backend/server_err.log
 
 # Third-party tooling
 tools/
+
+# whisper.cpp source (kept for readability) — ignore build output & its own git metadata
+backend/third_party/**/.git/
+backend/third_party/**/build/

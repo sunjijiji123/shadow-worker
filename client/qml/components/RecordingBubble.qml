@@ -28,6 +28,27 @@ Rectangle {
     property string state: "listening"
     property string transcript: ""
     property bool showWave: state === "listening" || state === "transcribing"
+    // live 16-band spectrum from the backend (array of floats [0..1]).
+    // When non-empty, the 7 visible bars are driven by mapped bands; otherwise
+    // a decorative staggered animation plays (idle / no capture).
+    property var bands: []
+    // true when we have live spectrum data to render
+    readonly property bool hasLive: bands !== undefined && bands.length >= 16
+
+    // Map the 16 backend bands down to the 7 visible bars: pick 7 evenly
+    // spaced bands and scale each to a 0..1 weight. The backend already applies
+    // a bell-ish shape via FFT + normalization, so we just subsample.
+    readonly property var liveWeights: {
+        if (!hasLive) return [0,0,0,0,0,0,0]
+        var out = []
+        // sample 7 of the 16 bands (indices 2..14, step ~2)
+        var idx = [2, 4, 6, 8, 10, 12, 14]
+        for (var i = 0; i < 7; i++) {
+            var v = bands[idx[i]] || 0
+            out.push(Math.max(0, Math.min(1, v)))
+        }
+        return out
+    }
 
     signal closeRequested()
 
@@ -82,23 +103,40 @@ Rectangle {
                                 width: 4
                                 height: 24
                                 Rectangle {
+                                    id: waveBar
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: 4
                                     radius: 2
                                     color: Theme.accent
-                                    // CSS @keyframes wave: scaleY 0.4 -> 1 -> 0.4,
-                                    // 1s ease-in-out, staggered 0.1s per bar.
-                                    // We map scaleY 0.4..1 to height 8..22.
-                                    SequentialAnimation on height {
+
+                                    // LIVE spectrum: bar height follows the mapped band
+                                    // weight (0..1) from the backend FFT. Each bar already
+                                    // has independent frequency energy, so no jitter needed.
+                                    // Map weight 0..1 -> height 3..22px.
+                                    readonly property int liveHeight:
+                                        Math.max(3, Math.min(22, Math.round(3 + (root.liveWeights[index] || 0) * 19)))
+                                    // DECORATIVE (no live data): staggered pulse so the
+                                    // wave isn't dead when idle.
+                                    readonly property real idleHeight: waveAnim.running ? waveAnim.currentHeight : 6
+                                    height: root.hasLive ? liveHeight : idleHeight
+
+                                    property real currentHeight: 8
+                                    SequentialAnimation {
+                                        id: waveAnim
+                                        running: root.showWave && !root.hasLive
                                         loops: Animation.Infinite
                                         PauseAnimation { duration: index * 100 }
                                         NumberAnimation {
+                                            target: waveBar
+                                            property: "currentHeight"
                                             from: 8; to: 22
                                             duration: 500
                                             easing.type: Easing.InOutQuad
                                         }
                                         NumberAnimation {
+                                            target: waveBar
+                                            property: "currentHeight"
                                             from: 22; to: 8
                                             duration: 500
                                             easing.type: Easing.InOutQuad

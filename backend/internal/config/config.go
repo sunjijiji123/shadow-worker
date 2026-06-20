@@ -48,6 +48,7 @@ type ASRConfig struct {
 	ActiveProvider string                 `yaml:"active_provider"`
 	Providers      map[string]ASRProvider `yaml:"providers"`
 	Local          LocalASRConfig         `yaml:"local"`
+	RecordMode     string                 `yaml:"record_mode"` // hold | press (recording trigger)
 }
 
 // VLMProvider 是单个 VLM 供应商配置。
@@ -134,6 +135,7 @@ func Default() *Config {
 				ModelName: "tiny",
 				Language:  "zh",
 			},
+			RecordMode: "hold",
 		},
 		VLM: VLMConfig{
 			Mode:                "off",

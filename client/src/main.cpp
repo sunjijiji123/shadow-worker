@@ -1,16 +1,18 @@
 // Shadow Worker Qt 客户端入口。
 
 #include <QAbstractGrpcChannel>
+#include <QApplication>
 #include <QGrpcHttp2Channel>
-#include <QGuiApplication>
 #include <QLoggingCategory>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
 
 #include "asr/asrclient.h"
+#include "asr/voiceclient.h"
 #include "audio/audiorecorder.h"
 #include "hotkey/globalhotkey.h"
+#include "ui/traycontroller.h"
 #include "utils/autostart.h"
 #include "viewmodels/overview_vm.h"
 #include "viewmodels/settings_vm.h"
@@ -18,6 +20,7 @@
 #include "viewmodels/whitelist_vm.h"
 #include "window/windowpicker.h"
 #include "window/windowhelper.h"
+#include "audio/audiodevicemanager.h"
 
 #include <fstream>
 #include <iostream>
@@ -43,12 +46,15 @@ int main(int argc, char *argv[]) {
     QGuiApplication::setHighDpiScaleFactorRoundingPolicy(
         Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
 
-    logMsg("[main] before QGuiApplication");
-    QGuiApplication app(argc, argv);
-    logMsg("[main] after QGuiApplication");
+    logMsg("[main] before QApplication");
+    QApplication app(argc, argv);
+    logMsg("[main] after QApplication");
 
-    QGuiApplication::setApplicationName("Shadow Worker");
-    QGuiApplication::setOrganizationName("ShadowWorker");
+    QApplication::setApplicationName("Shadow Worker");
+    QApplication::setOrganizationName("ShadowWorker");
+    // Keep the process alive when the main window is hidden to the tray.
+    // Quit only happens via the tray menu's Quit item.
+    QApplication::setQuitOnLastWindowClosed(false);
 
     QLoggingCategory::setFilterRules(
         "qt.qml.binding.removal.warning=true\nqml=true");
@@ -72,8 +78,12 @@ int main(int argc, char *argv[]) {
     WindowPicker picker;
     WindowHelper windowHelper;
     AudioRecorder audioRecorder;
+    AudioDeviceManager audioDeviceManager;
     GlobalHotkey globalHotkey;
     AsrClient asrClient;
+    VoiceClient voiceClient;
+    voiceClient.setChannel(channel);
+    TrayController trayController;
 
     logMsg("[main] creating engine");
     QQmlApplicationEngine engine;
@@ -88,8 +98,15 @@ int main(int argc, char *argv[]) {
     engine.rootContext()->setContextProperty("windowPicker", &picker);
     engine.rootContext()->setContextProperty("windowHelper", &windowHelper);
     engine.rootContext()->setContextProperty("audioRecorder", &audioRecorder);
+    engine.rootContext()->setContextProperty("audioDeviceManager", &audioDeviceManager);
     engine.rootContext()->setContextProperty("globalHotkey", &globalHotkey);
     engine.rootContext()->setContextProperty("asrClient", &asrClient);
+    engine.rootContext()->setContextProperty("voiceClient", &voiceClient);
+    engine.rootContext()->setContextProperty("trayController", &trayController);
+
+    // Tray "Quit" -> actually quit the app (C++-level guarantee).
+    QObject::connect(&trayController, &TrayController::quitRequested, &app,
+                     &QApplication::quit);
 
     const QUrl url(u"qrc:/qt/qml/ShadowWorker/qml/main.qml"_qs);
     QObject::connect(

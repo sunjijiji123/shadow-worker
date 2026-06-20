@@ -231,7 +231,9 @@ Item {
                 HeatmapGrid {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 133
-                    model: root.fakeHeatmap()  // TEMP fake data; replace with viewModel.heatmap
+                    // real heatmap data from the backend (GetHeatmap RPC).
+                    // Empty until data is collected.
+                    model: viewModel && viewModel.heatmap ? viewModel.heatmap : []
                 }
             }
 
@@ -343,25 +345,6 @@ Item {
         // (no fillHeight spacer - Flickable handles overflow)
         }
     } // Flickable
-
-    // TEMP: fake heatmap data for visual verification (remove before commit)
-    function fakeHeatmap() {
-        var out = []
-        var today = new Date()
-        for (var i = 0; i < 150; i++) {
-            var d = new Date(today)
-            d.setDate(today.getDate() - i)
-            var iso = d.getFullYear() + "-" + ("0"+(d.getMonth()+1)).slice(-2) + "-" + ("0"+d.getDate()).slice(-2)
-            var wd = d.getDay()
-            var weekend = (wd === 0 || wd === 6)
-            if (Math.random() < (weekend ? 0.4 : 0.85)) {
-                var mins = weekend ? Math.floor(30 + Math.random()*90) : Math.floor(120 + Math.random()*300)
-                var lvl = mins < 60 ? 1 : mins < 180 ? 2 : mins < 300 ? 3 : mins < 420 ? 4 : 5
-                out.push({ date: iso, minutes: mins, level: lvl })
-            }
-        }
-        return out
-    }
 
     // ---- helpers ----
     // toast wrapper: walk up to find ApplicationWindow.toast (defined in main.qml)

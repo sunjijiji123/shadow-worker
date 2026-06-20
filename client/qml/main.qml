@@ -8,7 +8,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import ShadowWorker
 
-ApplicationWindow {
+    ApplicationWindow {
     id: mainWindow
     visible: true
     width: 1200
@@ -19,6 +19,36 @@ ApplicationWindow {
     minimumHeight: 720
     maximumHeight: 720
     title: qsTr("Shadow Worker")
+
+    // Close button (X) -> hide to tray, NOT quit. The app stays alive with the
+    // tray icon present (QApplication::setQuitOnLastWindowClosed(false)).
+    // Real exit only via the tray menu's Quit item.
+    onClosing: function(close) {
+        close.accepted = false
+        mainWindow.hide()
+    }
+
+    // tray menu / icon click handlers
+    Connections {
+        target: trayController
+        function onShowMainRequested() {
+            mainWindow.show()
+            mainWindow.raise()
+            mainWindow.requestActivate()
+        }
+        function onSettingsRequested() {
+            currentView = "settings"
+            mainWindow.show()
+            mainWindow.raise()
+            mainWindow.requestActivate()
+        }
+        // onQuitRequested handled in C++ (-> QApplication::quit), but we also
+        // tear down any recording here for cleanliness.
+        function onQuitRequested() {
+            if (audioRecorder && audioRecorder.recording)
+                audioRecorder.stopRecording()
+        }
+    }
     color: Theme.bg2
 
     property string currentView: "overview"
@@ -163,8 +193,52 @@ ApplicationWindow {
         id: recordingWindow
     }
 
-    // ---- temporary demo trigger (cycle states) ----
-    // TODO: replace with a global hotkey once audio capture is wired.
+    // ---- real recording flow driven by the global hotkey (or demo button) ----
+    // globalHotkey.activatedWithName fires when the registered OS hotkey is
+    // pressed. We start a REAL capture (not the demo state machine) and show
+    // the recording window with its wave driven by live mic level.
+    // ---- real recording flow: backend captures audio (waveIn), streams
+    // 16-band FFT levels to us for the spectrum, and runs ASR on stop. ----
+    function startRealRecording() {
+        // backend opens the mic; the device id is read from QSettings by the
+        // backend (we pass empty = default for now; device routing TBD).
+        voiceClient.start("")
+        recordingWindow.startRealRecording()
+    }
+    function stopRealRecording() {
+        // backend stops capture + runs ASR; result arrives via onResultReady
+        recordingWindow.startTranscribing()
+        voiceClient.stop()
+    }
+
+    // live spectrum frames from the backend -> recording window
+    Connections {
+        target: voiceClient
+        function onLevelsReady(bands, rms) {
+            recordingWindow.setBands(bands, rms)
+        }
+        function onResultReady(text, error) {
+            if (error && error !== "") {
+                recordingWindow.applyTranscriptionError(error)
+            } else {
+                recordingWindow.applyTranscription(text)
+            }
+        }
+    }
+
+    Connections {
+        target: globalHotkey
+        function onActivatedWithName(name) {
+            if (name === "record") {
+                if (recordingWindow.state === "hidden")
+                    startRealRecording()
+                else
+                    stopRealRecording()   // toggle off
+            }
+        }
+    }
+
+    // ---- demo trigger button (now drives the real flow too) ----
     Rectangle {
         parent: mainWindow.contentItem
         anchors.bottom: mainWindow.contentItem.bottom
@@ -183,7 +257,7 @@ ApplicationWindow {
             id: demoTxt
             anchors.centerIn: parent
             text: recordingWindow.state === "hidden"
-                  ? qsTr("▶ Demo Record") : qsTr("▶ Next State")
+                  ? qsTr("▶ Record") : qsTr("■ Stop")
             color: demoMa.containsMouse ? Theme.ink : Theme.muted
             font.pixelSize: 12
         }
@@ -193,8 +267,10 @@ ApplicationWindow {
             cursorShape: Qt.PointingHandCursor
             hoverEnabled: true
             onClicked: {
-                if (recordingWindow.state === "hidden") recordingWindow.show()
-                else recordingWindow.advance()
+                if (recordingWindow.state === "hidden")
+                    startRealRecording()
+                else
+                    stopRealRecording()
             }
         }
     }
@@ -202,5 +278,23 @@ ApplicationWindow {
     Component.onCompleted: {
         // pull overview once on startup
         if (overviewVm) overviewVm.refresh()
+        // Load config from backend; once loaded, register the record hotkey
+        // from the SAVED value (settingsVm.hotkeyRecord is just the default
+        // "F9" until load() completes). This is the single source of truth for
+        // the startup hotkey — matches the ai-voice-tool pattern of registering
+        // from config at startup.
+        if (settingsVm) settingsVm.load()
+    }
+
+    // register the record hotkey as soon as the saved config arrives.
+    Connections {
+        target: settingsVm
+        function onHotkeyRecordChanged() {
+            if (globalHotkey) {
+                var sc = settingsVm.hotkeyRecord || "Ctrl+Shift+R"
+                globalHotkey.unregisterAll()
+                globalHotkey.registerShortcut(sc, "record")
+            }
+        }
     }
 }

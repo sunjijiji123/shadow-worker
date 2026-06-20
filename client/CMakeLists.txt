@@ -114,6 +114,17 @@ qt_add_grpc(config_grpc CLIENT
     PROTO_FILES ${PROTO_DIR}/config.proto
     OUTPUT_DIRECTORY ${GEN_DIR}
 )
+
+# voice (recording control + live spectrum stream)
+qt_add_protobuf(voice_proto
+    PROTO_FILES ${PROTO_DIR}/voice.proto
+    OUTPUT_DIRECTORY ${GEN_DIR}
+)
+qt_add_grpc(voice_grpc CLIENT
+    PROTO_FILES ${PROTO_DIR}/voice.proto
+    OUTPUT_DIRECTORY ${GEN_DIR}
+)
+target_link_libraries(voice_grpc PRIVATE voice_proto)
 target_link_libraries(config_grpc PRIVATE config_proto whitelist_proto)
 
 # ============================================================
@@ -135,10 +146,16 @@ qt_add_executable(shadow-worker-client
     src/window/windowhelper.cpp
     src/audio/audiorecorder.h
     src/audio/audiorecorder.cpp
+    src/audio/audiodevicemanager.h
+    src/audio/audiodevicemanager.cpp
     src/hotkey/globalhotkey.h
     src/hotkey/globalhotkey.cpp
+    src/ui/traycontroller.h
+    src/ui/traycontroller.cpp
     src/asr/asrclient.h
     src/asr/asrclient.cpp
+    src/asr/voiceclient.h
+    src/asr/voiceclient.cpp
     src/utils/autostart.h
     src/utils/autostart.cpp
 )
@@ -163,6 +180,8 @@ target_link_libraries(shadow-worker-client PRIVATE
     collection_grpc
     config_proto
     config_grpc
+    voice_proto
+    voice_grpc
 )
 
 # QML 文件作为资源
@@ -173,6 +192,7 @@ target_include_directories(shadow-worker-client PRIVATE
     ${CMAKE_SOURCE_DIR}/src/window
     ${CMAKE_SOURCE_DIR}/src/audio
     ${CMAKE_SOURCE_DIR}/src/hotkey
+    ${CMAKE_SOURCE_DIR}/src/ui
     ${CMAKE_SOURCE_DIR}/src/asr
     ${CMAKE_SOURCE_DIR}/src/utils
 )

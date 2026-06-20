@@ -28,6 +28,9 @@ Item {
     property string result: ""
     property bool autoPolish: true
     property bool resultPolishing: false
+    // live 16-band spectrum from the backend (empty when idle)
+    property var bands: []
+    property int rmsLevel: 0
 
     readonly property string demoTranscript:
         "Please organize this requirements doc into structured meeting minutes, " +
@@ -83,22 +86,17 @@ Item {
     function hide() {
         state = "hidden"
     }
+    // close = ABANDON at any state: discard recording/partial result, just hide.
+    // Distinct from stopRealRecording (which transcribes + polishes).
     function close() {
-        switch (state) {
-            case "listening":
-            case "transcribing":
-                hide()
-                break
-            case "polishing":
-                polishTimer.stop()
-                resultPolishing = false
-                state = "completed"
-                break
-            case "completed":
-            default:
-                hide()
-                break
+        polishTimer.stop()
+        finishTimer.stop()
+        resultPolishing = false
+        // stop backend capture (result is ignored on abandon)
+        if (voiceClient && voiceClient.recording) {
+            voiceClient.stop()
         }
+        hide()
     }
     function advance() {
         switch (state) {
@@ -122,6 +120,77 @@ Item {
             case "completed":
                 hide()
                 break
+        }
+    }
+
+    // ---- REAL recording flow (hotkey / demo button) ----
+    // These differ from the demo advance(): they're driven by actual mic
+    // capture. The listening state shows the wave driven by audioRecorder.level
+    // (see RecordingBubble). finishRecording runs the transcribe->polish->done
+    // pipeline with placeholder text (ASR not wired yet).
+    property real recordStartMs: 0
+    function startRealRecording() {
+        recordStartMs = Date.now()
+        state = "listening"
+        transcript = ""
+        result = ""
+        resultPolishing = false
+        bands = []
+        rmsLevel = 0
+        placePill()
+    }
+    // live spectrum frame from the backend (16 floats + rms 0..100)
+    function setBands(b, rms) {
+        bands = b
+        rmsLevel = rms
+    }
+    function finishRecording() {
+        // duration of the captured audio
+        var secs = Math.max(1, Math.round((Date.now() - recordStartMs) / 1000))
+        // placeholder result text — ASR/transcription is not wired yet.
+        result = qsTr("Recording captured (%1s). Connect an ASR provider to transcribe.").arg(secs)
+        // brief transcribe then polish then done
+        state = "transcribing"
+        finishTimer.restart()
+    }
+    // ---- cloud ASR transcription flow ----
+    // Called right after stopRealRecording sends PCM to the backend. Enters
+    // the transcribing state and waits for applyTranscription() (from the
+    // asrClient.resultReady signal) or applyTranscriptionError().
+    function startTranscribing() {
+        result = ""
+        resultPolishing = false
+        state = "transcribing"
+        // no timer here — the result arrives async via the gRPC stream
+    }
+    // backend returned recognized text -> run polish (if auto) then done.
+    function applyTranscription(text) {
+        result = text
+        if (autoPolish) {
+            state = "polishing"
+            resultPolishing = true
+            polishTimer.restart()
+        } else {
+            state = "completed"
+        }
+    }
+    // backend reported an ASR error -> show it in the result bubble, no polish.
+    function applyTranscriptionError(errorMsg) {
+        result = qsTr("Transcription failed: %1").arg(errorMsg)
+        resultPolishing = false
+        state = "completed"
+    }
+    // drives transcribing -> polishing -> completed
+    Timer {
+        id: finishTimer
+        interval: 600
+        repeat: false
+        onTriggered: {
+            state = "polishing"
+            if (autoPolish) {
+                resultPolishing = true
+                polishTimer.restart()
+            }
         }
     }
 
@@ -149,15 +218,32 @@ Item {
 
         RecordingBubble {
             anchors.fill: parent
+            z: 1   // above the drag MouseArea (z:0) so the close button works
             state: root.state
             transcript: root.transcript
-            onCloseRequested: root.close()
+            // live 16-band spectrum from the backend drives the wave heights
+            bands: root.bands
+            onCloseRequested: function() {
+                // × = ABANDON: discard the recording, just hide.
+                // Stop backend capture (its ASR result is ignored on abandon).
+                if (voiceClient && voiceClient.recording) {
+                    voiceClient.stop()
+                }
+                polishTimer.stop()
+                finishTimer.stop()
+                root.resultPolishing = false
+                root.hide()
+            }
         }
 
         // drag the pill window. resultWindow follows via its x/y bindings
         // (they read pillWindow.x/y), so we don't reposition it manually.
+        // z:0 keeps this BELOW the RecordingBubble so its close button (and
+        // other interactive children) receive clicks first; only empty areas
+        // fall through to here and start a drag.
         MouseArea {
             anchors.fill: parent
+            z: 0
             onPressed: function(mouse) {
                 root.draggingPill = true
                 windowHelper.startDrag(pillWindow)

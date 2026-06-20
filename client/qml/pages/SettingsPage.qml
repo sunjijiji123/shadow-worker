@@ -22,6 +22,44 @@ Item {
     property string asrActiveModel: "xiaomi"
     property string asrModelType: "cloud"  // cloud | local (from active chip)
     property int micTestLevel: 0
+
+    // ---- record hotkey: modifier + key, parsed from settingsVm.hotkeyRecord ----
+    // e.g. "Ctrl+Shift+R" -> modifier="Ctrl + Shift" (UI label), key="R"
+    property string hotkeyModifier: "Ctrl + Shift"
+    property string hotkeyKey: "R"
+
+    // build the globalHotkey shortcut string from modifier + key.
+    // modifier UI labels use " + " separators; the registration API uses "+".
+    function hotkeyString(mod, key) {
+        var m = mod === qsTr("None") ? "" : mod.replace(/ \+ /g, "+")
+        return m === "" ? key : (m + "+" + key)
+    }
+    // (re)register the record hotkey with the OS whenever modifier/key changes.
+    function registerRecordHotkey() {
+        if (!globalHotkey) return
+        if (!recordEnabled) {
+            globalHotkey.unregisterAll()
+            return
+        }
+        var sc = hotkeyString(hotkeyModifier, hotkeyKey)
+        globalHotkey.unregisterAll()
+        if (settingsVm) settingsVm.hotkeyRecord = sc
+        globalHotkey.registerShortcut(sc, "record")
+    }
+    // parse settingsVm.hotkeyRecord ("Ctrl+Shift+R") into modifier label + key.
+    // Called once on completed to seed the UI fields.
+    function initHotkeyFromSettings() {
+        var sc = settingsVm && settingsVm.hotkeyRecord ? settingsVm.hotkeyRecord : "Ctrl+Shift+R"
+        var parts = sc.split("+")
+        var key = parts[parts.length - 1]
+        var mods = parts.slice(0, parts.length - 1)
+        hotkeyKey = key
+        if (mods.length === 0) {
+            hotkeyModifier = qsTr("None")
+        } else {
+            hotkeyModifier = mods.join(" + ")
+        }
+    }
     // ASR model list (mutable so chips can be removed at runtime)
     property var asrModels: [
         { key: "xiaomi",   label: "Xiaomi-ASR",    type: "cloud", deletable: true },
@@ -172,6 +210,41 @@ Item {
         deleteConfirmDialog.open()
     }
 
+    // Load config from the backend on entry, then sync the local UI props
+    // (recordMode + hotkey) from the viewModel once loaded. Also seed the
+    // OS hotkey registration.
+    Component.onCompleted: {
+        if (viewModel) {
+            viewModel.load()
+            // sync local props when the async load completes. We watch the
+            // hotkeyRecord + recordMode notify signals as a "load done" cue.
+            var conn1 = viewModel.hotkeyRecordChanged
+            viewModel.hotkeyRecordChanged.connect(function() {
+                root.syncFromViewModel()
+            })
+            viewModel.recordModeChanged.connect(function() {
+                root.syncFromViewModel()
+            })
+        }
+        // seed from whatever the viewModel already holds (defaults until load)
+        syncFromViewModel()
+        registerRecordHotkey()
+    }
+
+    // pull recordMode + hotkey string from viewModel into the local UI props.
+    function syncFromViewModel() {
+        if (!viewModel) return
+        if (viewModel.recordMode) recordMode = viewModel.recordMode
+        initHotkeyFromSettings()
+    }
+
+    // push local UI props back into the viewModel before save.
+    function pushToViewModel() {
+        if (!viewModel) return
+        viewModel.recordMode = recordMode
+        viewModel.hotkeyRecord = hotkeyString(hotkeyModifier, hotkeyKey)
+    }
+
     Flickable {
         anchors.fill: parent
         anchors.margins: 20
@@ -249,7 +322,10 @@ Item {
                 headerExtra: [
                     Toggle {
                         checked: recordEnabled
-                        onToggled: recordEnabled = checked
+                        onToggled: {
+                            recordEnabled = checked
+                            registerRecordHotkey()
+                        }
                     }
                 ]
 
@@ -286,13 +362,32 @@ Item {
                             Layout.fillWidth: true
                             label: qsTr("Modifier")
                             options: [qsTr("None"), "Ctrl", "Alt", "Win", "Ctrl + Shift"]
-                            currentIndex: 4
+                            // current index from hotkeyModifier label
+                            currentIndex: {
+                                var opts = [qsTr("None"), "Ctrl", "Alt", "Win", "Ctrl + Shift"]
+                                for (var i = 0; i < opts.length; i++) {
+                                    if (opts[i] === hotkeyModifier) return i
+                                }
+                                return 4
+                            }
+                            onSelected: function(index, value) {
+                                hotkeyModifier = value
+                                registerRecordHotkey()
+                            }
                         }
 
                         TextField {
                             Layout.fillWidth: true
                             label: qsTr("Key")
-                            text: "R"
+                            text: hotkeyKey
+                            captureMode: true
+                            placeholder: qsTr("Press a key...")
+                            // keyPressed fires when a key is captured (not on
+                            // manual typing — captureMode makes the field read-only)
+                            onKeyPressed: function(keyName) {
+                                hotkeyKey = keyName
+                                registerRecordHotkey()
+                            }
                         }
                     }
                 }
@@ -466,25 +561,77 @@ Item {
                         spacing: 16
 
                         SelectBox {
+                            id: inputDeviceBox
                             Layout.fillWidth: true
                             Layout.preferredWidth: 2
                             label: qsTr("Input Device")
-                            options: [qsTr("Default Microphone"), qsTr("Microphone (Realtek)"), qsTr("Microphone (USB)")]
+                            // options come from the real device list; first entry
+                            // is always the system default.
+                            options: {
+                                var opts = [qsTr("Default Microphone")]
+                                var devs = audioDeviceManager ? audioDeviceManager.devices : []
+                                for (var i = 0; i < devs.length; i++) {
+                                    if (!devs[i].isDefault)
+                                        opts.push(devs[i].description)
+                                }
+                                return opts
+                            }
+                            // index 0 = default; otherwise find the selected device
+                            // among the non-default entries (opts[i+1]).
+                            currentIndex: {
+                                var sel = audioDeviceManager ? audioDeviceManager.selectedDeviceId : ""
+                                if (sel === "") return 0
+                                var devs = audioDeviceManager ? audioDeviceManager.devices : []
+                                var pos = 0
+                                for (var i = 0; i < devs.length; i++) {
+                                    if (devs[i].isDefault) continue
+                                    pos++
+                                    if (devs[i].id === sel) return pos
+                                }
+                                return 0
+                            }
+                            onSelected: function(index, value) {
+                                if (index === 0) {
+                                    // default
+                                    audioDeviceManager.selectedDeviceId = ""
+                                    audioRecorder.inputDeviceId = ""
+                                } else {
+                                    // index>0 maps to the (index-1)-th non-default device
+                                    var devs = audioDeviceManager.devices
+                                    var pos = 0
+                                    for (var i = 0; i < devs.length; i++) {
+                                        if (devs[i].isDefault) continue
+                                        pos++
+                                        if (pos === index) {
+                                            audioDeviceManager.selectedDeviceId = devs[i].id
+                                            audioRecorder.inputDeviceId = devs[i].id
+                                            return
+                                        }
+                                    }
+                                }
+                            }
                         }
 
-                        // mic test button (green pill, HTML .mic-test-btn)
+                        // mic test button (green pill, HTML .mic-test-btn).
+                        // testing state is driven by audioRecorder.recording.
                         MicTestButton {
                             Layout.alignment: Qt.AlignBottom
+                            testing: audioRecorder.recording
                             onClicked: {
-                                // TODO: wire to audio recorder for real level
+                                if (audioRecorder.recording) {
+                                    audioRecorder.stopRecording()
+                                } else {
+                                    // test mode: capture just to drive the volume bar
+                                    audioRecorder.startRecording(true)
+                                }
                             }
                         }
                     }
 
-                    // volume bar (simulated level)
+                    // volume bar: live RMS level from the recorder (0..100)
                     VolumeBar {
                         Layout.fillWidth: true
-                        level: micTestLevel
+                        level: audioRecorder.level
                     }
                 }
             }
@@ -1361,7 +1508,14 @@ Item {
     // bottom save bar (visible on settings page)
     SaveBar {
         onSaveRequested: {
-            // ApplicationWindow.window gives the root ApplicationWindow (from QtQuick.Controls)
+            if (!viewModel) {
+                var win0 = ApplicationWindow.window
+                if (win0 && win0.toast) win0.toast(qsTr("Settings backend not connected"), "warning")
+                return
+            }
+            // push local UI props into the viewModel, then persist via gRPC.
+            pushToViewModel()
+            viewModel.save()
             var win = ApplicationWindow.window
             if (win && win.toast) win.toast(qsTr("Settings saved"))
         }
