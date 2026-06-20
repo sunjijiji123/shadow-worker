@@ -2,7 +2,7 @@
 //
 // 当前支持:
 //   - cloud: OpenAI 兼容的 /audio/transcriptions SSE 接口
-//   - local: whisper.cpp 本地模型(接口已留,模型由用户后续导入)
+//   - local: whisper.cpp 本地模型(CGO 静态链接,构建见 backend/WHISPER_BUILD.md)
 //
 // 所有引擎统一接收完整 PCM(16kHz/mono/int16),返回识别文本。
 package asr
