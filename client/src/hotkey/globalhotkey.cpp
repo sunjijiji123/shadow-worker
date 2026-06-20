@@ -1,15 +1,33 @@
-// GlobalHotkey 实现 (Windows RegisterHotKey)
+// GlobalHotkey 实现 (Windows)
+//
+// 两种模式：
+//   press: RegisterHotKey + WM_HOTKEY → emit activated（toggle 语义）
+//   hold:  RegisterHotKey 检测按下 → emit pressed；
+//          QTimer 轮询 GetAsyncKeyState 检测松开 → emit released。
+//
+// 历史教训：早期版本用 WH_KEYBOARD_LL 低级键盘钩子检测松开，但该钩子的
+// 回调跑在系统键盘链路里。如果回调里同步执行慢操作（如 emit → gRPC 调用），
+// 会阻塞整个系统的键盘输入，导致电脑卡顿。改为 QTimer 轮询后，所有处理
+// 都在 Qt 主线程事件循环内完成，绝不阻塞系统键盘。
 
 #include "globalhotkey.h"
 
+#include <QApplication>
 #include <QDebug>
 #include <QGuiApplication>
 
 #include <windows.h>
 
+// ---- GlobalHotkey ----
+
 GlobalHotkey::GlobalHotkey(QObject *parent) : QObject(parent) {
   QGuiApplication::instance()->installNativeEventFilter(this);
   m_installed = true;
+
+  // hold 模式轮询定时器：50ms 一次检测松开（约 20fps，足够灵敏）。
+  m_holdPollTimer.setInterval(50);
+  connect(&m_holdPollTimer, &QTimer::timeout, this,
+          &GlobalHotkey::onHoldPollTick);
 }
 
 GlobalHotkey::~GlobalHotkey() {
@@ -26,12 +44,14 @@ bool GlobalHotkey::registerHotkey(int vk) {
   if (!RegisterHotKey(nullptr, id, MOD_CONTROL | MOD_SHIFT,
                       static_cast<UINT>(vk)))
     return false;
-  m_registrations[id] = {id, QStringLiteral("record")};
+  m_registrations[id] = {id, QStringLiteral("record"), QStringLiteral("press"),
+                         MOD_CONTROL | MOD_SHIFT, vk};
   return true;
 }
 
 bool GlobalHotkey::registerShortcut(const QString &shortcut,
-                                    const QString &name) {
+                                    const QString &name,
+                                    const QString &mode) {
   if (shortcut.trimmed().isEmpty())
     return false;
 
@@ -40,21 +60,60 @@ bool GlobalHotkey::registerShortcut(const QString &shortcut,
   if (!parseShortcut(shortcut, modifiers, vk))
     return false;
 
+  QString actualMode = mode.isEmpty() ? QStringLiteral("press") : mode.toLower();
   int id = m_nextId++;
+
   if (!RegisterHotKey(nullptr, id, modifiers, static_cast<UINT>(vk))) {
     qWarning() << "RegisterHotKey failed for" << shortcut
                << "error:" << GetLastError();
     return false;
   }
-  m_registrations[id] = {id, name.isEmpty() ? shortcut : name};
+
+  m_registrations[id] = {id, name.isEmpty() ? shortcut : name, actualMode,
+                         modifiers, vk};
+
+  // hold 模式：记录 vk，但不立即启动轮询。
+  // 轮询必须在 WM_HOTKEY（真正按下）时才启动——否则注册时键是松开的，
+  // 第一次 tick 就会误判"已松开"并停止轮询，导致真正按下后检测不到松开。
+  if (actualMode == QStringLiteral("hold")) {
+    m_holdVk = vk;
+    m_holdName = name.isEmpty() ? shortcut : name;
+  }
+
   return true;
 }
 
 void GlobalHotkey::unregisterAll() {
+  stopHoldPolling();
+  m_holdVk = 0;   // 彻底注销：清掉 hold 配置
   for (auto it = m_registrations.begin(); it != m_registrations.end(); ++it) {
     UnregisterHotKey(nullptr, it.key());
   }
   m_registrations.clear();
+}
+
+void GlobalHotkey::stopHoldPolling() {
+  m_holdPollTimer.stop();
+  // 注意：不清零 m_holdVk！它是注册时设的"配置"，不是运行状态。
+  // 清零会导致第二次按下时 tick 因 m_holdVk==0 立即退出，检测不到松开。
+  // m_holdVk 只在 unregisterAll 时清零。
+}
+
+void GlobalHotkey::onHoldPollTick() {
+  if (m_holdVk == 0) {
+    // 没有注册 hold 热键，不应到达这里；保险起见停掉定时器。
+    m_holdPollTimer.stop();
+    return;
+  }
+  // GetAsyncKeyState 最高位为 1 = 当前按下；为 0 = 已松开
+  SHORT state = GetAsyncKeyState(m_holdVk);
+  bool down = (state & 0x8000) != 0;
+  if (!down) {
+    // 检测到松开：emit released 并停止轮询
+    QString name = m_holdName;
+    stopHoldPolling();
+    emit released(name);
+  }
 }
 
 bool GlobalHotkey::parseShortcut(const QString &shortcut, uint &modifiers,
@@ -136,8 +195,24 @@ bool GlobalHotkey::nativeEventFilter(const QByteArray &eventType, void *message,
     int id = static_cast<int>(msg->wParam);
     auto it = m_registrations.find(id);
     if (it != m_registrations.end()) {
-      emit activatedWithName(it->name);
-      emit activated();
+      const Reg &reg = it.value();
+
+      if (reg.mode == QStringLiteral("hold")) {
+        // hold 模式：按下 = 开始录音。此时键确实处于按下状态，
+        // 启动轮询检测松开。
+        // 注意：RegisterHotKey 在某些配置下按住期间会重复触发 WM_HOTKEY
+        // （约每 30ms 一次）。如果每次都 m_holdPollTimer.start()，50ms 的
+        // 定时器永远到不了 timeout（被不断重置），轮询 tick 永不执行，
+        // 松开就检测不到。所以只在轮询未运行时启动一次。
+        if (!m_holdPollTimer.isActive()) {
+          m_holdPollTimer.start();
+        }
+        emit pressed(reg.name);
+      } else {
+        // press 模式：toggle
+        emit activatedWithName(reg.name);
+        emit activated();
+      }
       return true;
     }
   }
