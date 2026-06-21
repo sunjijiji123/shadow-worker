@@ -144,6 +144,8 @@ qt_add_executable(shadow-worker-client
     src/window/windowpicker.cpp
     src/window/windowhelper.h
     src/window/windowhelper.cpp
+    src/window/textinjector.h
+    src/window/textinjector.cpp
     src/audio/audiorecorder.h
     src/audio/audiorecorder.cpp
     src/audio/audiodevicemanager.h
@@ -255,6 +257,8 @@ qt_add_qml_module(shadow-worker-client
         qml/icons/toast_success.svg
         qml/icons/toast_error.svg
         qml/icons/toast_warning.svg
+        qml/icons/polish.svg
+        qml/icons/polish_active.svg
 )
 
 # Windows: keep console in DEBUG builds (to see errors); RELEASE would use WIN32 to hide it.

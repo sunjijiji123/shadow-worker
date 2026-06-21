@@ -113,6 +113,10 @@ Item {
     property bool polishEnabled: false
     property string llmActiveModel: ""
     property string llmModelType: "cloud"  // cloud | local (from active chip)
+    // 识别结果输出方式：preview（气泡预览）/ auto（直接注入焦点输入框）。
+    // 字段挂在 LLM 配置下（inject_mode），但语义属于"识别结果如何呈现"，
+    // UI 放在 voice tab。未润色时也适用（识别原文同样按此方式输出）。
+    property string injectMode: "preview"
     // LLM model list (mutable so chips can be removed at runtime)
     property var llmModels: []
     // polish prompt content（从 viewModel.llmPrompt 同步，后端默认值见 default_prompt.txt）
@@ -316,6 +320,7 @@ Item {
         // ---- LLM/Polish 同步（仿 ASR）----
         polishEnabled = viewModel.llmEnabled || false
         polishPrompt = viewModel.llmPrompt || ""
+        injectMode = viewModel.llmInjectMode || "preview"
         llmModels = providersToChips(viewModel.llmProviders || [])
         llmActiveModel = viewModel.llmActiveProvider || ""
         llmModelType = activeProviderType(llmActiveModel, "llm")
@@ -437,6 +442,7 @@ Item {
         // LLM/Polish 推送
         viewModel.llmEnabled = polishEnabled
         viewModel.llmPrompt = polishPrompt
+        viewModel.llmInjectMode = injectMode
         viewModel.llmActiveProvider = llmActiveModel
         flushLlmFields()
     }
@@ -938,6 +944,33 @@ Item {
                     VolumeBar {
                         Layout.fillWidth: true
                         level: audioRecorder.level
+                    }
+                }
+            }
+
+            // ---- Card 4: Recognition Result Output Mode ----
+            // HTML: "识别结果输出方式"。语音识别（含润色）完成后结果如何呈现：
+            //   preview = 弹出气泡，手动复制粘贴
+            //   auto    = 直接注入当前焦点输入框
+            Card {
+                Layout.fillWidth: true
+                visible: activeTab === "voice"
+                title: qsTr("Recognition Result Output")
+                description: qsTr("How the final text (ASR result, or polished if enabled) is delivered.")
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+
+                    Radio {
+                        text: qsTr("Preview") + " · " + qsTr("show bubble, copy manually")
+                        checked: root.injectMode === "preview"
+                        onClicked: root.injectMode = "preview"
+                    }
+                    Radio {
+                        text: qsTr("Direct Inject") + " · " + qsTr("auto-type into the focused input")
+                        checked: root.injectMode === "auto"
+                        onClicked: root.injectMode = "auto"
                     }
                 }
             }

@@ -11,12 +11,17 @@ import ShadowWorker
 Rectangle {
     id: root
 
+    // 润色标签的强调色：accent 绿（与 Copy copied 按钮一致）。
+    readonly property color polishAccent: "#10B981"
+
     // ---- API ----
     property string text: ""             // the transcript / polished result
     property bool polishing: false       // overlay shown when true
     // 已润色标记：手动/自动润色完成后为 true。控制 Polish 按钮状态。
     property bool polished: false
     property bool autoPolish: false      // when true, icon is done + non-interactive
+    // degradedHint: injectMode=auto 注入失败降级时为 true，顶部显示提示条。
+    property bool degradedHint: false
     // model info shown at bottom-left
     property string asrModelName: ""     // e.g. "ggml-small" or "mimo-v2.5-asr"
     property string polishModelName: ""  // e.g. "gpt-4o" (empty = no polish)
@@ -64,22 +69,79 @@ Rectangle {
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.margins: 14
+        anchors.topMargin: 10          // 缩小气泡顶部到 Polish 行的间距
         anchors.leftMargin: 18
         anchors.rightMargin: 18
         spacing: 0
 
-        // ---- top row: Polish button (right-aligned) ----
-        // Polish 按钮独占顶部一行，右对齐。文字变化（Polish↔Polished）只影响
-        // 本行宽度，不会撑破下方文本框或底部 actions row。
+        // ---- degraded hint（injectMode=auto 注入失败降级时的提示条）----
+        // 黄色背景小条，提示用户"未检测到输入框，已切回预览模式"。
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.bottomMargin: degradedHint ? 8 : 0
+            visible: root.degradedHint
+            height: 24
+            radius: 4
+            color: Qt.rgba(245/255, 158/255, 11/255, 0.15)  // amber 半透明
+            border.color: Qt.rgba(245/255, 158/255, 11/255, 0.4)
+            border.width: 1
+
+            Text {
+                anchors.centerIn: parent
+                text: qsTr("No input field detected — switched to preview")
+                color: "#F59E0B"
+                font.pixelSize: 11
+                font.weight: Font.DemiBold
+            }
+        }
+
+        // ---- top row: Polish clickLabel (left-aligned to textarea edge) ----
+        // 轻量的"魔法棒"可点击标签（镂空线框图标），替代突兀的实心按钮。
+        // 未润色：灰色镂空魔法棒 + 灰色"润色"；已润色：蓝色镂空魔法棒 + 蓝色"已润色"。
+        // 润色进行中（polishing）时灰掉不可点。
         RowLayout {
             Layout.fillWidth: true
-            Item { Layout.fillWidth: true }
-            Button {
-                text: root.polished ? qsTr("Polished") : qsTr("Polish")
-                kind: root.polished ? "ghost" : "primary"
-                small: true
-                enabled: !root.polished && !root.polishing && !root.autoPolish
-                onClicked: root.polishRequested()
+            Layout.topMargin: 0
+            spacing: 4
+
+            Item {
+                width: polishRow.implicitWidth
+                height: polishRow.implicitHeight
+                // 只在润色进行中（polishing）时变暗；autoPolish 不影响透明度
+                // （自动润色模式下标签也应清晰可见，只是不可重复点击）。
+                opacity: root.polishing ? 0.4 : 1.0
+
+                Row {
+                    id: polishRow
+                    spacing: 4
+                    layoutDirection: Qt.LeftToRight
+
+                    Image {
+                        sourceSize.width: 14
+                        sourceSize.height: 14
+                        width: 14; height: 14
+                        anchors.verticalCenter: parent.verticalCenter
+                        // 未润色用线框魔法棒，已润色用亮蓝实心魔法棒
+                        source: root.polished
+                                ? "qrc:/qt/qml/ShadowWorker/qml/icons/polish_active.svg"
+                                : "qrc:/qt/qml/ShadowWorker/qml/icons/polish.svg"
+                    }
+                    Text {
+                        text: root.polished ? qsTr("Polished") : qsTr("Polish")
+                        color: root.polished ? root.polishAccent : Theme.muted
+                        font.pixelSize: 12
+                        font.weight: Font.DemiBold
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: (!root.polished && !root.polishing && !root.autoPolish)
+                                 ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    enabled: !root.polished && !root.polishing && !root.autoPolish
+                    onClicked: root.polishRequested()
+                }
             }
         }
 
@@ -91,7 +153,7 @@ Rectangle {
         TextArea {
             id: resultEdit
             Layout.fillWidth: true
-            Layout.topMargin: 8
+            Layout.topMargin: 4          // 缩小 Polish 行到文本框的间距
             text: root.text
             minHeight: 80
             frameColor: Theme.bg2
@@ -135,8 +197,11 @@ Rectangle {
                         font.weight: Font.DemiBold
                     }
                     Text {
-                        // 有润色模型显示模型名，否则显示"没有润色"
-                        text: root.polishModelName !== "" ? root.polishModelName : qsTr("No polish")
+                        // 未润色显示"No polish"；润色后才显示实际使用的模型名。
+                        // polishModelName 是配置的润色模型（由外部传入），
+                        // 仅在 polished=true 时展示，体现"这次结果用 X 模型润色过"。
+                        text: root.polished && root.polishModelName !== ""
+                              ? root.polishModelName : qsTr("No polish")
                         color: Theme.muted
                         font.pixelSize: 10
                     }
