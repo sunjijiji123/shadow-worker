@@ -155,6 +155,12 @@ backend\test-asr-e2e.bat
 
 38. **ViewModel 首次数据加载的时序坑：refresh 不要放在 setChannel 里**：`main.cpp` 里 `timelineVm.setChannel(channel)`（第73行）在 `setContextProperty`（第95行）**之前**调用。若在 setChannel 里立即 refresh，gRPC 本地回调（<50ms）可能早于 QML 绑定建立，`dataChanged` 信号发完时 QML 还没监听 → 首次进入页面无数据。**正确做法：refresh 放在 `main.qml` 的 `Component.onCompleted` 里调**（此时所有 context property 已绑定）。overview_vm 的 setChannel 末尾调 refresh 能工作只是碰巧时序对，不要照抄。
 
+39. **QML role 名不要用 `text`（与 QML 内置属性冲突）**：`QAbstractListModel::roleNames()` 里如果把某个 role 命名为 `"text"`，delegate 里用 `required property string text` 绑定会失败——值永远是空字符串。原因是 `text` 是 QML 内置属性名（Text 元素、很多组件都有），required property 的绑定机制会被内置属性接管，model 的 role 值传不进来。**症状**：DB/proto/C++ 层 `item.text` 都有值（可用 `QFile` 落盘确认，坑 #34），但 QML delegate 的 `text` 永远空。**修复**：role 名改成不冲突的名字（如 `"evText"`），delegate 的 `required property string evText` 同步改名。命名 role 时避开 QML 保留/通用属性名：`text`、`parent`、`data`、`children`、`x`/`y`/`width`/`height` 等。
+
+40. **ListView delegate 根项的 `Layout.topMargin/bottomMargin` 不生效**：ListView 用 delegate 的 `implicitHeight` 来定位每行，而 Layout 系统的 margin 只在**被父 Layout 管理**时才参与高度计算——ListView 不是 Layout，所以 delegate 根（ColumnLayout/RowLayout）上的 `Layout.topMargin/bottomMargin` 被**静默忽略**。**症状**：改 margin 数值界面完全无变化。**修复**：行间距用 **`ListView.spacing`** 属性（这个 ListView 真正认）；delegate 内部的子项（被 ColumnLayout 管理的 RowLayout 等）仍可正常用 Layout margin 做行内呼吸。
+
+41. **【构建陷阱】此环境的 cmd.exe 吞输出 + PowerShell AMSI 间歇崩溃**：在 AI agent 的非交互终端里，`cmd.exe /c "..."` 只打印 Windows banner 后立即 `[H[2J[3J` 清屏返回，**命令体的 stdout/stderr 和 `> log` 重定向全部失效**（但 exit code 正常）。`build_client.bat` 等含 `setlocal enabledelayedexpansion` + 在 `if()` 块里展开带 `(x86)` 路径的 bat 还会触发 `此时不应有 \Microsoft` 解析错误。PowerShell `-File` 加载脚本则可能 `AmsiUtils.ScanBuffer AccessViolation` 间歇崩溃（与脚本内容部分相关，不稳定）。**可靠构建方式**：用 `scripts\_build_qt_clean.bat`（纯 ASCII 注释、不用 setlocal/delayedexpansion、不在 if 块展开带括号路径），通过 `powershell -Command "cmd /c '...bat' 2>&1 | Select-Object -Last N"` 调用——PowerShell 编排 + cmd 子进程执行 vcvars64+cmake，输出能正常捕获。**改 .qml 后**必须删 `client/build/.qt/rcc` + `client/build/ShadowWorker` + `client/build/CMakeCache.txt` 强制 reconfigure 重打 qrc（坑 #20 的强化版：光删 rcc 不够，CMakeCache 还在会跳过 configure 导致 `qmake_ShadowWorker.qrc missing`）。
+
 ## 项目结构
 
 ```
