@@ -87,16 +87,18 @@ func runBackgroundService() {
 	}
 	holder := asr.NewEngineHolder(asrEngine)
 
-	// 4b. 创建润色引擎（LLM 未启用时为 nil，holder 仍可后续热重载启用）
+	// 4b. 创建润色引擎。只要配置了有效的 LLM provider 就创建（手动润色可用），
+	// 不受"自动润色"开关（cfg.LLM.Enabled）影响——后者只控制识别后是否自动触发。
+	// 没配 provider 时 llmEngine 为 nil，手动润色返回"LLM 未启用"。
 	llmEngine, err := llm.New(cfg)
 	if err != nil {
-		log.Printf("创建 LLM 引擎失败（润色不可用）: %v", err)
+		log.Printf("创建 LLM 引擎失败（润色不可用，请在设置页配置 LLM provider）: %v", err)
 	}
 	llmHolder := llm.NewEngineHolder(llmEngine)
 	if llmEngine != nil {
 		log.Printf("LLM 引擎: %s", llmEngine.Name())
 	} else {
-		log.Printf("LLM 引擎: 未启用（润色关闭）")
+		log.Printf("LLM 引擎: 未配置 provider（润色不可用）")
 	}
 
 	// 5. 启动 VLM 截图理解(可选)

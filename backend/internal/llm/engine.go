@@ -28,13 +28,16 @@ func NewCloudEngineForTest(cfg config.LLMProvider) (Engine, error) {
 
 // New 根据配置创建润色引擎。
 //
-// LLM 未启用时返回 nil（调用方据此跳过润色）。provider 找不到时返回 error。
+// 引擎是否创建只取决于"是否配置了有效的 LLM provider"，而**不**取决于
+// cfg.LLM.Enabled（那是"自动润色"开关，只控制识别后是否自动触发润色，
+// 不应影响手动润色的可用性）。provider 找不到时返回 error（main.go 据此
+// 跳过引擎创建，holder 为 nil，手动润色返回"LLM 未启用"）。
+//
+// 这样语义：配了 provider → 引擎存在 → 手动 Polish 永远可用；
+// 关闭"自动润色" → 仅不自动触发，手动点 Polish 仍生效。
 func New(cfg *config.Config) (Engine, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config 不能为空")
-	}
-	if cfg.LLM.Enabled != "on" {
-		return nil, nil // 润色未启用，返回 nil（非错误）
 	}
 	p, ok := cfg.GetLLMProvider()
 	if !ok {

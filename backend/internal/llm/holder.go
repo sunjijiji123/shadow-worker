@@ -37,7 +37,8 @@ func (h *EngineHolder) Get() Engine {
 
 // Rebuild 根据新配置重建引擎并原子替换。
 //
-// cfg.LLM.Enabled != "on" 时，引擎置为 nil（禁用润色）。
+// 只要配置了有效 provider 就创建引擎（手动润色可用），不受"自动润色"开关
+// （cfg.LLM.Enabled）影响——后者只控制识别后是否自动触发。
 // 重建失败（如 provider 找不到）时返回 error 但保留旧引擎，运行中的请求
 // 不会因坏配置中断。调用方应将 error 反馈给用户。
 func (h *EngineHolder) Rebuild(cfg *config.Config) error {
