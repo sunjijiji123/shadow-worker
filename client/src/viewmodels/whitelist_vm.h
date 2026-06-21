@@ -50,10 +50,18 @@ public:
   Q_INVOKABLE void removeApp(const QString &path);
   Q_INVOKABLE void updateCategory(const QString &path, const QString &category);
 
+  // listWindows 调用后端 ListWindows RPC 枚举当前可见窗口。
+  // 结果通过 windowsListed 信号异步返回（QVariantList，每项 {hwnd,path,name,title}）。
+  Q_INVOKABLE void listWindows();
+
 signals:
   void loadingChanged();
   void errorChanged();
   void appPicked(const QString &path, const QString &name);
+  // windowsListed 在 listWindows() 完成后发射。
+  // windows 是 QVariantList，元素为 QVariantMap（hwnd/path/name/title）。
+  // error 非空时表示失败，windows 为空。
+  void windowsListed(const QVariantList &windows, const QString &error);
 
 private:
   void setLoading(bool loading);

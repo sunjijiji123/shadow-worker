@@ -53,8 +53,9 @@ func (s *OverviewServer) GetOverview(ctx context.Context, req *GetOverviewReques
 		return nil, err
 	}
 
-	// 应用排行 + 涉及应用数
-	apps, err := s.db.AppMinutesByRange(start, end)
+	// 采集应用列表 + 涉及应用数：以白名单(app_categories)为基准，
+	// 保证首页"采集应用"卡片与设置页白名单列表数量一致（没用过的应用也显示，时长 0）。
+	apps, err := s.db.WhitelistAppsWithMinutes(start, end)
 	if err != nil {
 		return nil, err
 	}
@@ -188,8 +189,18 @@ func (s *OverviewServer) collectionStatus() string {
 	return "paused"
 }
 
-// currentActiveApp 返回当前前台白名单应用(名 + 类别);非白名单/idle 返回空串。
+// currentActiveApp 返回概览页"当前应用"（名 + 类别）。
+//
+// 语义：优先返回 collector 正在记录的白名单应用（coll.CurrentApp），而非瞬时
+// 前台窗口。当用户切到非白名单应用（如本客户端自身、系统设置）时，collector
+// 的 curApp 仍保留上一个白名单应用，避免"看一眼概览就显示空白"。
+// collector 没有当前应用（未启动/首次未采集）时，回退到瞬时 ForegroundApp。
 func (s *OverviewServer) currentActiveApp() (string, string) {
+	if s.coll != nil {
+		if name, cat, _, ok := s.coll.CurrentApp(); ok {
+			return name, cat
+		}
+	}
 	app, err := collector.ForegroundApp()
 	if err != nil {
 		return "", ""

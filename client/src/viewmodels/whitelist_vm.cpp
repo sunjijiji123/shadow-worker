@@ -141,6 +141,35 @@ void WhitelistViewModel::updateCategory(const QString &path,
           });
 }
 
+void WhitelistViewModel::listWindows() {
+  shadowworker::ListWindowsRequest req;
+  auto reply = m_client->ListWindows(req);
+  auto *replyPtr = reply.get();
+
+  connect(replyPtr, &QGrpcOperation::finished, this,
+          [this, reply = std::move(reply)](const QGrpcStatus &status) mutable {
+            if (!status.isOk()) {
+              emit windowsListed({}, status.message());
+              return;
+            }
+            auto result = reply->read<shadowworker::WindowList>();
+            if (!result) {
+              emit windowsListed({}, QStringLiteral("解析窗口列表失败"));
+              return;
+            }
+            QVariantList out;
+            for (const auto &w : result->windows()) {
+              QVariantMap item;
+              item["hwnd"] = static_cast<qint64>(w.hwnd());
+              item["path"] = w.path();
+              item["name"] = w.name();
+              item["title"] = w.title();
+              out.append(item);
+            }
+            emit windowsListed(out, {});
+          });
+}
+
 void WhitelistViewModel::setLoading(bool loading) {
   if (m_loading == loading)
     return;

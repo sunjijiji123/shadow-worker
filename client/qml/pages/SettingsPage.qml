@@ -12,8 +12,11 @@ Item {
     id: root
 
     property var viewModel: null
-    property var whitelistViewModel: null
-    property var windowPicker: null
+    // 注意：whitelistVm 不声明为本地 property。
+    // 若声明 property var whitelistVm: null 且 main.qml 用 whitelistVm: whitelistVm
+    // 传值，QML 会把右值解析为 SettingsPage 自身的这个属性（自引用 null），
+    // 而非父作用域的 context property（属性名与 context property 同名陷阱）。
+    // 直接用全局 context property 名 whitelistVm 即可。
 
     property string activeTab: "voice"
 
@@ -169,29 +172,18 @@ Item {
         }
     }
 
-    // ---- Behavior Capture (apps) tab local state ----
+    // ---- Behavior Capture (apps) tab ----
+    // 白名单直接消费 whitelistVm（全局 context property，QAbstractListModel）。
+    // 应用图标首字母（取 name 前 2 字符，与 OverviewPage 一致）。
+    function initials(name) {
+        if (!name) return "?"
+        return name.substring(0, 2)
+    }
+
+    // Capture Rules 卡片的本地状态（锁屏暂停 / 空闲超时）。
+    // 本次仅做前端占位，后端参数接线（config.yaml 持久化 + collector 热重载）留待后续。
     property bool pauseOnLock: true
     property int idleTimeoutMin: 5
-    // tracked app whitelist: {key, name, iconBg, iconText, category}
-    // category must be one of: coding / browser / chat / office / other
-    property var trackedApps: [
-        { key: "cursor",  name: "Cursor",  iconBg: "#3B82F6", iconText: "Cr", category: "coding" },
-        { key: "chrome",  name: "Chrome",  iconBg: "#F59E0B", iconText: "Ch", category: "browser" },
-        { key: "wechat",  name: "WeChat",  iconBg: "#10B981", iconText: "We", category: "chat" }
-    ]
-
-    function setAppCategory(index, category) {
-        var arr = trackedApps.slice()
-        if (index >= 0 && index < arr.length) {
-            arr[index].category = category
-            trackedApps = arr
-        }
-    }
-    function removeTrackedApp(index) {
-        var arr = trackedApps.slice()
-        arr.splice(index, 1)
-        trackedApps = arr
-    }
 
     // ---- Quick Tools tab local state ----
     property string screenshotModifier: "Ctrl + Shift"
@@ -264,6 +256,15 @@ Item {
         // 先用默认值注册一次，确保热键可用。等异步 syncFromViewModel 加载完
         // 真实 recordMode 后，由 Radio 切换或 key/modifier 改变时按需重注册。
         registerRecordHotkey()
+
+        // 拉取白名单应用列表（进入设置页即加载真实数据）
+        if (whitelistVm) whitelistVm.refresh()
+    }
+
+    // 添加采集应用对话框（枚举可见窗口，搜索选择）。
+    // whitelistVm 在对话框内直接用全局 context property，不通过属性传入。
+    AddAppDialog {
+        id: addAppDialog
     }
 
     // Test Connection 的响应改由 main.qml 的全局 Connections 处理
@@ -1233,19 +1234,15 @@ Item {
                         text: qsTr("Scan Apps")
                         kind: "ghost"
                         small: true
-                        onClicked: {
-                            var win = ApplicationWindow.window
-                            if (win && win.toast) win.toast(qsTr("Scanning installed apps..."))
-                        }
+                        // 后端暂无"扫描已安装应用"的 RPC，先禁用避免误导。
+                        enabled: false
+                        opacity: 0.5
                     },
                     Button {
                         text: qsTr("+ Add")
                         kind: "ghost"
                         small: true
-                        onClicked: {
-                            var win = ApplicationWindow.window
-                            if (win && win.toast) win.toast(qsTr("Window picker not connected yet"))
-                        }
+                        onClicked: addAppDialog.open()
                     }
                 ]
 
@@ -1254,16 +1251,16 @@ Item {
                     spacing: 10
 
                     Repeater {
-                        model: trackedApps
+                        model: whitelistVm
 
                         delegate: Rectangle {
                             id: appRow
-                            required property var modelData
-                            required property int index
-                            // stash the row's app + index before the inner Repeater
-                            // overwrites the `modelData`/`index` names.
-                            property var app: modelData
-                            property int appIndex: index
+                            // whitelistVm 是 QAbstractListModel，注入具名 role
+                            // (path/name/category/todayMinutes)。不再需要 modelData/index 备份。
+                            required property string path
+                            required property string name
+                            required property string category
+                            required property int todayMinutes
 
                             Layout.fillWidth: true
                             // .whitelist-app-row: bg, rule border, radius 10, padding 12
@@ -1279,17 +1276,17 @@ Item {
                                 anchors.margins: 12
                                 spacing: 12
 
-                                // .app-icon: 40x40, radius 8, colored bg, 14px bold white initials
+                                // .app-icon: 40x40, radius 8, colored bg (按类别色), 14px bold white initials
                                 Rectangle {
                                     width: 40
                                     height: 40
                                     radius: 8
-                                    color: appRow.app.iconBg
+                                    color: Theme.colorOf(appRow.category)
                                     Layout.alignment: Qt.AlignVCenter
 
                                     Text {
                                         anchors.centerIn: parent
-                                        text: appRow.app.iconText
+                                        text: root.initials(appRow.name)
                                         color: "#FFFFFF"
                                         font.pixelSize: 14
                                         font.weight: Font.Bold
@@ -1302,7 +1299,7 @@ Item {
                                     spacing: 6
 
                                     Text {
-                                        text: appRow.app.name
+                                        text: appRow.name
                                         color: Theme.ink
                                         font.pixelSize: 14
                                         font.weight: Font.DemiBold
@@ -1319,12 +1316,11 @@ Item {
                                             delegate: Chip {
                                                 id: catChip
                                                 required property string modelData
-                                                property bool isActive: appRow.app.category === modelData
                                                 // .whitelist-app-row .chip: 11px, padding 2x6
                                                 text: modelData
-                                                checked: isActive
+                                                checked: appRow.category === modelData
                                                 implicitHeight: 22
-                                                onClicked: setAppCategory(appRow.appIndex, modelData)
+                                                onClicked: whitelistVm.updateCategory(appRow.path, modelData)
                                             }
                                         }
                                     }
@@ -1341,7 +1337,7 @@ Item {
                                         anchors.fill: parent
                                         cursorShape: Qt.PointingHandCursor
                                         hoverEnabled: true
-                                        onClicked: removeTrackedApp(appRow.appIndex)
+                                        onClicked: whitelistVm.removeApp(appRow.path)
                                     }
                                 }
                             }
@@ -1826,7 +1822,7 @@ Item {
     AddModelDialog {
         id: addModelDialog
         parent: Overlay.overlay
-        onSaved: function(name, provider, deployType, customName) {
+        onSaved: function(name, provider, deployType, customName, fields) {
             if (!viewModel) return
             var rawKey = customName || name || provider || ("model-" + Date.now())
             var key = rawKey.replace(/\s+/g, "-").toLowerCase()
@@ -1852,7 +1848,18 @@ Item {
             }
 
             viewModel.addProvider(cat, key)
-            viewModel.updateProvider(cat, key, {name: displayName, type: isLocal ? "local" : "cloud"})
+            // 合并预设字段（fields 来自 AddModelDialog 的 presetFields）
+            // 预设厂商有 model/baseURL/authType/apiFormat/stream；
+            // Custom 则 fields 为空，只设 name 和 type。
+            var updateData = {name: displayName, type: isLocal ? "local" : "cloud"}
+            if (fields) {
+                if (fields.model) updateData.model = fields.model
+                if (fields.baseUrl) updateData.baseUrl = fields.baseUrl
+                if (fields.authType !== undefined) updateData.authType = fields.authType
+                if (fields.apiFormat) updateData.apiFormat = fields.apiFormat
+                if (fields.stream !== undefined) updateData.stream = fields.stream
+            }
+            viewModel.updateProvider(cat, key, updateData)
             viewModel.setActiveProvider(cat, key)
             // 直接同步刷新（C++ 数据已更新，syncFromViewModel 从 C++ 读取最新值）
             syncFromViewModel()

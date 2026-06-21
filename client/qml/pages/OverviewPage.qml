@@ -143,35 +143,60 @@ Item {
 
                     Repeater {
                         model: viewModel && viewModel.apps ? viewModel.apps : []
-                        delegate: ColumnLayout {
+                        delegate: Item {
                             required property var modelData
-                            spacing: 4
+                            // 固定宽度，避免 name 长短不同导致卡片错位。
+                            // 以 "WorkBuddy" 为基准（8 字符 + 图标对齐余量）。
+                            width: 88
+                            height: 80
 
-                            Rectangle {
-                                Layout.alignment: Qt.AlignHCenter
-                                width: 40
-                                height: 40
-                                radius: 8
-                                color: Theme.colorOf(modelData.category)
+                            ColumnLayout {
+                                anchors.fill: parent
+                                spacing: 4
+
+                                Rectangle {
+                                    Layout.alignment: Qt.AlignHCenter
+                                    width: 40
+                                    height: 40
+                                    radius: 8
+                                    color: Theme.colorOf(modelData.category)
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: root.initials(modelData.name)
+                                        color: "#ffffff"
+                                        font.pixelSize: 14
+                                        font.weight: Font.Bold
+                                    }
+                                }
                                 Text {
-                                    anchors.centerIn: parent
-                                    text: initials(modelData.name)
-                                    color: "#ffffff"
-                                    font.pixelSize: 14
-                                    font.weight: Font.Bold
+                                    Layout.alignment: Qt.AlignHCenter
+                                    Layout.fillWidth: true
+                                    text: modelData.name
+                                    color: Theme.ink
+                                    font.pixelSize: 12
+                                    // 超长名称用省略号，hover 时由卡片 tooltip 显示全称
+                                    horizontalAlignment: Text.AlignHCenter
+                                    elide: Text.ElideRight
+                                }
+                                Text {
+                                    Layout.alignment: Qt.AlignHCenter
+                                    Layout.fillWidth: true
+                                    text: modelData.category
+                                    color: Theme.muted
+                                    font.pixelSize: 12
+                                    horizontalAlignment: Text.AlignHCenter
                                 }
                             }
-                            Text {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: modelData.name
-                                color: Theme.ink
-                                font.pixelSize: 12
-                            }
-                            Text {
-                                Layout.alignment: Qt.AlignHCenter
-                                text: modelData.category
-                                color: Theme.muted
-                                font.pixelSize: 12
+
+                            // 整个卡片可点击进入应用管理；hover 显示应用全名
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                hoverEnabled: true
+                                onClicked: root.manageAppsRequested()
+                                ToolTip.visible: containsMouse
+                                ToolTip.delay: 300
+                                ToolTip.text: modelData.name
                             }
                         }
                     }

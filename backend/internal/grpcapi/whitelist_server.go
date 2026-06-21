@@ -3,9 +3,11 @@ package grpcapi
 import (
 	"context"
 	"fmt"
+	"log"
 	"path/filepath"
 	"time"
 
+	"shadow-worker/backend/internal/collector"
 	"shadow-worker/backend/internal/storage"
 )
 
@@ -120,6 +122,24 @@ func (s *WhitelistServer) UpdateCategory(ctx context.Context, req *UpdateCategor
 		IconPath: app.IconPath,
 		AddedAt:  app.AddedAt.Unix(),
 	}, nil
+}
+
+// ListWindows 列出当前所有可见顶层窗口，供客户端"添加采集应用"时选择。
+// 复用 collector.VisibleWindows（EnumWindows + IsWindowVisible 过滤）。
+func (s *WhitelistServer) ListWindows(ctx context.Context, req *ListWindowsRequest) (*WindowList, error) {
+	apps := collector.VisibleWindows()
+	log.Printf("[whitelist] ListWindows 返回 %d 个可见窗口", len(apps))
+
+	out := &WindowList{Windows: make([]*WindowInfo, 0, len(apps))}
+	for _, app := range apps {
+		out.Windows = append(out.Windows, &WindowInfo{
+			Hwnd:  int64(app.HWND),
+			Path:  app.Path,
+			Name:  app.Name,
+			Title: app.WindowTitle,
+		})
+	}
+	return out, nil
 }
 
 func fileName(path string) string {

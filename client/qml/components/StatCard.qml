@@ -38,6 +38,9 @@ Rectangle {
             color: Theme.ink
             font.pixelSize: Theme.fontStat
             font.weight: Font.Bold
+            // 约束宽度并省略过长文本（如应用名）
+            Layout.fillWidth: true
+            elide: Text.ElideRight
         }
 
         Text {

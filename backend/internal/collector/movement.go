@@ -34,10 +34,12 @@ type Collector struct {
 	pauseCh  chan struct{}
 	resumeCh chan struct{}
 
-	// 当前段状态（避免锁竞争，仅在 loop goroutine 访问）
-	curSegID  int64
-	curApp    App
-	curActive bool
+	// 当前段状态。curApp/curActive/curCategory 主要由 loop goroutine 写，
+	// 但 CurrentApp() 从 gRPC handler goroutine 读，故用 c.mu 保护读写。
+	curSegID    int64
+	curApp      App
+	curActive   bool
+	curCategory string
 }
 
 // NewCollector 创建采集引擎。
@@ -114,6 +116,23 @@ func (c *Collector) IsRunning() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.running
+}
+
+// CurrentApp 返回 collector 当前正在记录的白名单应用（名 + 类别 + 是否活跃）。
+// 注意：curApp 由 loop goroutine 写、本方法读，用 c.mu 保护。
+//
+// 语义：这是"真正正在被采集的应用"，而非瞬时前台窗口。当用户切到非白名单
+// 应用（如本客户端自身、系统设置）时，curApp 仍保留上一个白名单应用，
+// 直到 idle 超时或切到另一个白名单应用。供概览页"当前应用"显示，避免
+// 用户看一眼概览就显示空白。
+func (c *Collector) CurrentApp() (name string, category string, active bool, ok bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if !c.running || c.curApp.Path == "" {
+		return "", "", false, false
+	}
+	// curCategory 在 updateSegment 里从白名单查得后缓存。
+	return c.curApp.Name, c.curCategory, c.curActive, true
 }
 
 // loop 是采集主循环。
@@ -219,6 +238,7 @@ func (c *Collector) updateSegment(app App, active bool) {
 		}
 		c.curSegID = id
 		c.curApp = app
+		c.curCategory = category
 		c.curActive = active
 		return
 	}

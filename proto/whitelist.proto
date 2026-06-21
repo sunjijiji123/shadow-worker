@@ -16,6 +16,8 @@ service WhitelistService {
   rpc Remove(RemoveAppRequest) returns (Result);
   // 改类别(点 chip 弹选项后调)
   rpc UpdateCategory(UpdateCategoryRequest) returns (App);
+  // 列出当前所有可见顶层窗口(供客户端"添加采集应用"选择)
+  rpc ListWindows(ListWindowsRequest) returns (WindowList);
 }
 
 message ListAppsRequest {
@@ -54,4 +56,18 @@ message AppList {
 message Result {
   bool ok = 1;
   string error = 2;
+}
+
+message ListWindowsRequest {}
+
+// WindowInfo 描述一个当前可见的顶层窗口(供客户端选择)。
+message WindowInfo {
+  int64 hwnd = 1;       // 窗口句柄(仅本次枚举有效,客户端不持久化)
+  string path = 2;      // 进程完整路径(与 App.path 同义,选完可直接喂给 Add)
+  string name = 3;      // 进程名(filepath.Base,如 Cursor.exe)
+  string title = 4;     // 窗口标题(GetWindowTextW)
+}
+
+message WindowList {
+  repeated WindowInfo windows = 1;
 }

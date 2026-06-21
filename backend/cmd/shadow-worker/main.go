@@ -75,13 +75,17 @@ func runBackgroundService() {
 	coll.Start()
 	defer coll.Stop()
 
-	// 4. 创建 ASR 引擎（用 holder 包装，支持配置变更后热重载）
+	// 4. 创建 ASR 引擎（用 holder 包装，支持配置变更后热重载）。
+	// ASR 是可选模块：用户可能只用采集功能、不配 ASR。创建失败（如未配 provider）
+	// 不应阻断后端启动，仅禁用语音识别，采集/白名单/时间线等照常工作。
+	// 用户后续在设置页配置好 ASR 后，ConfigServer.Rebuild 会热重建引擎。
 	asrEngine, err := asr.New(cfg)
 	if err != nil {
-		log.Fatalf("创建 ASR 引擎失败: %v", err)
+		log.Printf("创建 ASR 引擎失败（语音识别不可用，其它功能正常）: %v", err)
+	} else {
+		log.Printf("ASR 引擎: %s", asrEngine.Name())
 	}
 	holder := asr.NewEngineHolder(asrEngine)
-	log.Printf("ASR 引擎: %s", asrEngine.Name())
 
 	// 4b. 创建润色引擎（LLM 未启用时为 nil，holder 仍可后续热重载启用）
 	llmEngine, err := llm.New(cfg)

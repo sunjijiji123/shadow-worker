@@ -122,6 +122,9 @@ func (s *VoiceServer) StopRecording(ctx context.Context, req *StopRequest) (*Voi
 	}
 
 	engine := s.holder.Get()
+	if engine == nil {
+		return &VoiceResult{Error: "ASR 未配置或创建失败，请在设置页配置 ASR 服务"}, nil
+	}
 	text, err := engine.Recognize(ctx, pcm)
 	if err != nil {
 		log.Printf("[voice] ASR failed: %v", err)

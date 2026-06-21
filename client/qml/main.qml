@@ -174,15 +174,20 @@ import ShadowWorker
 
                 OverviewPage {
                     viewModel: overviewVm
-                    onManageAppsRequested: currentView = "settings"
+                    // 跳到设置页并定位到"行为采集"tab（而非默认的音频输入）
+                    onManageAppsRequested: {
+                        currentView = "settings"
+                        settingsPage.activeTab = "apps"
+                    }
                 }
                 TimelinePage {
                     viewModel: timelineVm
                 }
                 SettingsPage {
+                    id: settingsPage
                     viewModel: settingsVm
-                    whitelistViewModel: whitelistVm
-                    windowPicker: windowPicker
+                    // whitelistVm 直接作为全局 context property 使用，
+                    // 不通过传值注入（属性名与 context property 同名会导致绑定自引用）。
                 }
                 SystemPage {}
             }
@@ -376,6 +381,15 @@ import ShadowWorker
                 globalHotkey.unregisterAll()
                 globalHotkey.registerShortcut(sc, "record")
             }
+        }
+    }
+
+    // 白名单变化（增删改后 whitelistVm.refresh → modelReset）时，刷新概览页的
+    // 采集应用列表，保持首页与设置页一致，无需用户手动点 Refresh。
+    Connections {
+        target: whitelistVm
+        function onModelReset() {
+            if (overviewVm) overviewVm.refresh()
         }
     }
 }

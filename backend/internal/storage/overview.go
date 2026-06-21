@@ -154,6 +154,46 @@ func (db *DB) AppMinutesByRange(start, end time.Time) ([]AppMinutes, error) {
 	return out, nil
 }
 
+// WhitelistAppsWithMinutes 以白名单(app_categories)为基准，LEFT JOIN 活动段聚合时长。
+// 返回白名单全部应用(name/category/path)，附时间范围内的活跃分钟(没用过的为 0)。
+// 与 AppMinutesByRange 的区别：本方法保证返回白名单全部应用（即使今日 0 活动），
+// 用于首页"采集应用"卡片——需与设置页白名单列表数量一致。
+// 按分钟降序（有活动的在前，0 分钟的在后）。
+func (db *DB) WhitelistAppsWithMinutes(start, end time.Time) ([]AppMinutes, error) {
+	rows, err := db.Query(
+		`SELECT ac.name, ac.category, ac.path,
+		        COALESCE(SUM(seg.end_ts - seg.start_ts), 0) AS sec
+		 FROM app_categories ac
+		 LEFT JOIN activity_segments seg
+		   ON seg.app_path = ac.path
+		  AND seg.state = 'active'
+		  AND seg.start_ts >= ? AND seg.end_ts <= ?
+		 GROUP BY ac.path, ac.name, ac.category
+		 ORDER BY sec DESC, ac.added_at`,
+		toUnix(start), toUnix(end),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("查询白名单应用时长失败: %w", err)
+	}
+	defer rows.Close()
+
+	var out []AppMinutes
+	for rows.Next() {
+		var am AppMinutes
+		var path string
+		var sec int64
+		if err := rows.Scan(&am.Name, &am.Category, &path, &sec); err != nil {
+			return nil, fmt.Errorf("扫描白名单应用时长失败: %w", err)
+		}
+		am.Minutes = int(sec / 60)
+		out = append(out, am)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("遍历白名单应用时长失败: %w", err)
+	}
+	return out, nil
+}
+
 // CategoryAggregate 按类别聚合时间范围内的活跃分钟(类别占比排行)。
 // 返回 (category, minutes) 列表,按分钟降序。
 type CategoryMinutes struct {
