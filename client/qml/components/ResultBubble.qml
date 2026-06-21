@@ -68,6 +68,21 @@ Rectangle {
         anchors.rightMargin: 18
         spacing: 0
 
+        // ---- top row: Polish button (right-aligned) ----
+        // Polish 按钮独占顶部一行，右对齐。文字变化（Polish↔Polished）只影响
+        // 本行宽度，不会撑破下方文本框或底部 actions row。
+        RowLayout {
+            Layout.fillWidth: true
+            Item { Layout.fillWidth: true }
+            Button {
+                text: root.polished ? qsTr("Polished") : qsTr("Polish")
+                kind: root.polished ? "ghost" : "primary"
+                small: true
+                enabled: !root.polished && !root.polishing && !root.autoPolish
+                onClicked: root.polishRequested()
+            }
+        }
+
         // ---- textarea (the result text, display + copy) ----
         // 单向显示：text 绑定到 root.text（即 RecordingWindow.result）。
         // 不回写 onTextEdited —— 双向回写会和外部清空 result 冲突，导致第二次
@@ -130,20 +145,13 @@ Rectangle {
 
             Item { Layout.fillWidth: true }
 
-            // right: Polish / Copy / Close（左到右顺序）
+            // right: Copy / Close（左到右顺序）。
+            // Polish 按钮已移到气泡右上角（浮动），避免 Polish→Polished 文字
+            // 变宽撑破 actions row 导致文本框超界。
             Row {
                 spacing: 8
                 Layout.alignment: Qt.AlignRight | Qt.AlignTop
 
-                // Polish 按钮：未润色时可点击触发润色；已润色时灰掉显示"已润色"。
-                // polishing 期间也禁用（润色进行中）。
-                Button {
-                    text: root.polished ? qsTr("Polished") : qsTr("Polish")
-                    kind: root.polished ? "ghost" : "primary"
-                    small: true
-                    enabled: !root.polished && !root.polishing && !root.autoPolish
-                    onClicked: root.polishRequested()
-                }
                 Button {
                     // Copy：点击后文字短暂变成 "Copied!" 并高亮，1.2s 后恢复。
                     id: copyBtn
