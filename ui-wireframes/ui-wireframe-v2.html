@@ -474,20 +474,234 @@
     .category-bar { height: 100%; border-radius: 5px; transition: width .25s ease; }
     .category-value { width: 110px; text-align: right; font-size: 13px; color: var(--muted); flex-shrink: 0; }
 
+    /* ===== 作品介绍区（参赛说明） ===== */
+    .hero {
+      background: linear-gradient(135deg, rgba(16,185,129,0.10), rgba(16,185,129,0.02) 60%, transparent);
+      border: 1px solid var(--rule);
+      border-radius: 14px;
+      padding: 28px 28px 24px;
+      margin-bottom: 32px;
+    }
+    .hero-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; flex-wrap: wrap; }
+    .hero-title-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .hero-logo {
+      width: 44px; height: 44px; border-radius: 12px; flex: 0 0 auto;
+      background: var(--accent); color: #000;
+      display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 20px;
+    }
+    .hero h1 { font-size: 26px; margin: 0; }
+    .hero-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 10px; border-radius: 999px; font-size: 12px;
+      background: var(--bg3); border: 1px solid var(--rule); color: var(--muted);
+    }
+    .hero-badge.accent { background: rgba(16,185,129,0.15); border-color: var(--accent); color: var(--accent); }
+    .hero-tagline { color: var(--muted); font-size: 15px; margin-top: 14px; max-width: 760px; line-height: 1.7; }
+    .hero-tagline b { color: var(--ink); font-weight: 600; }
+    .hero-meta { text-align: right; font-size: 12px; color: var(--muted); line-height: 1.8; flex-shrink: 0; }
+    .hero-meta b { color: var(--ink); font-weight: 600; }
+
+    .feat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 22px; }
+    .feat-card {
+      background: var(--bg3); border: 1px solid var(--rule); border-radius: 10px; padding: 16px;
+    }
+    .feat-card .feat-emoji { font-size: 22px; line-height: 1; }
+    .feat-card .feat-title { font-size: 15px; font-weight: 600; margin-top: 8px; }
+    .feat-card .feat-desc { font-size: 12.5px; color: var(--muted); margin-top: 6px; line-height: 1.6; }
+
+    .pain-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+    .pain-card { background: var(--bg3); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 18px; }
+    .pain-card h3 { font-size: 15px; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+    .pain-card ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; line-height: 1.9; }
+    .pain-card.solution ul { color: var(--ink); }
+    .pain-card.solution h3 { color: var(--accent); }
+    .pain-card.problem h3 { color: var(--danger); }
+
+    .stack-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .stack-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: 8px; font-size: 12.5px;
+      background: var(--bg2); border: 1px solid var(--rule); color: var(--ink);
+    }
+    .stack-chip code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--accent); font-size: 12px; }
+
+    .section-title { font-size: 15px; font-weight: 700; margin-top: 22px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+    .section-title::before { content: ''; width: 3px; height: 14px; background: var(--accent); border-radius: 2px; }
+
+    .trae-gallery { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-top: 12px; }
+    .trae-shot { position: relative; border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; background: var(--bg3); }
+    .trae-shot img { width: 100%; display: block; }
+    .trae-shot .shot-cap {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      padding: 8px 12px; font-size: 12px;
+      background: linear-gradient(transparent, rgba(0,0,0,0.85)); color: var(--ink);
+    }
+    .trae-shot .shot-cap b { color: var(--accent); }
+    .trae-shot .shot-no {
+      position: absolute; top: 8px; left: 8px;
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--accent); color: #000; font-size: 12px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    .demo-hint {
+      margin-top: 18px; padding: 12px 16px; border-radius: 10px;
+      background: rgba(16,185,129,0.08); border: 1px dashed var(--accent); color: var(--ink);
+      font-size: 13px; line-height: 1.7;
+    }
+    .demo-hint b { color: var(--accent); }
+
     @media (max-width: 768px) {
       .app-body { flex-direction: column; }
       .sidebar { width: 100%; display: flex; overflow-x: auto; border-right: none; border-bottom: 1px solid var(--rule); }
       .form-row, .two-col { flex-direction: column; display: block; }
       .update-row { flex-direction: column; align-items: flex-start; }
       .overview-grid { grid-template-columns: 1fr; }
+      .feat-grid { grid-template-columns: 1fr; }
+      .pain-grid { grid-template-columns: 1fr; }
+      .trae-gallery { grid-template-columns: 1fr; }
+      .hero-meta { text-align: left; }
     }
   </style>
 </head>
 <body>
 <div class="page">
-  <h1>Shadow Worker UI 线框稿 v2</h1>
-  <div class="subtitle">深色 + 绿色风格；左侧导航、设置 Tab、子 Tab、开关、Chip、下拉框、厂商添加均可交互</div>
 
+  <!-- ============ 作品介绍区（参赛说明） ============ -->
+  <div class="hero">
+    <div class="hero-head">
+      <div>
+        <div class="hero-title-row">
+          <div class="hero-logo">S</div>
+          <div>
+            <h1>Shadow Worker · 影行者</h1>
+            <div class="hero-badges">
+              <span class="hero-badge accent">🏆 TRAE AI 创造力大赛 · 学习工作赛道</span>
+              <span class="hero-badge">桌面端 · Windows</span>
+              <span class="hero-badge">100% 本地优先</span>
+              <span class="hero-badge">v0.2.0</span>
+            </div>
+          </div>
+        </div>
+        <p class="hero-tagline">
+          一个常驻后台的 <b>AI 行为追踪助手</b>：在你工作时默默记录「时间花在了哪里」，需要时用<b>一句话语音</b>输入、<b>一键润色</b>成文字，还能让 <b>VLM 看懂屏幕</b>自动生成工作摘要。所有数据留在本地，并对外暴露 <b>MCP 工具</b>，让任意 AI Agent 都能查询你的工作日志、生成日报周报。
+        </p>
+      </div>
+      <div class="hero-meta">
+        <b>一句话形态</b><br>
+        本地优先的桌面效率助手<br>
+        ───────────────<br>
+        <b>核心用户</b><br>
+        知识工作者 / 程序员<br>
+        ───────────────<br>
+        <b>核心价值</b><br>
+        自动记账 + 语音输入 + AI 摘要
+      </div>
+    </div>
+
+    <!-- 核心功能 -->
+    <div class="section-title">核心功能</div>
+    <div class="feat-grid">
+      <div class="feat-card">
+        <div class="feat-emoji">🎙️</div>
+        <div class="feat-title">语音输入与润色</div>
+        <div class="feat-desc">全局热键长按/点按录音，ASR 实时转写，LLM 自动去口语化、补标点。结果可预览或直接注入当前输入框。</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-emoji">📊</div>
+        <div class="feat-title">行为采集与时间轴</div>
+        <div class="feat-desc">按白名单追踪前台应用，自动归类 coding/浏览/沟通，生成时间轴、热力图和类别占比，回答"我今天到底做了什么"。</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-emoji">👁️</div>
+        <div class="feat-title">VLM 屏幕理解</div>
+        <div class="feat-desc">定时或按热键截图，调用视觉大模型理解当前屏幕内容，自动写入工作记录，无需手动描述。</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-emoji">⚡</div>
+        <div class="feat-title">快捷提示词注入</div>
+        <div class="feat-desc">「Ctrl + 数字」一键把预设提示词（翻译/会议纪要/润色）拼到语音结果前，免去重复打字。</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-emoji">🔌</div>
+        <div class="feat-title">MCP 工具服务</div>
+        <div class="feat-desc">对 Claude Desktop / Cursor 等 Agent 暴露工作日志查询工具，AI 能直接读你的数据生成日报、周报。</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-emoji">🔒</div>
+        <div class="feat-title">本地优先</div>
+        <div class="feat-desc">数据存本地 SQLite，ASR/VLM/LLM 支持云端或本地模型自由切换，隐私不外传。</div>
+      </div>
+    </div>
+
+    <!-- 痛点 / 价值 -->
+    <div class="section-title">解决什么问题</div>
+    <div class="pain-grid">
+      <div class="pain-card problem">
+        <h3>😖 痛点</h3>
+        <ul>
+          <li>一天结束说不清「时间花哪了」，写日报只能靠回忆，漏掉大量碎片</li>
+          <li>想到一句话要输入，切输入法、打字、改错字，打断思路</li>
+          <li>语音转文字常有「嗯啊、重复、没标点」，发出去显得不专业</li>
+          <li>想让 AI 帮写日报，但工作数据散落在各 App，AI 看不到</li>
+        </ul>
+      </div>
+      <div class="pain-card solution">
+        <h3>✨ Shadow Worker 怎么做</h3>
+        <ul>
+          <li>后台自动记录每个应用的使用时段并归类，时间轴一目了然</li>
+          <li>全局热键长按即录，松开即出文字，可一键注入当前焦点输入框</li>
+          <li>ASR 结果自动经 LLM 润色，去口语、补标点，出口即成稿</li>
+          <li>内置 MCP 服务，AI Agent 可直接查询工作日志生成日报周报</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 技术栈 -->
+    <div class="section-title">技术栈</div>
+    <div class="stack-row">
+      <span class="stack-chip">后端 <code>Go</code></span>
+      <span class="stack-chip">前端 <code>Qt6 / QML</code></span>
+      <span class="stack-chip">通信 <code>gRPC + Protobuf</code></span>
+      <span class="stack-chip">本地 ASR <code>whisper.cpp (CGO)</code></span>
+      <span class="stack-chip">存储 <code>SQLite</code></span>
+      <span class="stack-chip">配置 <code>YAML</code></span>
+      <span class="stack-chip">AI 工具链 <code>TRAE Work</code></span>
+    </div>
+
+    <!-- TRAE 开发过程截图 -->
+    <div class="section-title">用 TRAE 开发的过程（关键步骤截图）</div>
+    <div class="trae-gallery">
+      <div class="trae-shot">
+        <span class="shot-no">1</span>
+        <img src="TRAE-images/微信图片_20260618165237_67_237.png" alt="TRAE 步骤1">
+        <div class="shot-cap"><b>需求拆解</b>：在 TRAE Work 中描述 Shadow Worker 的产品形态，让 AI 先产出字段定义与数据结构</div>
+      </div>
+      <div class="trae-shot">
+        <span class="shot-no">2</span>
+        <img src="TRAE-images/微信图片_20260618231727_68_237.png" alt="TRAE 步骤2">
+        <div class="shot-cap"><b>逐页生成</b>：通过对话驱动 TRAE 生成概览页、设置页等 UI 模块，右侧实时预览交互效果</div>
+      </div>
+      <div class="trae-shot">
+        <span class="shot-no">3</span>
+        <img src="TRAE-images/微信图片_20260619155107_69_237.png" alt="TRAE 步骤3">
+        <div class="shot-cap"><b>功能打磨</b>：用自然语言反复调整「选窗口遮罩」「录音气泡状态机」等复杂交互细节</div>
+      </div>
+      <div class="trae-shot">
+        <span class="shot-no">4</span>
+        <img src="TRAE-images/微信图片_20260619174717_70_237.png" alt="TRAE 步骤4">
+        <div class="shot-cap"><b>整体联调</b>：TRAE 一键生成完整可交互的 HTML 原型，作为产品设计与开发对齐的依据</div>
+      </div>
+    </div>
+
+    <!-- 体验提示 -->
+    <div class="demo-hint">
+      👇 <b>下方为可交互原型</b>：点击左侧导航切换「概览 / 时间轴 / 设置 / 系统」；设置页可切换 6 个 Tab 体验表单交互；第 2 节「录音气泡」可点击按钮切换 录音→识别→润色→完成 四个状态。
+    </div>
+  </div>
+
+  <!-- ============ 原型演示 ============ -->
   <h2>1. 主窗口 + 概览页</h2>
   <div class="note">左侧导航：概览 / 时间轴 / 设置 / 系统。</div>
   <div class="wireframe">
