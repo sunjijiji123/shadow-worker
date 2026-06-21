@@ -43,6 +43,8 @@ class SettingsViewModel : public QObject {
       QVariantList vlmProviders READ vlmProviders NOTIFY vlmProvidersChanged)
   Q_PROPERTY(int vlmInterval READ vlmInterval WRITE setVlmInterval NOTIFY
                  vlmIntervalChanged)
+  Q_PROPERTY(QString vlmCaptureRange READ vlmCaptureRange WRITE
+                 setVlmCaptureRange NOTIFY vlmCaptureRangeChanged)
 
   // LLM / Polish
   Q_PROPERTY(bool llmEnabled READ llmEnabled WRITE setLlmEnabled NOTIFY
@@ -103,6 +105,8 @@ public:
   QVariantList vlmProviders() const { return m_vlmProviders; }
   int vlmInterval() const { return m_vlmInterval; }
   void setVlmInterval(int v);
+  QString vlmCaptureRange() const { return m_vlmCaptureRange; }
+  void setVlmCaptureRange(const QString &v);
 
   // LLM
   bool llmEnabled() const { return m_llmEnabled; }
@@ -157,6 +161,7 @@ signals:
   void vlmActiveProviderChanged();
   void vlmProvidersChanged();
   void vlmIntervalChanged();
+  void vlmCaptureRangeChanged();
 
   void llmEnabledChanged();
   void llmActiveProviderChanged();
@@ -201,6 +206,7 @@ private:
   QString m_vlmActiveProvider;
   QVariantList m_vlmProviders;
   int m_vlmInterval = 5;
+  QString m_vlmCaptureRange = QStringLiteral("active");
 
   bool m_llmEnabled = false;
   QString m_llmActiveProvider;

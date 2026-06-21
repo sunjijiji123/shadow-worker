@@ -119,6 +119,7 @@ func configToProto(cfg *config.Config) *ConfigData {
 		VlmActiveProvider:        cfg.VLM.ActiveProvider,
 		VlmProviders:             make(map[string]*ProviderConfig),
 		VlmScheduleIntervalMin:   int32(cfg.VLM.ScheduleIntervalMin),
+		VlmCaptureRange:          cfg.VLM.CaptureRange,
 		McpEnabled:               true,
 		HotkeyRecord:             cfg.Hotkeys.Record,
 		HotkeyScreenshot:         cfg.Hotkeys.Screenshot,
@@ -177,6 +178,12 @@ func protoToConfig(data *ConfigData) *config.Config {
 	cfg.VLM.Mode = data.VlmMode
 	cfg.VLM.ActiveProvider = data.VlmActiveProvider
 	cfg.VLM.ScheduleIntervalMin = int(data.VlmScheduleIntervalMin)
+	// capture_range 兼容旧配置：空值回落到默认 active
+	if cr := data.VlmCaptureRange; cr == "screen" {
+		cfg.VLM.CaptureRange = "screen"
+	} else {
+		cfg.VLM.CaptureRange = "active"
+	}
 	if data.VlmProviders != nil {
 		cfg.VLM.Providers = make(map[string]config.VLMProvider)
 		for k, p := range data.VlmProviders {

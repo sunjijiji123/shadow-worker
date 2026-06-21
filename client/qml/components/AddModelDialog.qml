@@ -85,7 +85,9 @@ Dialog {
         // VLM 预设
         if (targetCategory === "vlm") {
             if (providerName === "BigModel GLM") return {
-                model: "glm-4v-plus",
+                // glm-4.6v-flash 是 GLM-4.6V 的免费版，OpenAI 兼容视觉接口，
+                // 适合高频定时截图摘要。glm-4v-plus 仍可用，按需替换。
+                model: "glm-4.6v-flash",
                 baseUrl: "https://open.bigmodel.cn/api/paas/v4",
                 authType: "bearer", apiFormat: "openai"
             }
@@ -195,15 +197,22 @@ Dialog {
         }
     }
 
-    // reset fields before showing（onAboutToShow 在显示前触发，比 onOpened 更可靠）
+    // reset fields before showing. onAboutToShow 在显示前触发，
+    // 但部分子控件此刻可能尚未完全就绪（AGENTS.md 坑 #4：Component.onCompleted
+    // 里同步改子组件会触发 ASSERT）。用 Qt.callLater 延迟到下一事件循环，
+    // 确保清空操作在弹窗与子控件都 ready 后执行，彻底清掉上次残留。
     onAboutToShow: {
+        // 先同步清掉本地暂存（这些是普通 property，无副作用，立即生效）
         root.modelName = ""
         root.customName = ""
         root.providerIndex = 0
         root.deployIndex = 0
-        nameField.text = ""
-        customField.text = ""
-        providerSelect.currentIndex = 0
-        deploySelect.currentIndex = 0
+        // 子控件文本/index 的清空延迟到下一帧，避免在组件未就绪阶段赋值被吞
+        Qt.callLater(function() {
+            if (nameField) nameField.text = ""
+            if (customField) customField.text = ""
+            if (providerSelect) providerSelect.currentIndex = 0
+            if (deploySelect) deploySelect.currentIndex = 0
+        })
     }
 }

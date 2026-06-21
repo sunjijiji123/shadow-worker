@@ -86,6 +86,13 @@ void SettingsViewModel::setVlmInterval(int v) {
   emit vlmIntervalChanged();
 }
 
+void SettingsViewModel::setVlmCaptureRange(const QString &v) {
+  if (m_vlmCaptureRange == v)
+    return;
+  m_vlmCaptureRange = v;
+  emit vlmCaptureRangeChanged();
+}
+
 // LLM setters
 void SettingsViewModel::setLlmEnabled(bool v) {
   if (m_llmEnabled == v)
@@ -421,6 +428,7 @@ void SettingsViewModel::applyConfig(const ConfigData &data) {
   setVlmMode(data.vlmMode());
   setVlmActiveProvider(data.vlmActiveProvider());
   setVlmInterval((int)data.vlmScheduleIntervalMin());
+  setVlmCaptureRange(data.vlmCaptureRange());
 
   QVariantList vlmList;
   const auto vlmMap = data.vlmProviders();
@@ -463,6 +471,7 @@ ConfigData SettingsViewModel::buildConfig() const {
   data.setVlmMode(m_vlmMode);
   data.setVlmActiveProvider(m_vlmActiveProvider);
   data.setVlmScheduleIntervalMin((qint32)m_vlmInterval);
+  data.setVlmCaptureRange(m_vlmCaptureRange);
   data.setVlmProviders(providersFromList(m_vlmProviders));
 
   data.setPolishEnabled(m_llmEnabled);

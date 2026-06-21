@@ -9,17 +9,32 @@ package vlm
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"strings"
 
 	"shadow-worker/backend/internal/config"
 )
 
+// ProbePNG 是 Test Connection 用的固定测试图（test_probe.png，编译期内嵌）。
+// 比 1×1 黑图更有意义：GLM 会对它返回真实描述，用户能在 toast 里看到 VLM
+// 到底"看懂了什么"，从而同时验证连通性和理解效果。体积仅 ~500B，上传可忽略，
+// 总链路耗时仍由 GLM 推理（2~8s）主导，与黑图探测基本持平。
+//
+//go:embed test_probe.png
+var ProbePNG []byte
+
 // Engine 是 VLM 引擎接口。
 type Engine interface {
 	Name() string
 	// Describe 对一张截图进行文字描述。
 	Describe(ctx context.Context, imagePNG []byte) (string, error)
+}
+
+// NewCloudEngineForTest 暴露给 grpcapi 用作临时连接测试，不依赖完整 config。
+// 用一个最小占位图片验证连通性（探测逻辑在调用方，如 voice_server.TestConnection）。
+func NewCloudEngineForTest(cfg config.VLMProvider) (Engine, error) {
+	return newCloudEngine(cfg)
 }
 
 // New 根据配置创建 VLM 引擎。

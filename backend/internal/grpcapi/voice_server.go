@@ -12,6 +12,7 @@ import (
 	"shadow-worker/backend/internal/config"
 	"shadow-worker/backend/internal/llm"
 	"shadow-worker/backend/internal/storage"
+	"shadow-worker/backend/internal/vlm"
 )
 
 // VoiceServer implements VoiceService: in-process microphone capture with a
@@ -255,6 +256,41 @@ func (s *VoiceServer) TestConnection(ctx context.Context, req *TestConnectionReq
 		}
 		start := time.Now().UTC()
 		out, err := engine.Polish(ctx, "hi")
+		elapsed := time.Since(start)
+		if err != nil {
+			return &TestConnectionResponse{Ok: false, Message: err.Error(), LatencyMs: int32(elapsed.Milliseconds())}, nil
+		}
+		return &TestConnectionResponse{
+			Ok:        true,
+			Message:   "endpoint reachable (response=" + out + ")",
+			LatencyMs: int32(elapsed.Milliseconds()),
+		}, nil
+	case "vlm":
+		// VLM（视觉理解）连通性测试：构造临时引擎，发一张 1×1 PNG 探测。
+		cfg := config.VLMProvider{
+			BaseURL:  f["baseUrl"],
+			Model:    f["model"],
+			APIKey:   f["apiKey"],
+			AuthType: f["authType"],
+		}
+		if cfg.BaseURL == "" {
+			return &TestConnectionResponse{Ok: false, Message: "base_url is empty"}, nil
+		}
+		if cfg.Model == "" {
+			return &TestConnectionResponse{Ok: false, Message: "model is empty"}, nil
+		}
+		if cfg.AuthType == "" {
+			cfg.AuthType = "bearer"
+		}
+		engine, err := vlm.NewCloudEngineForTest(cfg)
+		if err != nil {
+			return &TestConnectionResponse{Ok: false, Message: err.Error()}, nil
+		}
+		// 用编译期内嵌的固定测试图（vlm.ProbePNG，~500B 真实 PNG）。
+		// 比 1×1 黑图更有意义：GLM 会返回对图的真实描述，前端 toast 能展示
+		// VLM 实际"看懂了什么"，同时验证连通性与理解效果。
+		start := time.Now().UTC()
+		out, err := engine.Describe(ctx, vlm.ProbePNG)
 		elapsed := time.Since(start)
 		if err != nil {
 			return &TestConnectionResponse{Ok: false, Message: err.Error(), LatencyMs: int32(elapsed.Milliseconds())}, nil

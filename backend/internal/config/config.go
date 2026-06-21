@@ -78,6 +78,10 @@ type VLMConfig struct {
 	ActiveProvider      string                 `yaml:"active_provider"`
 	Providers           map[string]VLMProvider `yaml:"providers"`
 	ScheduleIntervalMin int                    `yaml:"schedule_interval_min"`
+	// CaptureRange 控制定时/按需截图的范围：
+	//   active = 当前前台窗口（默认，与白名单配合聚焦正在做的事）
+	//   screen = 整个虚拟屏幕（含所有显示器，适合多屏工作流）
+	CaptureRange string `yaml:"capture_range"`
 }
 
 // LLMProvider 是单个 LLM/Polish 供应商配置。
@@ -150,6 +154,7 @@ func Default() *Config {
 			Mode:                "off",
 			ActiveProvider:      "",
 			ScheduleIntervalMin: 5,
+			CaptureRange:        "active",
 			// 初始无 provider，用户通过 Add Model 添加。
 			Providers: map[string]VLMProvider{},
 		},

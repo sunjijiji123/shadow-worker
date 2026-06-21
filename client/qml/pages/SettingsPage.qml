@@ -96,18 +96,27 @@ Item {
     // Structure: { key, label, type: "cloud"|"local", deletable: true }
     property var asrModels: []
 
-    // ---- Vision tab local state (will bind to viewModel later) ----
-    property bool vlmEnabled: true
-    property string vlmMode: "scheduled"   // scheduled | ondemand
-    property string vlmActiveModel: "xiaomi"
+    // ---- Vision tab local state (synced from viewModel.vlm*) ----
+    property bool vlmEnabled: false
+    property string vlmMode: "scheduled"   // scheduled | ondemand (前端，映射到后端 scheduled|on_demand|off)
+    property string vlmActiveModel: ""
     property string vlmModelType: "cloud"  // cloud | local (from active chip)
     property string captureRange: "active" // screen | active
+    property int vlmInterval: 5            // scheduled 模式定时截图间隔（分钟）
     // VLM model list (mutable so chips can be removed at runtime)
-    property var vlmModels: [
-        { key: "xiaomi",   label: "Xiaomi-VLM-1", type: "cloud", deletable: true },
-        { key: "deepseek", label: "DeepSeek-VL",  type: "cloud", deletable: true },
-        { key: "local",    label: "Local-ollama", type: "local", deletable: true }
-    ]
+    property var vlmModels: []
+    // VLM 云端字段暂存（仿 LLM 的 llm* 字段，无 binding，显式赋值）
+    property string vlmName: ""
+    property string vlmBaseUrl: ""
+    property string vlmModel: ""
+    property string vlmApiKey: ""
+    property string vlmApiFmt: "openai"
+    property string vlmAuth: "bearer"
+
+    // ---- Movement/Capture Parameters（Card 4，synced from viewModel.movement*）----
+    property int movementSampleMs: 300
+    property int movementIdleS: 10
+    property string movementPrecision: "medium"
 
     // ---- Polish tab local state (synced from viewModel.llm*) ----
     property bool polishEnabled: false
@@ -254,6 +263,16 @@ Item {
             viewModel.llmActiveProviderChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
             viewModel.llmProvidersChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
             viewModel.llmPromptChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
+            // VLM 信号
+            viewModel.vlmModeChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
+            viewModel.vlmActiveProviderChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
+            viewModel.vlmProvidersChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
+            viewModel.vlmIntervalChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
+            viewModel.vlmCaptureRangeChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
+            // Movement 信号
+            viewModel.movementSampleMsChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
+            viewModel.movementIdleSChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
+            viewModel.movementPrecisionChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
         }
         // seed from whatever the viewModel already holds (defaults until load).
         Qt.callLater(syncFromViewModel)
@@ -325,6 +344,23 @@ Item {
         llmActiveModel = viewModel.llmActiveProvider || ""
         llmModelType = activeProviderType(llmActiveModel, "llm")
         updateLlmFields()
+
+        // ---- VLM 同步（仿 ASR/LLM）----
+        var vm = fromBackendVlmMode(viewModel.vlmMode)
+        vlmEnabled = vm.enabled
+        vlmMode = vm.mode
+        vlmInterval = viewModel.vlmInterval || 5
+        captureRange = (viewModel.vlmCaptureRange === "screen") ? "screen" : "active"
+        vlmModels = providersToChips(viewModel.vlmProviders || [])
+        vlmActiveModel = viewModel.vlmActiveProvider || ""
+        vlmModelType = activeProviderType(vlmActiveModel, "vlm")
+        updateVlmFields()
+
+        // ---- Movement 同步（Card 4，仿 ASR）----
+        movementSampleMs = viewModel.movementSampleMs || 300
+        movementIdleS = viewModel.movementIdleS || 10
+        movementPrecision = viewModel.movementPrecision || "medium"
+        updateMovementFields()
     }
 
     // 从 viewModel 读取当前 LLM provider 数据，灌入本地暂存 + UI 控件（仿 updateCloudFields）。
@@ -358,10 +394,79 @@ Item {
         })
     }
 
+    // vlmMode 双向映射：前端 "scheduled"/"ondemand" + vlmEnabled ↔ 后端 "scheduled"/"on_demand"/"off"
+    function toBackendVlmMode(localMode, enabled) {
+        if (!enabled) return "off"
+        return localMode === "ondemand" ? "on_demand" : "scheduled"
+    }
+    function fromBackendVlmMode(backendMode) {
+        if (backendMode === "on_demand") return { enabled: true, mode: "ondemand" }
+        if (backendMode === "scheduled") return { enabled: true, mode: "scheduled" }
+        // "off" / "" / 未知 → 关闭，默认选中 scheduled（再开时恢复有效状态）
+        return { enabled: false, mode: "scheduled" }
+    }
+
+    // 从 viewModel 读取当前 VLM provider 数据，灌入本地暂存 + UI 控件（仿 updateLlmFields）。
+    function updateVlmFields() {
+        if (!viewModel || !vlmActiveModel) {
+            vlmName = ""; vlmBaseUrl = ""; vlmModel = ""; vlmApiKey = ""
+            vlmApiFmt = "openai"; vlmAuth = "bearer"
+        } else {
+            vlmName = providerField(vlmActiveModel, "name", "vlm") || vlmActiveModel
+            vlmBaseUrl = providerField(vlmActiveModel, "baseUrl", "vlm")
+            vlmModel = providerField(vlmActiveModel, "model", "vlm")
+            vlmApiKey = providerField(vlmActiveModel, "apiKey", "vlm")
+            vlmApiFmt = providerField(vlmActiveModel, "apiFormat", "vlm") || "openai"
+            vlmAuth = providerField(vlmActiveModel, "authType", "vlm") || "bearer"
+        }
+        // 命令式更新 UI（无 binding）
+        if (vlmNameField) vlmNameField.text = vlmName
+        if (vlmBaseUrlField) vlmBaseUrlField.text = vlmBaseUrl
+        if (vlmModelField) vlmModelField.text = vlmModel
+        if (vlmKeyField) vlmKeyField.text = vlmApiKey
+        if (vlmApiFormatBox) vlmApiFormatBox.currentIndex = (vlmApiFmt === "anthropic") ? 1 : 0
+        if (vlmAuthBox) vlmAuthBox.currentIndex = authToIndex(vlmAuth)
+        if (vlmIntervalField) vlmIntervalField.text = vlmInterval
+        // local 块控件（与 cloud 块共享同一组暂存属性）
+        if (vlmLocalUrlField) vlmLocalUrlField.text = vlmBaseUrl
+        if (vlmLocalModelField) vlmLocalModelField.text = vlmModel
+        if (vlmLocalAuthBox) vlmLocalAuthBox.currentIndex = (vlmAuth === "bearer") ? 0 : 1
+    }
+
+    // 把本地暂存的 VLM 云端字段 Write-Through 到 viewModel（保存前调用，仿 flushLlmFields）。
+    function flushVlmFields() {
+        if (!viewModel || !vlmActiveModel) return
+        viewModel.updateProvider("vlm", vlmActiveModel, {
+            name: vlmName, baseUrl: vlmBaseUrl, model: vlmModel,
+            apiKey: vlmApiKey, apiFormat: vlmApiFmt, authType: vlmAuth
+        })
+    }
+
+    // precision 字符串 ↔ SelectBox index。选项: 0=low, 1=medium, 2=high
+    function precisionToIndex(p) {
+        switch (p) {
+            case "low": return 0
+            case "medium": return 1
+            case "high": return 2
+            default: return 1
+        }
+    }
+    function indexToPrecision(idx) {
+        return ["low", "medium", "high"][idx] || "medium"
+    }
+
+    // 从 viewModel 读取 movement 参数，灌入 Card 4 UI（命令式，无 binding）。
+    function updateMovementFields() {
+        if (movementSampleField) movementSampleField.text = movementSampleMs
+        if (movementIdleField) movementIdleField.text = movementIdleS
+        if (movementPrecisionBox) movementPrecisionBox.currentIndex = precisionToIndex(movementPrecision)
+    }
+
     // 查找指定 category 下某个 provider key 的 type。
     function activeProviderType(key, category) {
         if (!viewModel) return "cloud"
         var providers = (category === "llm") ? (viewModel.llmProviders || [])
+                    : (category === "vlm") ? (viewModel.vlmProviders || [])
                     : (viewModel.asrProviders || [])
         for (var i = 0; i < providers.length; i++) {
             if (providers[i].key === key) return providers[i].type || "cloud"
@@ -380,6 +485,7 @@ Item {
     function providerField(key, field, category) {
         if (!viewModel) return ""
         var providers = (category === "llm") ? (viewModel.llmProviders || [])
+                    : (category === "vlm") ? (viewModel.vlmProviders || [])
                     : (viewModel.asrProviders || [])
         for (var i = 0; i < providers.length; i++) {
             if (providers[i].key === key) return providers[i][field] || ""
@@ -445,6 +551,18 @@ Item {
         viewModel.llmInjectMode = injectMode
         viewModel.llmActiveProvider = llmActiveModel
         flushLlmFields()
+
+        // VLM 推送
+        viewModel.vlmMode = toBackendVlmMode(vlmMode, vlmEnabled)
+        viewModel.vlmInterval = vlmInterval
+        viewModel.vlmCaptureRange = captureRange
+        viewModel.vlmActiveProvider = vlmActiveModel
+        flushVlmFields()
+
+        // Movement 推送
+        viewModel.movementSampleMs = movementSampleMs
+        viewModel.movementIdleS = movementIdleS
+        viewModel.movementPrecision = movementPrecision
     }
 
     // 把本地暂存的云端字段 Write-Through 到 viewModel。
@@ -1025,28 +1143,30 @@ Item {
                         visible: vlmMode === "scheduled"
 
                         TextField {
+                            id: vlmIntervalField
                             Layout.fillWidth: true
                             label: qsTr("Interval (min)")
-                            text: "5"
+                            // 无 text 绑定（AGENTS.md 坑 #2）：onTextEdited 回写 vlmInterval，
+                            // updateVlmFields/syncFromViewModel 命令式赋值。
+                            onTextEdited: function(newText) {
+                                var n = parseInt(newText, 10)
+                                vlmInterval = isNaN(n) || n < 1 ? 1 : n
+                            }
+                            Component.onCompleted: vlmIntervalField.text = vlmInterval
                         }
                     }
 
-                    // ondemand config: modifier + key
-                    RowLayout {
+                    // ondemand config: 本轮不实现热键触发，仅展示说明，隐藏 modifier/key 死控件。
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 16
+                        spacing: 6
                         visible: vlmMode === "ondemand"
 
-                        // modifier (HTML flex:0.6 — wider) + key
-                        SelectBox {
-                            label: qsTr("Modifier")
-                            options: [qsTr("None"), "Ctrl", "Alt", "Win", "Ctrl + Shift"]
-                            currentIndex: 4
-                            Layout.fillWidth: true
-                        }
-                        TextField {
-                            label: qsTr("Key")
-                            text: "V"
+                        Text {
+                            text: qsTr("On-demand trigger (global hotkey) will be supported in a later version. For now, use Scheduled mode.")
+                            color: Theme.muted
+                            font.pixelSize: 13
+                            wrapMode: Text.WordWrap
                             Layout.fillWidth: true
                         }
                     }
@@ -1071,8 +1191,8 @@ Item {
                         chips: vlmModels
                         onChipClicked: function(key) {
                             vlmActiveModel = key
-                            if (key === "local") vlmModelType = "local"
-                            else vlmModelType = "cloud"
+                            vlmModelType = activeProviderType(key, "vlm")
+                            updateVlmFields()
                         }
                         onChipClosed: function(key) {
                             requestDeleteModel("vlmModels", key, "vlmActiveModel", "vlmModelType")
@@ -1104,52 +1224,68 @@ Item {
                         columnSpacing: 16
 
                         TextField {
+                            id: vlmNameField
                             label: qsTr("Vendor Name")
-                            text: "Xiaomi MIMO"
                             readOnly: true
                             Layout.fillWidth: true
+                            onTextEdited: function(newText) { vlmName = newText }
                         }
                         TextField {
+                            id: vlmBaseUrlField
                             label: qsTr("Base URL")
-                            text: "https://api.xiaomi.com/v1/vlm"
                             Layout.fillWidth: true
+                            onTextEdited: function(newText) { vlmBaseUrl = newText }
                         }
                         TextField {
+                            id: vlmModelField
                             label: qsTr("Model")
-                            text: "mimo-vl"
                             Layout.fillWidth: true
+                            onTextEdited: function(newText) { vlmModel = newText }
                         }
                         SelectBox {
+                            id: vlmApiFormatBox
                             label: qsTr("API Format")
                             options: ["OpenAI", "Anthropic messages"]
                             Layout.fillWidth: true
+                            onSelected: function(index, value) {
+                                vlmApiFmt = (index === 1) ? "anthropic" : "openai"
+                            }
                         }
                         SelectBox {
+                            id: vlmAuthBox
                             label: qsTr("Auth Method")
                             options: ["Bearer", "api-key header", qsTr("No auth")]
                             Layout.fillWidth: true
+                            onSelected: function(index, value) {
+                                vlmAuth = indexToAuth(index)
+                            }
                         }
 
                         // API Key (span full width)
                         TextField {
+                            id: vlmKeyField
                             label: qsTr("API Key")
-                            text: "sk-xxxxxxxx"
                             isPassword: true
                             Layout.columnSpan: 2
                             Layout.fillWidth: true
+                            onTextEdited: function(newText) { vlmApiKey = newText }
                         }
                     }
 
                     // ---- Local fields (visible when vlmModelType === "local") ----
+                    // local provider 的 baseUrl/model/authType 同样存在 viewModel.vlmProviders，
+                    // 故复用 vlmBaseUrl/vlmModel/vlmAuth 暂存属性；控件用独立 id，
+                    // updateVlmFields() 会同步更新云/本地两组控件。
                     ColumnLayout {
                         Layout.fillWidth: true
                         visible: vlmModelType === "local"
                         spacing: 12
 
                         TextField {
+                            id: vlmLocalUrlField
                             Layout.fillWidth: true
                             label: qsTr("Ollama Server URL")
-                            text: "http://localhost:11434"
+                            onTextEdited: function(newText) { vlmBaseUrl = newText }
                         }
 
                         RowLayout {
@@ -1157,15 +1293,20 @@ Item {
                             spacing: 16
 
                             TextField {
+                                id: vlmLocalModelField
                                 Layout.fillWidth: true
                                 label: qsTr("Model")
-                                text: "llava"
+                                onTextEdited: function(newText) { vlmModel = newText }
                             }
                             SelectBox {
+                                id: vlmLocalAuthBox
                                 Layout.fillWidth: true
                                 label: qsTr("Auth Method")
                                 options: ["Bearer", qsTr("No auth")]
-                                currentIndex: 1
+                                onSelected: function(index, value) {
+                                    // 本地模型通常 no auth：Bearer→bearer，No auth→""
+                                    vlmAuth = (index === 0) ? "bearer" : ""
+                                }
                             }
                         }
                     }
@@ -1176,9 +1317,31 @@ Item {
                         Button {
                             text: qsTr("Test Connection")
                             kind: "primary"
+                            enabled: vlmModelType === "cloud"
+                            opacity: vlmModelType === "cloud" ? 1.0 : 0.5
+                            onClicked: {
+                                if (!voiceClient) {
+                                    var win0 = ApplicationWindow.window
+                                    if (win0 && win0.toast) win0.toast(qsTr("voiceClient not available"), "error")
+                                    return
+                                }
+                                if (!vlmBaseUrl) {
+                                    var win1 = ApplicationWindow.window
+                                    if (win1 && win1.toast) win1.toast(qsTr("No base URL filled"), "error")
+                                    return
+                                }
+                                voiceClient.testConnection("vlm", {
+                                    baseUrl: vlmBaseUrl,
+                                    model: vlmModel,
+                                    apiKey: vlmApiKey,
+                                    authType: vlmAuth
+                                })
+                            }
                         }
                         Text {
-                            text: qsTr("142 ms latency")
+                            // latency 由 main.qml 的全局 onConnectionTested toast 展示，
+                            // 这里保留占位（清掉原写死的 "142 ms latency"）。
+                            text: ""
                             color: Theme.muted
                             font.pixelSize: 12
                             anchors.verticalCenter: parent.verticalCenter
@@ -1232,20 +1395,32 @@ Item {
                     spacing: 16
 
                     TextField {
+                        id: movementSampleField
                         Layout.fillWidth: true
                         label: qsTr("Sample Interval (ms)")
-                        text: "300"
+                        // 无 text 绑定（AGENTS.md 坑 #2）：updateMovementFields 命令式赋值。
+                        onTextEdited: function(newText) {
+                            var n = parseInt(newText, 10)
+                            movementSampleMs = isNaN(n) || n < 1 ? 300 : n
+                        }
                     }
                     TextField {
+                        id: movementIdleField
                         Layout.fillWidth: true
                         label: qsTr("Idle Timeout (s)")
-                        text: "10"
+                        onTextEdited: function(newText) {
+                            var n = parseInt(newText, 10)
+                            movementIdleS = isNaN(n) || n < 1 ? 10 : n
+                        }
                     }
                     SelectBox {
+                        id: movementPrecisionBox
                         Layout.fillWidth: true
                         label: qsTr("Precision")
                         options: ["low", "medium", "high"]
-                        currentIndex: 1
+                        onSelected: function(index, value) {
+                            movementPrecision = indexToPrecision(index)
+                        }
                     }
                 }
             }

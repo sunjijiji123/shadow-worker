@@ -49,6 +49,7 @@ message ConfigData {
   string vlm_active_provider = 13;
   map<string, ProviderConfig> vlm_providers = 14;
   int32 vlm_schedule_interval_min = 15;
+  string vlm_capture_range = 29;    // screen | active（截图范围：整屏多显示器 / 当前活动窗口）
 
   // MCP
   bool mcp_enabled = 16;

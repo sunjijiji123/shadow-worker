@@ -70,14 +70,28 @@ func (v *VLMCapturer) Stop() {
 
 // Trigger 立即执行一次截图理解(按需模式也走这里)。
 func (v *VLMCapturer) Trigger(ctx context.Context) (string, error) {
-	app, err := ForegroundApp()
-	if err != nil {
-		return "", fmt.Errorf("获取前台应用失败: %w", err)
-	}
-
-	png := CaptureWindowPNG(app.HWND)
-	if png == nil {
-		return "", fmt.Errorf("截图失败")
+	var (
+		png []byte
+		app App
+		err error
+	)
+	if v.cfg.CaptureRange == "screen" {
+		// 整屏模式：截取虚拟屏（多显示器并集），用合成 app 信息标识。
+		png = CaptureScreenPNG()
+		if png == nil {
+			return "", fmt.Errorf("截图失败")
+		}
+		app = App{Name: "Screen", Path: ""}
+	} else {
+		// 活动窗口模式（默认）：前台窗口 + 白名单。
+		app, err = ForegroundApp()
+		if err != nil {
+			return "", fmt.Errorf("获取前台应用失败: %w", err)
+		}
+		png = CaptureWindowPNG(app.HWND)
+		if png == nil {
+			return "", fmt.Errorf("截图失败")
+		}
 	}
 
 	path, err := saveScreenshot(png, app.Name, time.Now().UTC())
@@ -103,7 +117,7 @@ func (v *VLMCapturer) Trigger(ctx context.Context) (string, error) {
 		v.logger.Warn("写入 VLM 事件失败", "err", err)
 	}
 
-	v.logger.Info("VLM 摘要已生成", "app", app.Name, "summary", summary)
+	v.logger.Info("VLM 摘要已生成", "app", app.Name, "range", v.cfg.CaptureRange, "summary", summary)
 	return summary, nil
 }
 

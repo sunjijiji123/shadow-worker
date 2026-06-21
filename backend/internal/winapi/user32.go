@@ -15,6 +15,16 @@ var (
 	procGetDC                    = moduser32.NewProc("GetDC")
 	procReleaseDC                = moduser32.NewProc("ReleaseDC")
 	procGetLastInputInfo         = moduser32.NewProc("GetLastInputInfo")
+	procGetSystemMetrics         = moduser32.NewProc("GetSystemMetrics")
+)
+
+// 虚拟屏幕（virtual screen）= 所有显示器的并集，原点在主显示器的左上角，
+// 当副屏位于主屏左侧/上方时坐标可能为负。GetDC(0) 返回覆盖整块虚拟屏的 DC。
+const (
+	SM_XVIRTUALSCREEN  = 76 // 虚拟屏左上角 x（通常 ≤ 0）
+	SM_YVIRTUALSCREEN  = 77 // 虚拟屏左上角 y（通常 ≤ 0）
+	SM_CXVIRTUALSCREEN = 78 // 虚拟屏总宽（所有显示器宽之和，含间隙）
+	SM_CYVIRTUALSCREEN = 79 // 虚拟屏总高
 )
 
 // HWND 是窗口句柄。
@@ -86,6 +96,13 @@ func GetDC(hwnd HWND) syscall.Handle {
 // ReleaseDC 释放设备上下文。
 func ReleaseDC(hwnd HWND, hdc syscall.Handle) int32 {
 	r, _, _ := procReleaseDC.Call(uintptr(hwnd), uintptr(hdc))
+	return int32(r)
+}
+
+// GetSystemMetrics 查询系统度量/配置。用于获取虚拟屏（多显示器并集）的坐标和尺寸。
+// nIndex 为 SM_* 常量；失败或未支持的索引返回 0。
+func GetSystemMetrics(nIndex int32) int32 {
+	r, _, _ := procGetSystemMetrics.Call(uintptr(nIndex))
 	return int32(r)
 }
 
