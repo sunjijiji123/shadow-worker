@@ -70,3 +70,11 @@ tools/
 # whisper.cpp source (kept for readability) — ignore build output & its own git metadata
 backend/third_party/**/.git/
 backend/third_party/**/build/
+
+# whisper .bin models (large binary, do not commit)
+modules/
+# temp build helper scripts (local only)
+scripts/_build_qt_run.bat
+scripts/build_qt*.log
+scripts/build_be*.log
+scripts/build_c*.log
