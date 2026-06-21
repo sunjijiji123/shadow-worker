@@ -130,39 +130,10 @@ func Default() *Config {
 	return &Config{
 		ASR: ASRConfig{
 			Mode:           "cloud",
-			ActiveProvider: "custom",
-			Providers: map[string]ASRProvider{
-				"mimo": {
-					// 小米 MIMO：chat completions 格式（base64 音频），Bearer 认证
-					Name:      "Xiaomi MIMO",
-					BaseURL:   "https://api.xiaomimimo.com/v1/chat/completions",
-					Model:     "mimo-asr-v2.5",
-					AuthType:  "bearer",
-					APIFormat: "openai",
-					Language:  "zh",
-					Type:      "cloud",
-					Stream:    true,
-				},
-				"bigmodel": {
-					// 智谱 GLM-ASR：标准 transcription 格式（multipart），Bearer 认证
-					Name:      "BigModel GLM",
-					BaseURL:   "https://open.bigmodel.cn/api/paas/v4/audio/transcriptions",
-					Model:     "glm-asr-2512",
-					AuthType:  "bearer",
-					APIFormat: "openai",
-					Language:  "zh",
-					Type:      "cloud",
-				},
-				"custom": {
-					Name:      "Custom",
-					BaseURL:   "https://api.openai.com/v1",
-					Model:     "whisper-1",
-					AuthType:  "bearer",
-					APIFormat: "openai",
-					Language:  "zh",
-					Type:      "cloud",
-				},
-			},
+			ActiveProvider: "",
+			// 初始无任何 provider：用户必须点 Add Model 添加。
+			// AddModel 选预设厂商（MIMO/GLM 等）时自动填充 model/baseURL/authType。
+			Providers: map[string]ASRProvider{},
 			Local: LocalASRConfig{
 				ModelPath: "models/ggml-tiny.bin",
 				ModelName: "tiny",
@@ -172,48 +143,16 @@ func Default() *Config {
 		},
 		VLM: VLMConfig{
 			Mode:                "off",
-			ActiveProvider:      "openai",
+			ActiveProvider:      "",
 			ScheduleIntervalMin: 5,
-			Providers: map[string]VLMProvider{
-				"openai": {
-					Name:      "OpenAI 兼容",
-					BaseURL:   "https://api.openai.com/v1",
-					Model:     "gpt-4o",
-					AuthType:  "bearer",
-					APIFormat: "openai",
-					Type:      "cloud",
-				},
-				"ollama": {
-					Name:      "Ollama 本地",
-					BaseURL:   "http://127.0.0.1:11434",
-					Model:     "llava",
-					AuthType:  "",
-					APIFormat: "ollama",
-					Type:      "local",
-				},
-			},
+			// 初始无 provider，用户通过 Add Model 添加。
+			Providers: map[string]VLMProvider{},
 		},
 		LLM: LLMConfig{
 			Enabled:        "off",
-			ActiveProvider: "openai",
-			Providers: map[string]LLMProvider{
-				"openai": {
-					Name:      "OpenAI 兼容",
-					BaseURL:   "https://api.openai.com/v1",
-					Model:     "gpt-4o",
-					AuthType:  "bearer",
-					APIFormat: "openai",
-					Type:      "cloud",
-				},
-				"ollama": {
-					Name:      "Ollama 本地",
-					BaseURL:   "http://127.0.0.1:11434",
-					Model:     "qwen2.5",
-					AuthType:  "",
-					APIFormat: "openai",
-					Type:      "local",
-				},
-			},
+			ActiveProvider: "",
+			// 初始无 provider，用户通过 Add Model 添加。
+			Providers:  map[string]LLMProvider{},
 			Prompt:     defaultPrompt,
 			InjectMode: "preview",
 		},

@@ -22,7 +22,7 @@ Dialog {
     rightPadding: 20
 
     // signals
-    signal saved(string name, string provider, string deployType, string customName)
+    signal saved(string name, string provider, string deployType, string customName, var fields)
 
     // local state
     property string modelName: ""
@@ -45,6 +45,58 @@ Dialog {
         return asrProviders
     }
     property var deployTypes: [qsTr("Cloud API"), qsTr("Local Model")]
+
+    // 预设配置表：选预设厂商时返回它的 model/baseURL/authType 等字段，
+    // 用户只需填 API Key。Custom 返回空 map（全留空自己填）。
+    // 返回 {model, baseUrl, authType, apiFormat, stream}。
+    function presetFields(providerName) {
+        if (providerName === qsTr("Custom")) return {}
+        // ASR 预设
+        if (targetCategory === "asr") {
+            if (providerName === "Xiaomi MIMO") return {
+                model: "mimo-v2.5-asr",
+                baseUrl: "https://api.xiaomimimo.com/v1/chat/completions",
+                authType: "bearer", apiFormat: "openai", stream: true
+            }
+            if (providerName === "BigModel GLM") return {
+                model: "glm-asr-2512",
+                baseUrl: "https://open.bigmodel.cn/api/paas/v4/audio/transcriptions",
+                authType: "bearer", apiFormat: "openai", stream: false
+            }
+        }
+        // LLM 预设
+        if (targetCategory === "llm") {
+            if (providerName === "DeepSeek") return {
+                model: "deepseek-chat",
+                baseUrl: "https://api.deepseek.com/v1",
+                authType: "bearer", apiFormat: "openai"
+            }
+            if (providerName === "BigModel GLM") return {
+                model: "glm-4-plus",
+                baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+                authType: "bearer", apiFormat: "openai"
+            }
+            if (providerName === "OpenAI") return {
+                model: "gpt-4o",
+                baseUrl: "https://api.openai.com/v1",
+                authType: "bearer", apiFormat: "openai"
+            }
+        }
+        // VLM 预设
+        if (targetCategory === "vlm") {
+            if (providerName === "BigModel GLM") return {
+                model: "glm-4v-plus",
+                baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+                authType: "bearer", apiFormat: "openai"
+            }
+            if (providerName === "Ollama") return {
+                model: "llava",
+                baseUrl: "http://127.0.0.1:11434",
+                authType: "", apiFormat: "openai"
+            }
+        }
+        return {}
+    }
 
     background: Rectangle {
         color: Theme.bg3
@@ -80,7 +132,14 @@ Dialog {
             label: qsTr("Provider")
             options: root.providers
             // currentIndex 由 onOpened 显式设置，不用绑定
-            onSelected: function(index, value) { root.providerIndex = index }
+            onSelected: function(index, value) {
+                root.providerIndex = index
+                // 选预设厂商时自动填显示名（Custom 不填，让用户输入）
+                if (value !== qsTr("Custom")) {
+                    nameField.text = value
+                    root.modelName = value
+                }
+            }
         }
 
         // deploy type select
@@ -120,11 +179,15 @@ Dialog {
                 text: qsTr("Save")
                 kind: "primary"
                 onClicked: {
+                    var providerName = root.providers[root.providerIndex]
+                    // 预设厂商自动填充字段；Custom 传空 map（全留空）
+                    var fields = root.presetFields(providerName)
                     root.saved(
                         root.modelName,
-                        root.providers[root.providerIndex],
+                        providerName,
                         root.deployTypes[root.deployIndex],
-                        root.customName
+                        root.customName,
+                        fields
                     )
                     root.close()
                 }

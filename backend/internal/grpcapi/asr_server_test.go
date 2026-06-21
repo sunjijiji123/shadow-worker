@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"shadow-worker/backend/internal/asr"
 	"shadow-worker/backend/internal/storage"
 
 	"google.golang.org/grpc/metadata"
@@ -29,7 +30,8 @@ func TestAsrServerStreamRecognize(t *testing.T) {
 	defer db.Close()
 
 	engine := &mockASREngine{name: "mock"}
-	srv := NewAsrServer(db, engine, nil)
+	holder := asr.NewEngineHolder(engine)
+	srv := NewAsrServer(db, holder, nil)
 
 	// 构造双向流模拟
 	stream := &mockAsrStream{}

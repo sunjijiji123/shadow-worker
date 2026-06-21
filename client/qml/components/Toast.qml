@@ -1,5 +1,6 @@
 // Toast.qml - global toast with status icon (success/error/warning).
 // HTML .toast + SVG check icon. Extended with 3 types.
+// 支持长文本自动换行：最大宽度 420px，高度随内容自适应。
 
 import QtQuick
 import ShadowWorker
@@ -15,6 +16,9 @@ Rectangle {
         if (type !== undefined) toastType = type
         else toastType = "success"
         icon.source = "qrc:/qt/qml/ShadowWorker/qml/icons/toast_" + toastType + ".svg"
+        // 长文本延长显示时间（每 50 字 +1s，上限 8s）
+        var len = text ? text.length : 0
+        hideTimer.interval = Math.min(8000, 2500 + Math.floor(len / 50) * 1000)
         showAnim.restart()
         hideTimer.restart()
     }
@@ -25,8 +29,8 @@ Rectangle {
     border.color: Theme.rule
     border.width: 1
     radius: 8
-    width: row.implicitWidth + 28
-    height: 40
+    width: Math.min(420, row.implicitWidth + 28)
+    height: Math.max(40, msgText.implicitHeight + 24)
     z: 1000
 
     Row {
@@ -42,10 +46,16 @@ Rectangle {
         }
 
         Text {
+            id: msgText
             text: root.message
             color: Theme.ink
             font.pixelSize: 13
             anchors.verticalCenter: parent.verticalCenter
+            wrapMode: Text.Wrap
+            maximumLineCount: 6
+            elide: Text.ElideRight
+            // 留出 icon(16) + spacing(8) + padding(28) 的空间
+            width: Math.min(420 - 52, msgText.implicitWidth)
         }
     }
 
