@@ -203,18 +203,31 @@ import ShadowWorker
         // backend opens the mic; the device id is read from QSettings by the
         // backend (we pass empty = default for now; device routing TBD).
         voiceClient.start("")
-        // 设置当前使用的模型名（显示在结果气泡右下角）
+        // 设置当前使用的模型名（显示在结果气泡左下角）。
+        // 显示 provider 的 model 字段（如 glm-asr-2512），不是 provider key。
         if (settingsVm) {
             if (settingsVm.asrMode === "local") {
                 recordingWindow.asrModelName = settingsVm.asrLocalModelName || "local"
             } else {
-                recordingWindow.asrModelName = settingsVm.asrActiveProvider || "cloud"
+                recordingWindow.asrModelName = activeProviderModel(settingsVm.asrProviders, settingsVm.asrActiveProvider)
             }
-            // 润色模型名：未启用时留空（ResultBubble 显示 "(disabled)"）
+            // 润色模型名：未启用时留空（ResultBubble 显示 "No polish"）
             recordingWindow.polishModelName = settingsVm.llmEnabled
-                ? (settingsVm.llmActiveProvider || "llm") : ""
+                ? activeProviderModel(settingsVm.llmProviders, settingsVm.llmActiveProvider) : ""
         }
         recordingWindow.startRealRecording()
+    }
+
+    // 从 provider 列表里找激活 provider，返回它的 model 字段。
+    // 用于结果气泡显示真实模型名（如 glm-asr-2512），而非 provider key。
+    function activeProviderModel(providers, activeKey) {
+        if (!providers) return ""
+        for (var i = 0; i < providers.length; i++) {
+            if (providers[i].key === activeKey) {
+                return providers[i].model || activeKey
+            }
+        }
+        return activeKey || ""
     }
     function stopRealRecording() {
         // backend stops capture + runs ASR; result arrives via onResultReady

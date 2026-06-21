@@ -14,17 +14,16 @@ Rectangle {
     // ---- API ----
     property string text: ""             // the transcript / polished result
     property bool polishing: false       // overlay shown when true
-    // polish-icon state: "off" (muted, clickable) | "done" (accent, locked)
-    // auto-polish on -> starts as "done" and locked
-    property string polishState: "off"   // off | done
+    // 已润色标记：手动/自动润色完成后为 true。控制 Polish 按钮状态。
+    property bool polished: false
     property bool autoPolish: false      // when true, icon is done + non-interactive
-    // model info shown at bottom-right
+    // model info shown at bottom-left
     property string asrModelName: ""     // e.g. "ggml-small" or "mimo-v2.5-asr"
     property string polishModelName: ""  // e.g. "gpt-4o" (empty = no polish)
 
     signal copyRequested()
     signal closeRequested()
-    signal polishRequested()   // manual polish (icon clicked, only when not done/auto)
+    signal polishRequested()   // manual polish（未润色时点击触发）
 
     // 把结果文字复制到系统剪贴板。用一个隐藏的 TextEdit 调用 copy()：
     // QML 没有直接的 clipboard API，这是桌面平台最可靠的纯 QML 方式。
@@ -44,9 +43,6 @@ Rectangle {
     border.color: Theme.rule
     border.width: 1
     clip: true
-
-    // effective polish state: autoPolish forces "done"
-    property bool polishDone: autoPolish || polishState === "done"
 
     // 隐藏的 TextEdit，仅用于 copy() 把文字送进系统剪贴板。
     // visible:false 但不能 enabled:false（copy 需要它可操作）。
@@ -69,114 +65,6 @@ Rectangle {
         anchors.leftMargin: 18
         anchors.rightMargin: 18
         spacing: 0
-
-        // ---- header: hint + polish icon ----
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
-
-            Text {
-                // .bubble-hint: 11px muted
-                text: qsTr("Enter to inject · Esc to close")
-                color: Theme.muted
-                font.pixelSize: 11
-                Layout.alignment: Qt.AlignVCenter
-            }
-            Item { Layout.fillWidth: true }
-
-            // polish icon (sparkle). 18x18, stroked. done=accent, off=muted.
-            // Clickable only when not done and not autoPolish.
-            // HIDDEN while polishing so the spinning loader (below) shows alone.
-            Item {
-                width: 18; height: 18
-                Layout.alignment: Qt.AlignVCenter
-                visible: !root.polishing
-
-                Canvas {
-                    id: polishIcon
-                    anchors.fill: parent
-                    // redraw when state changes
-                    onPolishDoneChanged: requestPaint()
-                    property bool polishDone: root.polishDone
-                    onPaint: {
-                        var ctx = getContext("2d")
-                        ctx.reset()
-                        ctx.strokeStyle = root.polishDone ? Theme.accent : Theme.muted
-                        ctx.fillStyle = "transparent"
-                        ctx.lineWidth = 1.6
-                        ctx.lineJoin = "round"
-                        ctx.lineCap = "round"
-                        // main 4-point star path (scaled from 24x24 viewBox)
-                        ctx.beginPath()
-                        ctx.moveTo(9, 2.5)
-                        ctx.bezierCurveTo(9.3, 5.2, 11.1, 7.0, 13.7, 7.4)
-                        ctx.bezierCurveTo(11.1, 7.8, 9.3, 9.6, 9, 12.3)
-                        ctx.bezierCurveTo(8.7, 9.6, 6.9, 7.8, 4.3, 7.4)
-                        ctx.bezierCurveTo(6.9, 7.0, 8.7, 5.2, 9, 2.5)
-                        ctx.stroke()
-                        // small star top-right
-                        ctx.beginPath()
-                        ctx.moveTo(13.1, 3.75)
-                        ctx.lineTo(13.4, 5.1); ctx.lineTo(14.7, 5.4)
-                        ctx.lineTo(13.4, 5.7); ctx.lineTo(13.1, 7.05)
-                        ctx.lineTo(12.8, 5.7); ctx.lineTo(11.5, 5.4)
-                        ctx.lineTo(12.8, 5.1); ctx.closePath()
-                        ctx.stroke()
-                        // small star bottom-left
-                        ctx.beginPath()
-                        ctx.moveTo(4.5, 11.25)
-                        ctx.lineTo(4.7, 12.3); ctx.lineTo(5.75, 12.5)
-                        ctx.lineTo(4.7, 12.7); ctx.lineTo(4.5, 13.75)
-                        ctx.lineTo(4.3, 12.7); ctx.lineTo(3.25, 12.5)
-                        ctx.lineTo(4.3, 12.3); ctx.closePath()
-                        ctx.stroke()
-                    }
-                }
-
-                // spinning variant shown while polishing
-                Item {
-                    id: spinIcon
-                    anchors.fill: parent
-                    visible: root.polishing
-                    RotationAnimation on rotation {
-                        running: spinIcon.visible
-                        loops: Animation.Infinite
-                        from: 0; to: 360; duration: 800
-                    }
-                    Canvas {
-                        anchors.fill: parent
-                        onPaint: {
-                            var ctx = getContext("2d")
-                            ctx.reset()
-                            ctx.strokeStyle = Theme.accent
-                            ctx.lineWidth = 2
-                            ctx.lineCap = "round"
-                            // sun-rays (8 short lines from center)
-                            var cx = 9, cy = 9
-                            var rays = [[9,3],[9,15],[3,9],[15,9],
-                                        [4.8,4.8],[13.2,13.2],[4.8,13.2],[13.2,4.8]]
-                            for (var i = 0; i < rays.length; i++) {
-                                ctx.beginPath()
-                                ctx.moveTo(cx, cy)
-                                ctx.lineTo(rays[i][0], rays[i][1])
-                                ctx.stroke()
-                            }
-                        }
-                    }
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: (!root.polishDone && !root.polishing) ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    hoverEnabled: true
-                    onClicked: {
-                        // manual polish: only when not done and not auto-polish
-                        if (root.polishDone || root.autoPolish || root.polishing) return
-                        root.polishRequested()
-                    }
-                }
-            }
-        }
 
         // ---- textarea (the result text, display + copy) ----
         // 单向显示：text 绑定到 root.text（即 RecordingWindow.result）。
@@ -230,7 +118,8 @@ Rectangle {
                         font.weight: Font.DemiBold
                     }
                     Text {
-                        text: root.polishModelName !== "" ? root.polishModelName : qsTr("(disabled)")
+                        // 有润色模型显示模型名，否则显示"没有润色"
+                        text: root.polishModelName !== "" ? root.polishModelName : qsTr("No polish")
                         color: Theme.muted
                         font.pixelSize: 10
                     }
@@ -239,21 +128,22 @@ Rectangle {
 
             Item { Layout.fillWidth: true }
 
-            // right: Copy / Close
+            // right: Polish / Copy / Close（左到右顺序）
             Row {
                 spacing: 8
-                layoutDirection: Qt.RightToLeft
                 Layout.alignment: Qt.AlignRight | Qt.AlignTop
 
+                // Polish 按钮：未润色时可点击触发润色；已润色时灰掉显示"已润色"。
+                // polishing 期间也禁用（润色进行中）。
                 Button {
-                    text: qsTr("Close")
-                    kind: "ghost"
+                    text: root.polished ? qsTr("Polished") : qsTr("Polish")
+                    kind: root.polished ? "ghost" : "primary"
                     small: true
-                    onClicked: root.closeRequested()
+                    enabled: !root.polished && !root.polishing && !root.autoPolish
+                    onClicked: root.polishRequested()
                 }
                 Button {
-                    // 点击后文字短暂变成 "Copied" 并高亮，1.2s 后恢复。
-                    // 用按钮自身状态做反馈，不弹 toast。
+                    // Copy：点击后文字短暂变成 "Copied!" 并高亮，1.2s 后恢复。
                     id: copyBtn
                     text: copyBtn.copied ? qsTr("Copied!") : qsTr("Copy")
                     kind: copyBtn.copied ? "primary" : "ghost"
@@ -270,6 +160,12 @@ Rectangle {
                         repeat: false
                         onTriggered: copyBtn.copied = false
                     }
+                }
+                Button {
+                    text: qsTr("Close")
+                    kind: "ghost"
+                    small: true
+                    onClicked: root.closeRequested()
                 }
             }
         }

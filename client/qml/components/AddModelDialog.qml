@@ -30,7 +30,20 @@ Dialog {
     property int deployIndex: 0
     property string customName: ""
 
-    property var providers: ["Xiaomi MIMO", "DeepSeek", "BigModel Z.ai", "MiniMax", qsTr("Custom")]
+    // 三种模型类型各有不同的预设 provider 列表。
+    // SettingsPage 在 open 前设 targetCategory（"asr"|"vlm"|"llm"）。
+    // 用绑定表达式（而非 onTargetCategoryChanged）：前者依赖值变化才触发，
+    // 如果连续在同一种 tab 操作（targetCategory 值未变），providers 不会刷新。
+    // 绑定表达式每次求值都正确，无此问题。
+    property string targetCategory: "asr"
+    readonly property var asrProviders: ["Xiaomi MIMO", "BigModel GLM", qsTr("Custom")]
+    readonly property var llmProviders: ["DeepSeek", "BigModel GLM", "OpenAI", qsTr("Custom")]
+    readonly property var vlmProviders: ["BigModel GLM", "Ollama", qsTr("Custom")]
+    readonly property var providers: {
+        if (targetCategory === "llm") return llmProviders
+        if (targetCategory === "vlm") return vlmProviders
+        return asrProviders
+    }
     property var deployTypes: [qsTr("Cloud API"), qsTr("Local Model")]
 
     background: Rectangle {
@@ -66,8 +79,8 @@ Dialog {
             Layout.fillWidth: true
             label: qsTr("Provider")
             options: root.providers
-            currentIndex: 0
-            onSelected: root.providerIndex = index
+            // currentIndex 由 onOpened 显式设置，不用绑定
+            onSelected: function(index, value) { root.providerIndex = index }
         }
 
         // deploy type select
@@ -76,8 +89,8 @@ Dialog {
             Layout.fillWidth: true
             label: qsTr("Deploy Type")
             options: root.deployTypes
-            currentIndex: 0
-            onSelected: root.deployIndex = index
+            // currentIndex 由 onOpened 显式设置，不用绑定
+            onSelected: function(index, value) { root.deployIndex = index }
         }
 
         // custom provider name (visible only when "Custom" selected)
@@ -108,10 +121,10 @@ Dialog {
                 kind: "primary"
                 onClicked: {
                     root.saved(
-                        nameField.text,
+                        root.modelName,
                         root.providers[root.providerIndex],
                         root.deployTypes[root.deployIndex],
-                        customField.text
+                        root.customName
                     )
                     root.close()
                 }
@@ -119,13 +132,15 @@ Dialog {
         }
     }
 
-    // reset fields when opened
-    onOpened: {
+    // reset fields before showing（onAboutToShow 在显示前触发，比 onOpened 更可靠）
+    onAboutToShow: {
+        root.modelName = ""
+        root.customName = ""
+        root.providerIndex = 0
+        root.deployIndex = 0
         nameField.text = ""
         customField.text = ""
         providerSelect.currentIndex = 0
         deploySelect.currentIndex = 0
-        root.providerIndex = 0
-        root.deployIndex = 0
     }
 }

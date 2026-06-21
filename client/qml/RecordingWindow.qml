@@ -30,6 +30,8 @@ Item {
     // 开启时，ASR 识别出文字后自动调 voiceClient.polish() 润色。
     property bool autoPolish: settingsVm ? settingsVm.llmEnabled : false
     property bool resultPolishing: false
+    // resultPolished: 当前结果是否已完成润色（控制 ResultBubble 的 Polish 按钮状态）
+    property bool resultPolished: false
     // abandoned=true 表示用户点了 × 放弃，后续的 ASR 结果应被忽略
     property bool abandoned: false
     // 当前使用的模型名（显示在结果气泡右下角）
@@ -146,6 +148,7 @@ Item {
         transcript = ""
         result = ""
         resultPolishing = false
+        resultPolished = false
         bands = []
         rmsLevel = 0
         placePill()
@@ -181,6 +184,7 @@ Item {
     // backend returned recognized text -> 若开启自动润色则调 LLM，否则直接完成。
     function applyTranscription(text) {
         result = text
+        resultPolished = false   // ASR 原文，尚未润色
         if (autoPolish && voiceClient) {
             state = "polishing"
             resultPolishing = true
@@ -190,13 +194,15 @@ Item {
         }
     }
     // 润色结果回调（由 main.qml 的 onPolishReady 转发）。
-    // 成功：替换 result 为润色文字；失败：保留原文 + 提示。
+    // 成功：替换 result 为润色文字，标记已润色；失败：保留原文。
     function applyPolishResult(originalText, polishedText, error) {
         if (error && error.length > 0) {
-            // 润色失败：保留原文，结果气泡仍显示 ASR 文字
+            // 润色失败：保留原文，结果气泡仍显示 ASR 文字（未润色）
             result = originalText
+            resultPolished = false
         } else {
             result = polishedText
+            resultPolished = true
         }
         resultPolishing = false
         state = "completed"
@@ -206,6 +212,7 @@ Item {
     function applyTranscriptionError(errorMsg) {
         result = qsTr("Transcription failed: %1").arg(errorMsg)
         resultPolishing = false
+        resultPolished = false
         state = "error"
     }
     // finishTimer 保留用于 demo 流程（finishRecording）；真实录音不走它。
@@ -310,14 +317,15 @@ Item {
             // stop the window from resizing when the textarea grows.
             text: root.result
             polishing: root.resultPolishing
+            polished: root.resultPolished
             autoPolish: root.autoPolish
-            polishState: root.autoPolish ? "done" : "off"
             asrModelName: root.asrModelName
             polishModelName: root.polishModelName
             onCloseRequested: {
                 // 结果气泡 × = 只关闭结果气泡，pill 回到 idle（等待下次录音）
                 root.result = ""
                 root.resultPolishing = false
+                root.resultPolished = false
                 root.bands = []
                 root.rmsLevel = 0
                 root.state = "idle"
