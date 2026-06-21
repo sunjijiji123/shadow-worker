@@ -305,10 +305,9 @@ Item {
         // 根据 active provider 的 type 推导 asrModelType
         asrModelType = activeProviderType(asrActiveModel)
 
-        // 本地模型字段
-        asrLocalModelPath = viewModel.asrLocalModelPath || ""
-        asrLocalModelName = viewModel.asrLocalModelName || deriveModelName(asrLocalModelPath)
-        asrLocalLanguage = viewModel.asrLocalLanguage || "zh"
+        // 本地模型字段：优先从 active provider 读 localModelPath（per-provider），
+        // 回退到全局 viewModel.asrLocalModelPath（向后兼容旧配置）。
+        updateLocalFields()
 
         // 灌入云端字段（无 binding，显式赋值）
         updateCloudFields()
@@ -429,8 +428,10 @@ Item {
         viewModel.asrActiveProvider = asrActiveModel
         // 保存前：把当前 UI 字段的值 Write-Through 到 viewModel，确保不丢
         flushCloudFields()
+        // 本地模型字段：per-provider 写入（支持多本地模型），同时写全局做向后兼容
+        flushLocalFields()
         viewModel.asrLocalModelPath = asrLocalModelPath
-        viewModel.asrLocalModelName = deriveModelName(asrLocalModelPath)
+        viewModel.asrLocalModelName = asrLocalModelName
         viewModel.asrLocalLanguage = asrLocalLanguage
         // LLM/Polish 推送
         viewModel.llmEnabled = polishEnabled
@@ -472,6 +473,27 @@ Item {
         if (cloudLangBox) cloudLangBox.currentIndex = langToIndex(cloudLang)
         if (cloudApiFormatBox) cloudApiFormatBox.currentIndex = cloudApiFmt === "anthropic" ? 1 : 0
         if (cloudAuthBox) cloudAuthBox.currentIndex = authToIndex(cloudAuth)
+    }
+
+    // 从 active provider 读本地模型字段（per-provider，支持多本地模型切换）。
+    // 不回退全局值：新增的 local provider 字段为空（干净状态），只有用户
+    // 自己选过路径才有值。旧配置若 provider 无 localModelPath，用户重新选一次即可。
+    function updateLocalFields() {
+        asrLocalModelPath = providerField(asrActiveModel, "localModelPath")
+        asrLocalModelName = providerField(asrActiveModel, "model") || deriveModelName(asrLocalModelPath)
+        asrLocalLanguage = providerField(asrActiveModel, "language") || "zh"
+        // 命令式更新 UI（无 binding）
+        if (localModelPathField) localModelPathField.text = asrLocalModelPath
+    }
+
+    // 把本地模型字段 Write-Through 到 active provider（per-provider）。
+    function flushLocalFields() {
+        if (!viewModel || !asrActiveModel) return
+        viewModel.updateProvider("asr", asrActiveModel, {
+            localModelPath: asrLocalModelPath,
+            model: asrLocalModelName,
+            language: asrLocalLanguage
+        })
     }
 
     Flickable {
@@ -647,6 +669,7 @@ Item {
                             asrActiveModel = key
                             asrModelType = activeProviderType(key)
                             updateCloudFields()
+                            updateLocalFields()
                         }
                         onChipClosed: function(key) {
                             requestDeleteModel("asrModels", key, "asrActiveModel", "asrModelType")
@@ -745,10 +768,11 @@ Item {
                                 id: localModelPathField
                                 Layout.fillWidth: true
                                 label: qsTr("Model Path")
-                                text: asrLocalModelPath
+                                // 无 text 绑定：updateLocalFields() 命令式赋值，
+                                // 切换 provider 时显示对应 provider 的路径。
                                 onTextEdited: {
-                                    asrLocalModelPath = text
-                                    asrLocalModelName = deriveModelName(text)
+                                    asrLocalModelPath = localModelPathField.text
+                                    asrLocalModelName = deriveModelName(localModelPathField.text)
                                 }
                             }
                             Button {
@@ -1023,7 +1047,10 @@ Item {
                             var win = ApplicationWindow.window
                             if (win && win.toast) win.toast(qsTr("At least one model must be kept"), "warning")
                         }
-                        onAddClicked: addModelDialog.open()
+                        onAddClicked: {
+                            addModelDialog.targetCategory = "vlm"
+                            addModelDialog.open()
+                        }
                     }
 
                     Text {
@@ -1799,7 +1826,6 @@ Item {
     AddModelDialog {
         id: addModelDialog
         parent: Overlay.overlay
-        property string targetCategory: "asr"
         onSaved: function(name, provider, deployType, customName) {
             if (!viewModel) return
             var rawKey = customName || name || provider || ("model-" + Date.now())
@@ -1846,6 +1872,8 @@ Item {
             path = path.replace(/^file:\/\//, "").replace(/^\//, "")
             asrLocalModelPath = path
             asrLocalModelName = deriveModelName(path)
+            // 同步到 UI（localModelPathField 无 text 绑定）
+            if (localModelPathField) localModelPathField.text = path
         }
     }
 

@@ -71,4 +71,8 @@ message ProviderConfig {
   string auth_type = 5;    // api-key | bearer
   string api_key = 6;
   int32 num_ctx = 7;       // Ollama 专属
+  string type = 8;         // cloud | local（区分部署类型，UI 用）
+  string language = 9;     // provider 级语言提示
+  bool stream = 10;        // ASR: 是否按 SSE 流式请求/解析（小米 true，标准 OpenAI false）
+  string local_model_path = 11; // ASR type=local: whisper .bin 路径（per-provider）
 }

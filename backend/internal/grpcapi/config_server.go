@@ -56,16 +56,17 @@ func (s *ConfigServer) SaveConfig(ctx context.Context, req *ConfigData) (*Result
 
 func providerToProto(p config.ASRProvider) *ProviderConfig {
 	return &ProviderConfig{
-		Name:      p.Name,
-		BaseUrl:   p.BaseURL,
-		Model:     p.Model,
-		ApiKey:    p.APIKey,
-		AuthType:  p.AuthType,
-		ApiFormat: p.APIFormat,
-		NumCtx:    int32(p.NumCtx),
-		Type:      p.Type,
-		Language:  p.Language,
-		Stream:    p.Stream,
+		Name:           p.Name,
+		BaseUrl:        p.BaseURL,
+		Model:          p.Model,
+		ApiKey:         p.APIKey,
+		AuthType:       p.AuthType,
+		ApiFormat:      p.APIFormat,
+		NumCtx:         int32(p.NumCtx),
+		Type:           p.Type,
+		Language:       p.Language,
+		Stream:         p.Stream,
+		LocalModelPath: p.LocalModelPath,
 	}
 }
 
@@ -156,16 +157,17 @@ func protoToConfig(data *ConfigData) *config.Config {
 				ptype = "cloud" // 兼容旧配置（无 type 字段时默认云端）
 			}
 			cfg.ASR.Providers[k] = config.ASRProvider{
-				Name:      p.Name,
-				BaseURL:   p.BaseUrl,
-				Model:     p.Model,
-				APIKey:    p.ApiKey,
-				AuthType:  p.AuthType,
-				APIFormat: p.ApiFormat,
-				NumCtx:    int(p.NumCtx),
-				Type:      ptype,
-				Language:  p.Language,
-				Stream:    p.Stream,
+				Name:           p.Name,
+				BaseURL:        p.BaseUrl,
+				Model:          p.Model,
+				APIKey:         p.ApiKey,
+				AuthType:       p.AuthType,
+				APIFormat:      p.ApiFormat,
+				NumCtx:         int(p.NumCtx),
+				Type:           ptype,
+				Language:       p.Language,
+				Stream:         p.Stream,
+				LocalModelPath: p.LocalModelPath,
 			}
 		}
 	}

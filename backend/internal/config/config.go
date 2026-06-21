@@ -33,6 +33,15 @@ type ASRProvider struct {
 	APIFormat string `yaml:"api_format"` // openai | anthropic
 	Language  string `yaml:"language"`
 	NumCtx    int    `yaml:"num_ctx"`
+	Type      string `yaml:"type"` // cloud | local
+	// Stream 控制是否按 SSE 流式请求/解析。小米等支持流式分块的 ASR 设 true；
+	// 标准 OpenAI whisper-1 不支持流式（返回普通 JSON），设 false。
+	// 默认 false（零值）。
+	Stream bool `yaml:"stream"`
+	// LocalModelPath 仅对 type=local 的 provider 有效：whisper .bin 模型文件路径。
+	// 每个 local provider 各自持有，支持多个本地模型独立切换。
+	// （历史遗留：早期只有全局唯一的 cfg.ASR.Local，现已改为 per-provider。）
+	LocalModelPath string `yaml:"local_model_path"`
 }
 
 // LocalASRConfig 是本地 whisper 配置。
@@ -60,6 +69,7 @@ type VLMProvider struct {
 	AuthType  string `yaml:"auth_type"`  // bearer | api-key
 	APIFormat string `yaml:"api_format"` // openai | ollama
 	NumCtx    int    `yaml:"num_ctx"`
+	Type      string `yaml:"type"` // cloud | local
 }
 
 // VLMConfig 是 VLM 配置块。
@@ -79,6 +89,7 @@ type LLMProvider struct {
 	AuthType  string `yaml:"auth_type"`  // bearer | api-key
 	APIFormat string `yaml:"api_format"` // openai | anthropic
 	NumCtx    int    `yaml:"num_ctx"`
+	Type      string `yaml:"type"` // cloud | local
 }
 
 // LLMConfig 是 LLM(Polish) 配置块。
@@ -121,13 +132,35 @@ func Default() *Config {
 			Mode:           "cloud",
 			ActiveProvider: "custom",
 			Providers: map[string]ASRProvider{
+				"mimo": {
+					// 小米 MIMO：chat completions 格式（base64 音频），Bearer 认证
+					Name:      "Xiaomi MIMO",
+					BaseURL:   "https://api.xiaomimimo.com/v1/chat/completions",
+					Model:     "mimo-asr-v2.5",
+					AuthType:  "bearer",
+					APIFormat: "openai",
+					Language:  "zh",
+					Type:      "cloud",
+					Stream:    true,
+				},
+				"bigmodel": {
+					// 智谱 GLM-ASR：标准 transcription 格式（multipart），Bearer 认证
+					Name:      "BigModel GLM",
+					BaseURL:   "https://open.bigmodel.cn/api/paas/v4/audio/transcriptions",
+					Model:     "glm-asr-2512",
+					AuthType:  "bearer",
+					APIFormat: "openai",
+					Language:  "zh",
+					Type:      "cloud",
+				},
 				"custom": {
-					Name:      "自定义 OpenAI 兼容",
+					Name:      "Custom",
 					BaseURL:   "https://api.openai.com/v1",
 					Model:     "whisper-1",
 					AuthType:  "bearer",
 					APIFormat: "openai",
 					Language:  "zh",
+					Type:      "cloud",
 				},
 			},
 			Local: LocalASRConfig{
@@ -148,6 +181,7 @@ func Default() *Config {
 					Model:     "gpt-4o",
 					AuthType:  "bearer",
 					APIFormat: "openai",
+					Type:      "cloud",
 				},
 				"ollama": {
 					Name:      "Ollama 本地",
@@ -155,6 +189,7 @@ func Default() *Config {
 					Model:     "llava",
 					AuthType:  "",
 					APIFormat: "ollama",
+					Type:      "local",
 				},
 			},
 		},
@@ -168,6 +203,7 @@ func Default() *Config {
 					Model:     "gpt-4o",
 					AuthType:  "bearer",
 					APIFormat: "openai",
+					Type:      "cloud",
 				},
 				"ollama": {
 					Name:      "Ollama 本地",
@@ -175,6 +211,7 @@ func Default() *Config {
 					Model:     "qwen2.5",
 					AuthType:  "",
 					APIFormat: "openai",
+					Type:      "local",
 				},
 			},
 			Prompt:     defaultPrompt,

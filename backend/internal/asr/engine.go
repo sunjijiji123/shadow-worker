@@ -42,6 +42,11 @@ type StreamingEngine interface {
 	RecognizeStreaming(ctx context.Context, pcm []byte, onPartial func(string)) (string, error)
 }
 
+// NewCloudEngineForTest 暴露给 grpcapi 用作临时连接测试，不依赖完整 config。
+func NewCloudEngineForTest(cfg config.ASRProvider) (Engine, error) {
+	return newCloudEngine(cfg, nil)
+}
+
 // New 根据配置创建 ASR 引擎。
 func New(cfg *config.Config) (Engine, error) {
 	if cfg == nil {
@@ -50,7 +55,19 @@ func New(cfg *config.Config) (Engine, error) {
 
 	switch strings.ToLower(cfg.ASR.Mode) {
 	case "local":
-		return newLocalEngine(cfg.ASR.Local, cfg.Hotwords)
+		// 优先用 active provider 的 LocalModelPath（支持多本地模型切换）；
+		// 若为空则回退到全局 cfg.ASR.Local（向后兼容旧配置）。
+		local := cfg.ASR.Local
+		if p, ok := cfg.GetASRProvider(); ok && p.LocalModelPath != "" {
+			local.ModelPath = p.LocalModelPath
+			if p.Model != "" {
+				local.ModelName = p.Model
+			}
+			if p.Language != "" {
+				local.Language = p.Language
+			}
+		}
+		return newLocalEngine(local, cfg.Hotwords)
 	case "cloud", "":
 		p, ok := cfg.GetASRProvider()
 		if !ok {

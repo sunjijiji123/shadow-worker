@@ -6,6 +6,7 @@
 #include <QGrpcCallReply>
 #include <QGrpcStatus>
 #include <QHash>
+#include <algorithm>
 
 using shadowworker::ConfigData;
 using shadowworker::GetConfigRequest;
@@ -205,10 +206,13 @@ void SettingsViewModel::emitProvidersChanged(const QString &category) {
 
 void SettingsViewModel::addProvider(const QString &category,
                                     const QString &key) {
+  qDebug() << "[VM] addProvider:" << category << "key=" << key;
   auto list = providerList(category);
   for (const auto &v : list) {
-    if (v.toMap()["key"].toString() == key)
+    if (v.toMap()["key"].toString() == key) {
+      qDebug() << "[VM]   key already exists, skip";
       return;
+    }
   }
   QVariantMap m;
   m["key"] = key;
@@ -219,8 +223,13 @@ void SettingsViewModel::addProvider(const QString &category,
   m["authType"] = "bearer";
   m["apiFormat"] = "openai";
   m["numCtx"] = 0;
+  m["type"] = "cloud"; // 默认云端，本地模型通过 AddModelDialog 设为 local
+  m["language"] = "";
+  m["stream"] = false;
+  m["localModelPath"] = ""; // ASR type=local: whisper .bin 路径（per-provider）
   list.append(m);
   setProviderList(category, list);
+  qDebug() << "[VM]   added, total=" << list.size();
 }
 
 void SettingsViewModel::removeProvider(const QString &category,
@@ -238,10 +247,12 @@ void SettingsViewModel::removeProvider(const QString &category,
 void SettingsViewModel::updateProvider(const QString &category,
                                        const QString &key,
                                        const QVariantMap &data) {
+  qDebug() << "[VM] updateProvider:" << category << "key=" << key << "data keys=" << data.keys();
   auto list = providerList(category);
   for (int i = 0; i < list.size(); ++i) {
     auto m = list[i].toMap();
     if (m["key"].toString() == key) {
+      qDebug() << "[VM]   found provider at index" << i << "before name=" << m["name"];
       auto update = [&m, &data](const char *k) {
         if (data.contains(k))
           m[k] = data[k];
@@ -252,13 +263,20 @@ void SettingsViewModel::updateProvider(const QString &category,
       update("apiKey");
       update("authType");
       update("apiFormat");
+      update("type");
+      update("language");
+      update("localModelPath");
+      if (data.contains("stream"))
+        m["stream"] = data["stream"].toBool();
       if (data.contains("numCtx"))
         m["numCtx"] = data["numCtx"].toInt();
+      qDebug() << "[VM]   after name=" << m["name"] << "type=" << m["type"];
       list[i] = m;
       setProviderList(category, list);
       return;
     }
   }
+  qDebug() << "[VM]   provider NOT FOUND for key=" << key;
 }
 
 void SettingsViewModel::setActiveProvider(const QString &category,
@@ -336,6 +354,16 @@ void SettingsViewModel::save() {
                    });
 }
 
+// 按 provider 的 key 排序，保证 chip 列表顺序稳定（map 遍历顺序不固定）。
+static QVariantList sortProvidersByKey(QVariantList list) {
+  std::sort(list.begin(), list.end(),
+            [](const QVariant &a, const QVariant &b) {
+              return a.toMap()["key"].toString() <
+                     b.toMap()["key"].toString();
+            });
+  return list;
+}
+
 static QVariantMap providerToMap(const QString &key, const ProviderConfig &p) {
   QVariantMap m;
   m["key"] = key;
@@ -346,6 +374,10 @@ static QVariantMap providerToMap(const QString &key, const ProviderConfig &p) {
   m["authType"] = p.authType();
   m["apiFormat"] = p.apiFormat();
   m["numCtx"] = (int)p.numCtx();
+  m["type"] = p.type();
+  m["language"] = p.language();
+  m["stream"] = p.stream();
+  m["localModelPath"] = p.localModelPath();
   return m;
 }
 
@@ -362,6 +394,10 @@ providersFromList(const QVariantList &list) {
     p.setAuthType(m["authType"].toString());
     p.setApiFormat(m["apiFormat"].toString());
     p.setNumCtx((qint32)m["numCtx"].toInt());
+    p.setType(m["type"].toString());
+    p.setLanguage(m["language"].toString());
+    p.setStream(m["stream"].toBool());
+    p.setLocalModelPath(m["localModelPath"].toString());
     map.insert(m["key"].toString(), p);
   }
   return map;
@@ -379,7 +415,7 @@ void SettingsViewModel::applyConfig(const ConfigData &data) {
   const auto asrMap = data.asrProviders();
   for (auto it = asrMap.begin(); it != asrMap.end(); ++it)
     asrList.append(providerToMap(it.key(), it.value()));
-  m_asrProviders = asrList;
+  m_asrProviders = sortProvidersByKey(asrList);
   emit asrProvidersChanged();
 
   setVlmMode(data.vlmMode());
@@ -390,7 +426,7 @@ void SettingsViewModel::applyConfig(const ConfigData &data) {
   const auto vlmMap = data.vlmProviders();
   for (auto it = vlmMap.begin(); it != vlmMap.end(); ++it)
     vlmList.append(providerToMap(it.key(), it.value()));
-  m_vlmProviders = vlmList;
+  m_vlmProviders = sortProvidersByKey(vlmList);
   emit vlmProvidersChanged();
 
   setLlmEnabled(data.polishEnabled());
@@ -402,7 +438,7 @@ void SettingsViewModel::applyConfig(const ConfigData &data) {
   const auto llmMap = data.polishProviders();
   for (auto it = llmMap.begin(); it != llmMap.end(); ++it)
     llmList.append(providerToMap(it.key(), it.value()));
-  m_llmProviders = llmList;
+  m_llmProviders = sortProvidersByKey(llmList);
   emit llmProvidersChanged();
 
   setMovementSampleMs((int)data.movementSampleIntervalMs());
