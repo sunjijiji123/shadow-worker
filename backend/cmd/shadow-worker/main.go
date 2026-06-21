@@ -63,6 +63,14 @@ func runBackgroundService() {
 		log.Fatalf("加载配置失败: %v", err)
 	}
 
+	// 将全局 debug 开关注入到各采集模块（VLM 截图、movement 帧差）。
+	// 这样模块内部只需读自己的 cfg.SaveScreenshots，无需感知全局 Debug 结构。
+	cfg.VLM.SaveScreenshots = cfg.Debug.SaveScreenshots
+	cfg.Movement.SaveScreenshots = cfg.Debug.SaveScreenshots
+	if cfg.Debug.SaveScreenshots {
+		log.Printf("[debug] 截图落盘已开启（VLM 截图 + movement 活动窗口帧将保存到 screenshots/ 目录）")
+	}
+
 	// 2. 打开 SQLite
 	db, err := storage.Open()
 	if err != nil {

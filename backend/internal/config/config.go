@@ -82,6 +82,9 @@ type VLMConfig struct {
 	//   active = 当前前台窗口（默认，与白名单配合聚焦正在做的事）
 	//   screen = 整个虚拟屏幕（含所有显示器，适合多屏工作流）
 	CaptureRange string `yaml:"capture_range"`
+	// SaveScreenshots 由 main.go 从 cfg.Debug.SaveScreenshots 注入（非 yaml 字段）。
+	// true 时 VLM 截图落盘到 screenshots/ 目录供调试。
+	SaveScreenshots bool `yaml:"-"`
 }
 
 // LLMProvider 是单个 LLM/Polish 供应商配置。
@@ -122,6 +125,9 @@ type MovementConfig struct {
 	// 两者为 0 时 NewCollector 用 Precision 对应 Preset 的默认值。
 	InputIdleS   int `yaml:"input_idle_s"`
 	DisplayIdleS int `yaml:"display_idle_s"`
+	// SaveScreenshots 由 main.go 从 cfg.Debug.SaveScreenshots 注入（非 yaml 字段）。
+	// true 时 movement 活动窗口帧落盘到 screenshots/ 目录供调试。
+	SaveScreenshots bool `yaml:"-"`
 }
 
 // Config 是整体配置。
@@ -132,6 +138,16 @@ type Config struct {
 	Movement MovementConfig `yaml:"movement"`
 	Hotkeys  HotkeyConfig   `yaml:"hotkeys"`
 	Hotwords []string       `yaml:"hotwords"`
+	Debug    DebugConfig    `yaml:"debug"`
+}
+
+// DebugConfig 是调试开关。默认全部关闭，不影响正常使用。
+// 排查截图/识别问题时在 config.yaml 设 debug.save_screenshots: true，
+// 所有截图（VLM 截图 + movement 活动窗口帧）会落盘到 screenshots/ 目录供分析。
+type DebugConfig struct {
+	// SaveScreenshots 开启时保存所有截图到磁盘（VLM 截图 + movement 帧差用的活动窗口帧）。
+	// 关闭时（默认）截图只在内存流转，不落盘。
+	SaveScreenshots bool `yaml:"save_screenshots"`
 }
 
 // Default 返回默认配置。

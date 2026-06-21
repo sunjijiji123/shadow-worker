@@ -85,7 +85,8 @@ func (db *DB) migrate() error {
 			app_name        TEXT NOT NULL,
 			category        TEXT NOT NULL,
 			window_title    TEXT,
-			state           TEXT NOT NULL
+			state           TEXT NOT NULL,
+			summary         TEXT
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_segments_start ON activity_segments(start_ts);`,
 		`CREATE INDEX IF NOT EXISTS idx_segments_cat_date ON activity_segments(category, start_ts);`,
@@ -101,6 +102,10 @@ func (db *DB) migrate() error {
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);`,
 		`CREATE INDEX IF NOT EXISTS idx_events_type_ts ON events(type, ts);`,
+		// 清理历史脏数据：旧版 voice_server 写入的 event 未带 TS（零值），
+		// 被存为 ts=0，永远无法被时间窗查询命中（ListEvents 用 ts >= start），
+		// 且无任何列可推断真实时间。直接删除这些孤儿行。
+		`DELETE FROM events WHERE ts = 0;`,
 	}
 
 	for _, stmt := range stmts {
@@ -108,7 +113,33 @@ func (db *DB) migrate() error {
 			return fmt.Errorf("执行建表语句失败: %w", err)
 		}
 	}
+
+	// 老库升级：activity_segments 在历史版本没有 summary 列。
+	// SQLite 的 ALTER TABLE ADD COLUMN 不支持 IF NOT EXISTS，
+	// 用 pragma_table_info 检测，列已存在则跳过，否则补列。
+	if err := db.ensureColumn("activity_segments", "summary", "TEXT"); err != nil {
+		return fmt.Errorf("迁移 activity_segments.summary 列失败: %w", err)
+	}
+
 	return nil
+}
+
+// ensureColumn 幂等地确保表里存在指定列。
+// 列声明 decl 是该列的类型与约束（如 "TEXT" 或 "TEXT NOT NULL DEFAULT ''"）。
+// 新库的 CREATE TABLE 通常已含该列，此时跳过；老库则通过 ALTER TABLE ADD COLUMN 补齐。
+func (db *DB) ensureColumn(table, col, decl string) error {
+	var name string
+	err := db.QueryRow(
+		`SELECT name FROM pragma_table_info(?) WHERE name = ?`, table, col,
+	).Scan(&name)
+	if err == nil {
+		return nil // 列已存在
+	}
+	if err != sql.ErrNoRows {
+		return err
+	}
+	_, err = db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, col, decl))
+	return err
 }
 
 // toUnix 把 time.Time 转成整数秒。

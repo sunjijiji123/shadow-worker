@@ -16,6 +16,7 @@ type ActivitySegment struct {
 	Category    string
 	WindowTitle string
 	State       string // active / idle
+	Summary     string // 由 vlm_summary 事件惰性回填
 }
 
 // InsertActivitySegment 插入一条活动段，返回自增 ID。
@@ -53,10 +54,49 @@ func (db *DB) UpdateActivitySegmentEndTS(id int64, endTS time.Time) error {
 	return nil
 }
 
+// UpdateActivitySegmentEndTSAndState 同时更新结束时间和活跃状态。
+// 用于同应用段内的滚动更新：每 tick 延长 end_ts 并把 state 更新为最新活跃强度
+// （engaged/active/idle 在段内翻转时记录最后值）。比分别调用两次 UPDATE 省 IO。
+func (db *DB) UpdateActivitySegmentEndTSAndState(id int64, endTS time.Time, state string) error {
+	_, err := db.Exec("UPDATE activity_segments SET end_ts = ?, state = ? WHERE id = ?", toUnix(endTS), state, id)
+	if err != nil {
+		return fmt.Errorf("更新活动段结束时间和状态失败: %w", err)
+	}
+	return nil
+}
+
+// UpdateActivitySegmentSummary 更新活动段的 AI 摘要（由 VLM 摘要事件惰性回填）。
+func (db *DB) UpdateActivitySegmentSummary(id int64, summary string) error {
+	_, err := db.Exec("UPDATE activity_segments SET summary = ? WHERE id = ?", summary, id)
+	if err != nil {
+		return fmt.Errorf("更新活动段摘要失败: %w", err)
+	}
+	return nil
+}
+
+// LatestVLMSummary 查询时间窗口 [start, end] 内最近一条 vlm_summary 事件的内容。
+// 走 idx_events_type_ts 索引。无结果返回空串。content 列可空，用 NullString 兜底。
+func (db *DB) LatestVLMSummary(start, end time.Time) (string, error) {
+	var content sql.NullString
+	err := db.QueryRow(
+		`SELECT content FROM events
+		 WHERE type = ? AND ts >= ? AND ts <= ?
+		 ORDER BY ts DESC LIMIT 1`,
+		string(EventTypeVLMSummary), toUnix(start), toUnix(end),
+	).Scan(&content)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("查询 VLM 摘要失败: %w", err)
+	}
+	return content.String, nil
+}
+
 // GetActivitySegment 按 ID 查询活动段。
 func (db *DB) GetActivitySegment(id int64) (*ActivitySegment, error) {
 	row := db.QueryRow(
-		"SELECT id, start_ts, end_ts, app_path, app_name, category, window_title, state FROM activity_segments WHERE id = ?",
+		"SELECT id, start_ts, end_ts, app_path, app_name, category, window_title, state, summary FROM activity_segments WHERE id = ?",
 		id,
 	)
 	return scanActivitySegment(row)
@@ -65,7 +105,7 @@ func (db *DB) GetActivitySegment(id int64) (*ActivitySegment, error) {
 // ListActivitySegments 查询时间范围内的活动段，按开始时间升序。
 func (db *DB) ListActivitySegments(start, end time.Time) ([]ActivitySegment, error) {
 	rows, err := db.Query(
-		`SELECT id, start_ts, end_ts, app_path, app_name, category, window_title, state
+		`SELECT id, start_ts, end_ts, app_path, app_name, category, window_title, state, summary
 		 FROM activity_segments
 		 WHERE start_ts < ? AND end_ts > ?
 		 ORDER BY start_ts`,
@@ -133,7 +173,10 @@ func scanActivitySegment(sc interface {
 }) (*ActivitySegment, error) {
 	var seg ActivitySegment
 	var startSec, endSec int64
-	if err := sc.Scan(&seg.ID, &startSec, &endSec, &seg.AppPath, &seg.AppName, &seg.Category, &seg.WindowTitle, &seg.State); err != nil {
+	// summary 列由 migrate 新增，旧行默认 NULL；
+	// modernc/sqlite 不允许把 NULL 扫进 Go string，故用 NullString 兜底。
+	var summary sql.NullString
+	if err := sc.Scan(&seg.ID, &startSec, &endSec, &seg.AppPath, &seg.AppName, &seg.Category, &seg.WindowTitle, &seg.State, &summary); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -141,5 +184,6 @@ func scanActivitySegment(sc interface {
 	}
 	seg.StartTS = fromUnix(startSec)
 	seg.EndTS = fromUnix(endSec)
+	seg.Summary = summary.String
 	return &seg, nil
 }

@@ -2,6 +2,7 @@ package grpcapi
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -9,6 +10,7 @@ import (
 
 	"shadow-worker/backend/internal/asr"
 	"shadow-worker/backend/internal/audio"
+	"shadow-worker/backend/internal/collector"
 	"shadow-worker/backend/internal/config"
 	"shadow-worker/backend/internal/llm"
 	"shadow-worker/backend/internal/storage"
@@ -133,11 +135,22 @@ func (s *VoiceServer) StopRecording(ctx context.Context, req *StopRequest) (*Voi
 	}
 
 	// persist as a voice event (best-effort)
+	// 必须带 TS + 前台应用，否则 ListEvents 的 ts>=start 半开区间查不到（ts=0 孤儿），
+	// 且无法按时间关联回 activity_segment。范式参照 asr_server.go。
 	if s.db != nil {
+		app, appErr := collector.ForegroundApp()
+		var appPath, appName string
+		if appErr == nil {
+			appPath = app.Path
+			appName = app.Name
+		}
 		_, _ = s.db.InsertEvent(storage.Event{
+			TS:      time.Now().UTC(),
 			Type:    storage.EventTypeVoice,
+			AppPath: appPath,
+			AppName: appName,
 			Content: text,
-			Meta:    "engine=" + engine.Name(),
+			Meta:    fmt.Sprintf("engine=%s;duration_ms=%d", engine.Name(), durationMs),
 		})
 	}
 

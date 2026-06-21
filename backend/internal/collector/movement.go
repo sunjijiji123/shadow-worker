@@ -23,6 +23,8 @@ type PrecisionConfig struct {
 	SampleMs     int
 	InputIdleS   int
 	DisplayIdleS int
+	// SaveScreenshots 由 NewCollector 从 MovementConfig 复制；debug 模式时为 true。
+	SaveScreenshots bool
 }
 
 // Presets 是预定义的精度档位。
@@ -82,6 +84,7 @@ func NewCollector(db *storage.DB, mc config.MovementConfig, logger *slog.Logger)
 	if mc.DisplayIdleS > 0 {
 		cfg.DisplayIdleS = mc.DisplayIdleS
 	}
+	cfg.SaveScreenshots = mc.SaveScreenshots
 	return &Collector{
 		db:       db,
 		cfg:      cfg,
@@ -237,6 +240,15 @@ func (c *Collector) loop() {
 				c.logger.Warn("帧差计算失败", "err", err)
 			} else if ratio > c.cfg.ChangeRatio {
 				strong = true
+				// debug 模式：画面变化时保存完整截图，便于排查 movement 判断依据。
+				// 帧差超阈值才保存，避免每 tick 落盘（300ms 一次太密）。
+				if c.cfg.SaveScreenshots {
+					if debugPng := CaptureWindowPNG(app.HWND); debugPng != nil {
+						if _, saveErr := saveScreenshot(debugPng, "mv-"+app.Name, time.Now().UTC()); saveErr != nil {
+							c.logger.Debug("debug 保存 movement 截图失败", "err", saveErr)
+						}
+					}
+				}
 			}
 			prevFrame = curr
 		} else {
@@ -282,11 +294,19 @@ func (c *Collector) isWhitelisted(path string) bool {
 }
 
 // updateSegment 根据活跃状态维护 activity_segments 表。
+//
+// 段的合并粒度（用户语义）："在同一应用上持续工作"应合并为一段，
+// 只有切换应用才结束旧段开新段。engaged/active/idle 之间的翻转
+// 都在段内进行——idle 只是"在这件事上暂时静默/思考"，不算离开。
+// 这样 worklog 每个应用是一段连续记录，不会被每秒的 state 翻转碎片化。
+// 段的 state 字段滚动更新为最新值（记录最后一次活跃强度），end_ts 每tick延长。
 func (c *Collector) updateSegment(app App, state string) {
 	now := time.Now().UTC()
 
-	// 应用或状态变化时，结束当前段并开启新段
-	if c.curSegID == 0 || c.curApp.Path != app.Path || c.curState != state {
+	// 唯一的开新段判据：首次、或切换了应用。
+	needNew := c.curSegID == 0 || c.curApp.Path != app.Path
+
+	if needNew {
 		if c.curSegID != 0 {
 			if err := c.db.UpdateActivitySegmentEndTS(c.curSegID, now); err != nil {
 				c.logger.Warn("结束活动段失败", "err", err)
@@ -323,8 +343,9 @@ func (c *Collector) updateSegment(app App, state string) {
 		return
 	}
 
-	// 同一段内只更新结束时间
-	if err := c.db.UpdateActivitySegmentEndTS(c.curSegID, now); err != nil {
-		c.logger.Warn("更新活动段结束时间失败", "err", err)
+	// 同一应用段内：延长结束时间，并滚动更新 state 为最新活跃强度。
+	c.curState = state
+	if err := c.db.UpdateActivitySegmentEndTSAndState(c.curSegID, now, state); err != nil {
+		c.logger.Warn("更新活动段失败", "err", err)
 	}
 }

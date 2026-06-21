@@ -45,6 +45,7 @@ message TimelineSegment {
   string category = 4;
   string window_title = 5;
   string state = 6;
+  string summary = 7;
 }
 
 message TimelineEvent {

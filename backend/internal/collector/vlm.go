@@ -77,16 +77,24 @@ func (v *VLMCapturer) Trigger(ctx context.Context) (string, error) {
 	)
 	if v.cfg.CaptureRange == "screen" {
 		// 整屏模式：截取虚拟屏（多显示器并集），用合成 app 信息标识。
+		// 整屏不按白名单过滤——整屏本身是用户明确的全局采集意图，
+		// 按前台 app 白名单过滤会导致永远采不到（整屏不属于单一应用）。
 		png = CaptureScreenPNG()
 		if png == nil {
 			return "", fmt.Errorf("截图失败")
 		}
 		app = App{Name: "Screen", Path: ""}
 	} else {
-		// 活动窗口模式（默认）：前台窗口 + 白名单。
+		// 活动窗口模式（默认）：前台窗口 + 白名单过滤。
 		app, err = ForegroundApp()
 		if err != nil {
 			return "", fmt.Errorf("获取前台应用失败: %w", err)
+		}
+		// 白名单过滤：仅采集用户添加到采集列表的应用。
+		// 不在白名单 → 静默跳过本次（不算错误），与 movement 采集的过滤口径一致。
+		if !v.isWhitelisted(app.Path) {
+			v.logger.Debug("前台应用不在白名单，跳过 VLM 截图", "app", app.Name, "path", app.Path)
+			return "", nil
 		}
 		png = CaptureWindowPNG(app.HWND)
 		if png == nil {
@@ -94,10 +102,15 @@ func (v *VLMCapturer) Trigger(ctx context.Context) (string, error) {
 		}
 	}
 
-	path, err := saveScreenshot(png, app.Name, time.Now().UTC())
-	if err != nil {
-		v.logger.Warn("保存截图失败", "err", err)
-		path = ""
+	// debug 模式：把截图落盘到 screenshots/ 目录，便于排查"VLM 识别了什么内容"。
+	// 默认关闭（不落盘），只在 config.yaml 设 debug.save_screenshots: true 时开启。
+	var shotPath string
+	if v.cfg.SaveScreenshots {
+		if p, saveErr := saveScreenshot(png, app.Name, time.Now().UTC()); saveErr != nil {
+			v.logger.Warn("debug 保存截图失败", "err", saveErr)
+		} else {
+			shotPath = p
+		}
 	}
 
 	summary, err := v.engine.Describe(ctx, png)
@@ -111,7 +124,7 @@ func (v *VLMCapturer) Trigger(ctx context.Context) (string, error) {
 		AppPath:        app.Path,
 		AppName:        app.Name,
 		Content:        summary,
-		ScreenshotPath: path,
+		ScreenshotPath: shotPath, // debug 模式才有值
 	})
 	if err != nil {
 		v.logger.Warn("写入 VLM 事件失败", "err", err)
@@ -119,6 +132,20 @@ func (v *VLMCapturer) Trigger(ctx context.Context) (string, error) {
 
 	v.logger.Info("VLM 摘要已生成", "app", app.Name, "range", v.cfg.CaptureRange, "summary", summary)
 	return summary, nil
+}
+
+// isWhitelisted 检查应用是否在采集白名单中（与 movement.go 的过滤口径一致）。
+// 白名单存在 SQLite 的 app_categories 表，由前端"采集应用"设置页维护。
+func (v *VLMCapturer) isWhitelisted(path string) bool {
+	if v.db == nil || path == "" {
+		return false
+	}
+	app, err := v.db.GetAppCategory(path)
+	if err != nil {
+		v.logger.Warn("查询白名单失败", "err", err)
+		return false
+	}
+	return app != nil
 }
 
 func (v *VLMCapturer) loop() {
@@ -147,7 +174,8 @@ func (v *VLMCapturer) runOnce() {
 	}
 }
 
-// saveScreenshot 把 PNG 数据保存到标准截图目录,返回相对/绝对路径。
+// saveScreenshot 把 PNG 数据保存到 screenshots/<日期>/ 目录，返回绝对路径。
+// 仅在 debug.save_screenshots=true 时调用。
 func saveScreenshot(data []byte, appName string, t time.Time) (string, error) {
 	cfgDir, err := os.UserConfigDir()
 	if err != nil {

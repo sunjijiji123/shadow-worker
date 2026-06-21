@@ -35,6 +35,7 @@ func TestCollectorUpdateSegment(t *testing.T) {
 	if coll.curSegID == 0 {
 		t.Fatal("应创建 activity_segment")
 	}
+	seg1ID := coll.curSegID
 	seg, err := db.GetActivitySegment(coll.curSegID)
 	if err != nil {
 		t.Fatalf("查询段失败: %v", err)
@@ -46,37 +47,49 @@ func TestCollectorUpdateSegment(t *testing.T) {
 		t.Fatalf("curState 应为 engaged，实际 %s", coll.curState)
 	}
 
-	// engaged → active(余热,同应用不换段)
+	// engaged → active：同应用，应合并为同一段（不开新段）。
 	coll.updateSegment(app, StateActive)
-	if seg.State != StateEngaged {
-		t.Fatalf("旧段状态不应被改动，仍为 engaged，实际 %s", seg.State)
+	if coll.curSegID != seg1ID {
+		t.Fatalf("engaged→active 应合并同一段，curSegID 不应变，旧=%d 新=%d", seg1ID, coll.curSegID)
 	}
+
+	// active → idle（静默思考）：同应用，idle 不打断聚合，仍合并为同一段。
+	coll.updateSegment(app, StateIdle)
+	if coll.curSegID != seg1ID {
+		t.Fatalf("active→idle 同应用应合并（idle 不打断），curSegID 不应变，旧=%d 新=%d", seg1ID, coll.curSegID)
+	}
+	// 段 state 应滚动更新为最新值（idle）。
 	seg2, err := db.GetActivitySegment(coll.curSegID)
 	if err != nil {
 		t.Fatalf("查询段失败: %v", err)
 	}
-	if seg2 == nil || seg2.State != StateActive {
-		t.Fatalf("新段状态应为 active，实际 %+v", seg2)
+	if seg2 == nil || seg2.State != StateIdle {
+		t.Fatalf("合并段 state 应已滚动为 idle，实际 %+v", seg2)
 	}
 
-	// active → idle 转换
-	time.Sleep(10 * time.Millisecond)
-	coll.updateSegment(app, StateIdle)
-	seg3, err := db.GetActivitySegment(coll.curSegID)
-	if err != nil {
-		t.Fatalf("查询段失败: %v", err)
+	// 切换到另一个应用：才开新段。
+	otherApp := App{
+		Path:        `C:\TestApps\Other.exe`,
+		Name:        "Other",
+		WindowTitle: "other",
 	}
-	if seg3 == nil || seg3.State != StateIdle {
-		t.Fatalf("新段状态应为 idle，实际 %+v", seg3)
+	if err := db.AddAppCategory(storage.AppCategory{
+		Path: otherApp.Path, Name: "Other", Category: "browser",
+	}); err != nil {
+		t.Fatalf("添加第二个白名单失败: %v", err)
+	}
+	coll.updateSegment(otherApp, StateEngaged)
+	if coll.curSegID == seg1ID {
+		t.Fatal("切换应用应开新段，curSegID 应改变")
 	}
 
-	// 检查总段数:engaged / active / idle 各一段 = 3
+	// 检查总段数：同 app 的 engaged/active/idle 合并为 1 段 + 切换后的新 app 1 段 = 2
 	segs, err := db.ListActivitySegmentsByDate(time.Now().UTC())
 	if err != nil {
 		t.Fatalf("列出段失败: %v", err)
 	}
-	if len(segs) != 3 {
-		t.Fatalf("应有 3 个段(engaged/active/idle)，实际 %d", len(segs))
+	if len(segs) != 2 {
+		t.Fatalf("应有 2 个段（同app合并 + 切换app新段），实际 %d", len(segs))
 	}
 
 	// 验证三态常量互不相同(防止拼写/重构导致状态机退化)。

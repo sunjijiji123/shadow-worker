@@ -16,6 +16,17 @@ var (
 	procReleaseDC                = moduser32.NewProc("ReleaseDC")
 	procGetLastInputInfo         = moduser32.NewProc("GetLastInputInfo")
 	procGetSystemMetrics         = moduser32.NewProc("GetSystemMetrics")
+	procPrintWindow              = moduser32.NewProc("PrintWindow")
+)
+
+// PrintWindow 标志位。
+const (
+	// PW_CLIENTONLY 仅截客户区。对很多应用客户区 DC 为空，故不单独使用。
+	PW_CLIENTONLY = 0x00000001
+	// PW_RENDERFULLCONTENT 让硬件加速/合成渲染（Electron/CEF/Chromium 内壳的
+	// IDE 如 VS Code、ZCode）也能正确截取。GetDC+BitBlt 对这类窗口只能拿到
+	// 空白/加载态画面，必须用 PrintWindow 配此标志。Windows 8.1+ 支持。
+	PW_RENDERFULLCONTENT = 0x00000002
 )
 
 // 虚拟屏幕（virtual screen）= 所有显示器的并集，原点在主显示器的左上角，
@@ -97,6 +108,15 @@ func GetDC(hwnd HWND) syscall.Handle {
 func ReleaseDC(hwnd HWND, hdc syscall.Handle) int32 {
 	r, _, _ := procReleaseDC.Call(uintptr(hwnd), uintptr(hdc))
 	return int32(r)
+}
+
+// PrintWindow 把窗口可视内容绘制到指定 DC。flags 为 PW_* 标志组合。
+// 对硬件加速/合成渲染窗口（Electron/CEF 等），必须用 PW_RENDERFULLCONTENT
+// 才能截到真实内容；GetDC+BitBlt 对这类窗口只能拿到空白/加载态。
+// 成功返回 true。
+func PrintWindow(hwnd HWND, hdc syscall.Handle, flags uint32) bool {
+	r, _, _ := procPrintWindow.Call(uintptr(hwnd), uintptr(hdc), uintptr(flags))
+	return r != 0
 }
 
 // GetSystemMetrics 查询系统度量/配置。用于获取虚拟屏（多显示器并集）的坐标和尺寸。

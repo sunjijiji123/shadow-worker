@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"syscall"
 	"unsafe"
 
 	"shadow-worker/backend/internal/winapi"
@@ -18,6 +19,10 @@ const (
 
 // CaptureWindow 截取指定窗口并降采样为 RGB 字节（长度=320*180*3）。
 // 失败返回 nil。
+//
+// 用 PrintWindow(PW_RENDERFULLCONTENT) 代替 GetDC+BitBlt：硬件加速窗口
+// （Electron/CEF）用 BitBlt 只能拿到空白/加载态，导致帧差信号失效、
+// state 误判。PrintWindow 对所有窗口类型都能拿到真实内容。
 func CaptureWindow(hwnd winapi.HWND) []byte {
 	var rect winapi.RECT
 	if !winapi.GetWindowRect(hwnd, &rect) {
@@ -29,11 +34,11 @@ func CaptureWindow(hwnd winapi.HWND) []byte {
 		return nil
 	}
 
-	hdc := winapi.GetDC(hwnd)
+	hdc := winapi.GetDC(0)
 	if hdc == 0 {
 		return nil
 	}
-	defer winapi.ReleaseDC(hwnd, hdc)
+	defer winapi.ReleaseDC(0, hdc)
 
 	memDC := winapi.CreateCompatibleDC(winapi.HDC(hdc))
 	if memDC == 0 {
@@ -50,28 +55,12 @@ func CaptureWindow(hwnd winapi.HWND) []byte {
 	old := winapi.SelectObject(memDC, winapi.Handle(bmp))
 	defer winapi.SelectObject(memDC, old)
 
-	if !winapi.BitBlt(memDC, 0, 0, w, h, winapi.HDC(hdc), 0, 0, winapi.SRCCOPY) {
+	if !winapi.PrintWindow(hwnd, syscall.Handle(memDC), winapi.PW_RENDERFULLCONTENT) {
 		return nil
 	}
 
-	// 32-bit BGRA 缓冲区
-	bufSize := int(w) * int(h) * 4
-	bits := make([]byte, bufSize)
-
-	bmi := &winapi.BITMAPINFO{}
-	bmi.BmiHeader.BiSize = uint32(unsafe.Sizeof(bmi.BmiHeader))
-	bmi.BmiHeader.BiWidth = int32(w)
-	bmi.BmiHeader.BiHeight = -int32(h) // 顶-down
-	bmi.BmiHeader.BiPlanes = 1
-	bmi.BmiHeader.BiBitCount = 32
-	bmi.BmiHeader.BiCompression = 0
-	bmi.BmiHeader.BiSizeImage = uint32(bufSize)
-
-	lines := winapi.GetDIBits(
-		winapi.HDC(hdc), bmp, 0, uint32(h),
-		unsafe.Pointer(&bits[0]), bmi, winapi.DIB_RGB_COLORS,
-	)
-	if lines == 0 {
+	bits, ok := dibitsRGB(winapi.HDC(hdc), bmp, w, h)
+	if !ok {
 		return nil
 	}
 
@@ -135,7 +124,11 @@ func abs(a int) int {
 }
 
 // CaptureWindowPNG 截取指定窗口并返回 PNG 字节。
-// 失败返回 nil。
+//
+// 使用 PrintWindow(PW_RENDERFULLCONTENT) 而非 GetDC+BitBlt：后者对硬件加速/
+// 合成渲染窗口（Electron/CEF 内壳的 IDE 如 VS Code、ZCode）只能拿到空白或
+// 加载态画面。PrintWindow 让窗口把内容绘制到我们提供的 DC，对所有窗口类型都
+// 有效（Windows 8.1+）。失败返回 nil。
 func CaptureWindowPNG(hwnd winapi.HWND) []byte {
 	var rect winapi.RECT
 	if !winapi.GetWindowRect(hwnd, &rect) {
@@ -147,13 +140,34 @@ func CaptureWindowPNG(hwnd winapi.HWND) []byte {
 		return nil
 	}
 
-	hdc := winapi.GetDC(hwnd)
+	hdc := winapi.GetDC(0)
 	if hdc == 0 {
 		return nil
 	}
-	defer winapi.ReleaseDC(hwnd, hdc)
+	defer winapi.ReleaseDC(0, hdc)
 
-	return capturePNGFromDC(winapi.HDC(hdc), 0, 0, w, h)
+	memDC := winapi.CreateCompatibleDC(winapi.HDC(hdc))
+	if memDC == 0 {
+		return nil
+	}
+	defer winapi.DeleteDC(memDC)
+
+	bmp := winapi.CreateCompatibleBitmap(winapi.HDC(hdc), w, h)
+	if bmp == 0 {
+		return nil
+	}
+	defer winapi.DeleteObject(winapi.Handle(bmp))
+
+	old := winapi.SelectObject(memDC, winapi.Handle(bmp))
+	defer winapi.SelectObject(memDC, old)
+
+	// PrintWindow 把窗口内容绘制到 memDC。PW_RENDERFULLCONTENT 对硬件加速
+	// 窗口必需；对普通窗口也兼容（相当于标准绘制）。
+	if !winapi.PrintWindow(hwnd, syscall.Handle(memDC), winapi.PW_RENDERFULLCONTENT) {
+		return nil
+	}
+
+	return dibitsToPNG(winapi.HDC(hdc), bmp, w, h)
 }
 
 // CaptureScreenPNG 截取整块虚拟屏幕（所有显示器并集）并返回 PNG 字节。
@@ -198,6 +212,23 @@ func capturePNGFromDC(srcDC winapi.HDC, x, y, w, h int32) []byte {
 		return nil
 	}
 
+	return dibitsToPNG(srcDC, bmp, w, h)
+}
+
+// dibitsToPNG 从已绘制好的位图 bmp 读出 32-bit BGRA 像素，转 RGBA PNG。
+// srcDC 必须与 bmp 兼容（用于 GetDIBits 的格式查询）。失败返回 nil。
+// 供 capturePNGFromDC(BitBlt) 和 CaptureWindowPNG(PrintWindow) 共用。
+func dibitsToPNG(srcDC winapi.HDC, bmp winapi.HBITMAP, w, h int32) []byte {
+	bits, ok := dibitsRGB(srcDC, bmp, w, h)
+	if !ok {
+		return nil
+	}
+	return bitsToPNG(bits, w, h)
+}
+
+// dibitsRGB 从已绘制好的位图 bmp 读出 32-bit BGRA 像素缓冲。
+// 供需要原始像素的帧差路径（CaptureWindow → resizeNearestRGB）使用。
+func dibitsRGB(srcDC winapi.HDC, bmp winapi.HBITMAP, w, h int32) ([]byte, bool) {
 	bufSize := int(w) * int(h) * 4
 	bits := make([]byte, bufSize)
 
@@ -212,10 +243,9 @@ func capturePNGFromDC(srcDC winapi.HDC, x, y, w, h int32) []byte {
 
 	lines := winapi.GetDIBits(srcDC, bmp, 0, uint32(h), unsafe.Pointer(&bits[0]), bmi, winapi.DIB_RGB_COLORS)
 	if lines == 0 {
-		return nil
+		return nil, false
 	}
-
-	return bitsToPNG(bits, w, h)
+	return bits, true
 }
 
 // bitsToPNG 把 32-bit BGRA 像素缓冲转为 RGBA PNG。失败返回 nil。

@@ -82,7 +82,21 @@ func (s *CollectionServer) QueryTimeline(ctx context.Context, req *TimelineReque
 	}
 
 	snapshot := &TimelineSnapshot{Date: req.Date}
-	for _, seg := range segs {
+
+	// 聚合：把连续相同 app 的细粒度段合并成一条。
+	// 历史数据（采集层修复前）有大量同 app 的 engaged/active/idle 碎片段，
+	// 合并后每个应用是一段连续记录，符合 worklog 的用户语义。
+	// 聚合判据：相邻且 app_name 相同（任何 app 切换都打断，idle 不打断）。
+	aggregated := aggregateSegments(segs)
+
+	for _, seg := range aggregated {
+		// 惰性回填：若聚合段尚无摘要，取该时间窗内最后一条 vlm_summary 事件。
+		// 聚合段无单一 DB ID，回填只更新返回值，不落库（每次查询重算，开销可接受）。
+		if seg.Summary == "" {
+			if sum, err := s.db.LatestVLMSummary(seg.StartTS, seg.EndTS); err == nil && sum != "" {
+				seg.Summary = sum
+			}
+		}
 		snapshot.Segments = append(snapshot.Segments, &TimelineSegment{
 			StartTs:     seg.StartTS.Unix(),
 			EndTs:       seg.EndTS.Unix(),
@@ -90,6 +104,7 @@ func (s *CollectionServer) QueryTimeline(ctx context.Context, req *TimelineReque
 			Category:    seg.Category,
 			WindowTitle: seg.WindowTitle,
 			State:       seg.State,
+			Summary:     seg.Summary,
 		})
 	}
 	for _, ev := range events {
@@ -101,6 +116,39 @@ func (s *CollectionServer) QueryTimeline(ctx context.Context, req *TimelineReque
 		})
 	}
 	return snapshot, nil
+}
+
+// aggregateSegments 把连续相同 app 的段合并。
+// 输入需按 start_ts 升序（ListActivitySegments 已保证）。
+// 合并规则：相邻且 AppName 相同 → 合为一段，start 取最早、end 取最晚、
+// state/windowTitle/summary 取该组最后一条（最新状态）。
+// 任何 app 切换（哪怕只切走一瞬）都形成断点，两边不合并。
+func aggregateSegments(segs []storage.ActivitySegment) []storage.ActivitySegment {
+	if len(segs) == 0 {
+		return segs
+	}
+	out := make([]storage.ActivitySegment, 0, len(segs))
+	cur := segs[0]
+	for i := 1; i < len(segs); i++ {
+		s := segs[i]
+		if s.AppName == cur.AppName {
+			// 同 app 连续：合并。end 取较晚者（防御性 max，正常情况 s 在 cur 之后）。
+			if s.EndTS.After(cur.EndTS) {
+				cur.EndTS = s.EndTS
+			}
+			// 状态/标题/摘要取最新一条（s 在 cur 之后，覆盖）。
+			cur.State = s.State
+			cur.WindowTitle = s.WindowTitle
+			if s.Summary != "" {
+				cur.Summary = s.Summary
+			}
+			continue
+		}
+		out = append(out, cur)
+		cur = s
+	}
+	out = append(out, cur)
+	return out
 }
 
 // TriggerVLM 手动触发一次 VLM 截图理解。
