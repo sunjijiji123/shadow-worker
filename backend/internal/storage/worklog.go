@@ -34,9 +34,9 @@ type WorklogResult struct {
 
 // SummaryGroup 是 get_summary 的分组项。
 type SummaryGroup struct {
-	Key   string   `json:"key"`
-	Minutes int    `json:"minutes"`
-	Apps  []string `json:"apps"`
+	Key     string   `json:"key"`
+	Minutes int      `json:"minutes"`
+	Apps    []string `json:"apps"`
 }
 
 // SummaryResult 是 get_summary 的返回结构。
@@ -116,7 +116,7 @@ func (db *DB) GetWorklog(ctx context.Context, date, categoryFilter, appFilter st
 		if appFilter != "" && seg.AppName != appFilter {
 			continue
 		}
-		if seg.State != "active" {
+		if seg.State == "idle" {
 			continue
 		}
 
@@ -168,7 +168,7 @@ func (db *DB) GetSummary(ctx context.Context, date, groupBy string) (*SummaryRes
 	groups := make(map[string]*SummaryGroup)
 	total := 0
 	for _, seg := range segs {
-		if seg.State != "active" {
+		if seg.State == "idle" {
 			continue
 		}
 		minutes := int(seg.EndTS.Sub(seg.StartTS).Minutes())
@@ -263,7 +263,7 @@ func (db *DB) ListAppsWithTodayMinutes(ctx context.Context) (*ListAppsResult, er
 
 	minutesByApp := make(map[string]int)
 	for _, seg := range segs {
-		if seg.State != "active" {
+		if seg.State == "idle" {
 			continue
 		}
 		m := int(seg.EndTS.Sub(seg.StartTS).Minutes())

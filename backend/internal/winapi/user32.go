@@ -6,14 +6,15 @@ import (
 )
 
 var (
-	moduser32                   = syscall.NewLazyDLL("user32.dll")
-	procGetForegroundWindow     = moduser32.NewProc("GetForegroundWindow")
+	moduser32                    = syscall.NewLazyDLL("user32.dll")
+	procGetForegroundWindow      = moduser32.NewProc("GetForegroundWindow")
 	procGetWindowThreadProcessId = moduser32.NewProc("GetWindowThreadProcessId")
-	procGetWindowTextW          = moduser32.NewProc("GetWindowTextW")
-	procWindowFromPoint         = moduser32.NewProc("WindowFromPoint")
-	procGetWindowRect           = moduser32.NewProc("GetWindowRect")
-	procGetDC                   = moduser32.NewProc("GetDC")
-	procReleaseDC               = moduser32.NewProc("ReleaseDC")
+	procGetWindowTextW           = moduser32.NewProc("GetWindowTextW")
+	procWindowFromPoint          = moduser32.NewProc("WindowFromPoint")
+	procGetWindowRect            = moduser32.NewProc("GetWindowRect")
+	procGetDC                    = moduser32.NewProc("GetDC")
+	procReleaseDC                = moduser32.NewProc("ReleaseDC")
+	procGetLastInputInfo         = moduser32.NewProc("GetLastInputInfo")
 )
 
 // HWND 是窗口句柄。
@@ -27,6 +28,13 @@ type POINT struct {
 // RECT 是矩形区域。
 type RECT struct {
 	Left, Top, Right, Bottom int32
+}
+
+// LASTINPUTINFO 用于 GetLastInputInfo,记录系统最后一次输入事件的时间戳。
+// DwTime 单位为毫秒,与 GetTickCount64 同源(自系统启动起算),二者可相减。
+type LASTINPUTINFO struct {
+	CbSize uint32
+	DwTime uint32
 }
 
 // GetForegroundWindow 返回当前前台窗口句柄。
@@ -79,4 +87,17 @@ func GetDC(hwnd HWND) syscall.Handle {
 func ReleaseDC(hwnd HWND, hdc syscall.Handle) int32 {
 	r, _, _ := procReleaseDC.Call(uintptr(hwnd), uintptr(hdc))
 	return int32(r)
+}
+
+// LastInputTick 返回系统最后一次键鼠输入事件的 tick(毫秒,自系统启动起算)。
+// 失败(API 调用返回 0 或 DwTime 为 0)时 ok=false。
+// 用法:与 GetTickCount64() 相减得到空闲毫秒数。
+// 注意:这是系统级信号,不区分输入发给了哪个窗口;配合"前台=白名单"判定即可。
+func LastInputTick() (tick uint32, ok bool) {
+	info := LASTINPUTINFO{CbSize: uint32(unsafe.Sizeof(LASTINPUTINFO{}))}
+	r, _, _ := procGetLastInputInfo.Call(uintptr(unsafe.Pointer(&info)))
+	if r == 0 || info.DwTime == 0 {
+		return 0, false
+	}
+	return info.DwTime, true
 }

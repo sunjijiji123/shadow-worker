@@ -107,7 +107,7 @@ func TestMinutesToLevel(t *testing.T) {
 	}
 }
 
-// InterruptCount 打断计数测试(决策 A:idle→active 切换次数)。
+// InterruptCount 打断计数测试(idle→非idle 切换次数)。
 
 func TestInterruptCount(t *testing.T) {
 	db := newTestDB(t)
@@ -263,6 +263,104 @@ func TestDailyMinutes(t *testing.T) {
 	}
 	if byDate["2026-06-19"] != 30 {
 		t.Fatalf("6-19 分钟 = %d, want 30", byDate["2026-06-19"])
+	}
+}
+
+// TestRangeAggregationsThreeState 验证三态聚合:engaged 和 active 都计入工作时长,idle 不计。
+func TestRangeAggregationsThreeState(t *testing.T) {
+	db := newTestDB(t)
+	day := time.Date(2026, 6, 18, 0, 0, 0, 0, time.UTC)
+	start, end := RangeBounds(day, "day")
+
+	// Cursor:engaged 40min + active 20min + idle 30min(只 engaged/active 计入 = 60min)
+	// Chrome:idle 50min(不计入)
+	segs := []struct {
+		s, e  time.Time
+		state string
+	}{
+		{time.Date(2026, 6, 18, 9, 0, 0, 0, time.UTC), time.Date(2026, 6, 18, 9, 40, 0, 0, time.UTC), "engaged"},
+		{time.Date(2026, 6, 18, 9, 40, 0, 0, time.UTC), time.Date(2026, 6, 18, 10, 0, 0, 0, time.UTC), "active"},
+		{time.Date(2026, 6, 18, 10, 0, 0, 0, time.UTC), time.Date(2026, 6, 18, 10, 30, 0, 0, time.UTC), "idle"},
+		{time.Date(2026, 6, 18, 11, 0, 0, 0, time.UTC), time.Date(2026, 6, 18, 11, 50, 0, 0, time.UTC), "idle"},
+	}
+	for _, s := range segs {
+		if _, err := db.InsertActivitySegment(ActivitySegment{
+			StartTS: s.s, EndTS: s.e,
+			AppPath: "C:\\Cursor.exe", AppName: "Cursor", Category: "coding", State: s.state,
+		}); err != nil {
+			t.Fatalf("插入段失败: %v", err)
+		}
+	}
+
+	// 总分钟:只 engaged+active = 60
+	min, err := db.RangeActiveMinutes(start, end)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if min != 60 {
+		t.Fatalf("RangeActiveMinutes(三态) = %d, want 60 (engaged 40 + active 20)", min)
+	}
+
+	// 活动段数:engaged + active = 2(idle 2 段不计)
+	segN, _ := db.RangeActiveSegments(start, end)
+	if segN != 2 {
+		t.Fatalf("RangeActiveSegments(三态) = %d, want 2", segN)
+	}
+
+	// 应用排行:Cursor 60min
+	apps, _ := db.AppMinutesByRange(start, end)
+	if len(apps) != 1 || apps[0].Name != "Cursor" || apps[0].Minutes != 60 {
+		t.Fatalf("AppMinutesByRange(三态) 错误: %+v", apps)
+	}
+
+	// 类别:coding 60min
+	cats, _ := db.CategoryAggregate(start, end)
+	if len(cats) != 1 || cats[0].Minutes != 60 {
+		t.Fatalf("CategoryAggregate(三态) 错误: %+v", cats)
+	}
+}
+
+// TestInterruptCountThreeState 验证三态打断语义:
+// idle→engaged 算打断;idle→active 算打断;engaged↔active 不算打断。
+func TestInterruptCountThreeState(t *testing.T) {
+	db := newTestDB(t)
+	day := time.Date(2026, 6, 18, 0, 0, 0, 0, time.UTC)
+	start, end := RangeBounds(day, "day")
+
+	// 序列:engaged → active → engaged → idle → active → engaged
+	//   engaged→active:不算打断(同属工作中)
+	//   active→engaged:不算打断
+	//   engaged→idle:不算打断(是离开)
+	//   idle→active:算打断 ✓ (1)
+	//   active→engaged:不算打断
+	// 期望打断次数 = 1
+	segs := []struct {
+		h     int
+		state string
+	}{
+		{9, "engaged"},
+		{10, "active"},
+		{11, "engaged"},
+		{12, "idle"},
+		{13, "active"},
+		{14, "engaged"},
+	}
+	for _, s := range segs {
+		tt := time.Date(2026, 6, 18, s.h, 0, 0, 0, time.UTC)
+		if _, err := db.InsertActivitySegment(ActivitySegment{
+			StartTS: tt, EndTS: tt.Add(time.Hour),
+			AppPath: "C:\\Cursor.exe", AppName: "Cursor", Category: "coding", State: s.state,
+		}); err != nil {
+			t.Fatalf("插入段失败: %v", err)
+		}
+	}
+
+	got, err := db.InterruptCount(start, end)
+	if err != nil {
+		t.Fatalf("InterruptCount 失败: %v", err)
+	}
+	if got != 1 {
+		t.Fatalf("三态打断次数错误: got %d, want 1 (只有 idle→active 算打断)", got)
 	}
 }
 

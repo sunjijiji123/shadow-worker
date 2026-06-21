@@ -97,7 +97,7 @@ func (db *DB) ListActivitySegmentsByDate(day time.Time) ([]ActivitySegment, erro
 	return db.ListActivitySegments(day, next)
 }
 
-// TodayActivityMinutes 统计今日在白名单应用上的活跃总分钟数。
+// TodayActivityMinutes 统计今日在白名单应用上的工作总分钟数(engaged+active)。
 func (db *DB) TodayActivityMinutes() (int, int, error) {
 	now := time.Now().UTC()
 	start := now.Truncate(24 * time.Hour)
@@ -107,17 +107,17 @@ func (db *DB) TodayActivityMinutes() (int, int, error) {
 	err := db.QueryRow(
 		`SELECT COALESCE(SUM(end_ts - start_ts), 0)
 		 FROM activity_segments
-		 WHERE state = 'active' AND start_ts >= ? AND end_ts <= ?`,
+		 WHERE state IN ('engaged','active') AND start_ts >= ? AND end_ts <= ?`,
 		toUnix(start), toUnix(end),
 	).Scan(&totalSec)
 	if err != nil {
-		return 0, 0, fmt.Errorf("统计今日活跃时长失败: %w", err)
+		return 0, 0, fmt.Errorf("统计今日工作时长失败: %w", err)
 	}
 
 	var segments int64
 	err = db.QueryRow(
 		`SELECT COUNT(*) FROM activity_segments
-		 WHERE state = 'active' AND start_ts >= ? AND end_ts <= ?`,
+		 WHERE state IN ('engaged','active') AND start_ts >= ? AND end_ts <= ?`,
 		toUnix(start), toUnix(end),
 	).Scan(&segments)
 	if err != nil {

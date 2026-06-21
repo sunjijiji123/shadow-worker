@@ -6,10 +6,11 @@ import (
 )
 
 var (
-	modkernel32                     = syscall.NewLazyDLL("kernel32.dll")
-	procOpenProcess                 = modkernel32.NewProc("OpenProcess")
-	procCloseHandle                 = modkernel32.NewProc("CloseHandle")
-	procQueryFullProcessImageNameW  = modkernel32.NewProc("QueryFullProcessImageNameW")
+	modkernel32                    = syscall.NewLazyDLL("kernel32.dll")
+	procOpenProcess                = modkernel32.NewProc("OpenProcess")
+	procCloseHandle                = modkernel32.NewProc("CloseHandle")
+	procQueryFullProcessImageNameW = modkernel32.NewProc("QueryFullProcessImageNameW")
+	procGetTickCount64             = modkernel32.NewProc("GetTickCount64")
 )
 
 // 进程访问权限常量。
@@ -49,4 +50,12 @@ func QueryFullProcessImageNameW(hProcess Handle, flags uint32, buf *uint16, size
 		uintptr(unsafe.Pointer(size)),
 	)
 	return r != 0
+}
+
+// GetTickCount64 返回自系统启动以来的毫秒数(64 位,不会溢出)。
+// 与 GetLastInputInfo 返回的 dwTime 同源,可直接相减得到空闲时长。
+// (vendor 的 golang.org/x/sys/windows 未导出 GetTickCount64,故自行封装。)
+func GetTickCount64() uint64 {
+	r, _, _ := procGetTickCount64.Call()
+	return uint64(r)
 }

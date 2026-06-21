@@ -111,8 +111,13 @@ type HotkeyConfig struct {
 // MovementConfig 是采集配置块。
 type MovementConfig struct {
 	SampleIntervalMs int    `yaml:"sample_interval_ms"`
-	IdleTimeoutS     int    `yaml:"idle_timeout_s"`
+	IdleTimeoutS     int    `yaml:"idle_timeout_s"` // 保留供设置页回显;collector 实际使用 InputIdleS/DisplayIdleS 两层超时
 	Precision        string `yaml:"precision"`
+	// InputIdleS:输入超时。GetLastInputInfo 显示近该秒数内有输入 → 判为强信号。
+	// DisplayIdleS:展示超时。距上次 engaged 超过该秒数 → 从 active 退化为 idle。
+	// 两者为 0 时 NewCollector 用 Precision 对应 Preset 的默认值。
+	InputIdleS   int `yaml:"input_idle_s"`
+	DisplayIdleS int `yaml:"display_idle_s"`
 }
 
 // Config 是整体配置。
@@ -160,6 +165,8 @@ func Default() *Config {
 			SampleIntervalMs: 300,
 			IdleTimeoutS:     10,
 			Precision:        "medium",
+			InputIdleS:       15,
+			DisplayIdleS:     90,
 		},
 		Hotkeys: HotkeyConfig{
 			Record:       "F9",

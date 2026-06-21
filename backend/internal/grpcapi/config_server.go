@@ -98,21 +98,23 @@ func llmProviderToProto(p config.LLMProvider) *ProviderConfig {
 
 func configToProto(cfg *config.Config) *ConfigData {
 	data := &ConfigData{
-		AsrMode:               cfg.ASR.Mode,
-		AsrActiveProvider:     cfg.ASR.ActiveProvider,
-		AsrProviders:          make(map[string]*ProviderConfig),
-		AsrLocalModelPath:     cfg.ASR.Local.ModelPath,
-		AsrLocalModelName:     cfg.ASR.Local.ModelName,
-		AsrLocalLanguage:      cfg.ASR.Local.Language,
-		AsrRecordMode:         cfg.ASR.RecordMode,
-		PolishEnabled:         cfg.LLM.Enabled == "on",
-		PolishActiveProvider:  cfg.LLM.ActiveProvider,
-		PolishProviders:       make(map[string]*ProviderConfig),
-		PolishPrompt:          cfg.LLM.Prompt,
-		InjectMode:            cfg.LLM.InjectMode,
+		AsrMode:                  cfg.ASR.Mode,
+		AsrActiveProvider:        cfg.ASR.ActiveProvider,
+		AsrProviders:             make(map[string]*ProviderConfig),
+		AsrLocalModelPath:        cfg.ASR.Local.ModelPath,
+		AsrLocalModelName:        cfg.ASR.Local.ModelName,
+		AsrLocalLanguage:         cfg.ASR.Local.Language,
+		AsrRecordMode:            cfg.ASR.RecordMode,
+		PolishEnabled:            cfg.LLM.Enabled == "on",
+		PolishActiveProvider:     cfg.LLM.ActiveProvider,
+		PolishProviders:          make(map[string]*ProviderConfig),
+		PolishPrompt:             cfg.LLM.Prompt,
+		InjectMode:               cfg.LLM.InjectMode,
 		MovementSampleIntervalMs: int32(cfg.Movement.SampleIntervalMs),
 		MovementIdleTimeoutS:     int32(cfg.Movement.IdleTimeoutS),
 		MovementPrecision:        cfg.Movement.Precision,
+		MovementInputIdleS:       int32(cfg.Movement.InputIdleS),
+		MovementDisplayIdleS:     int32(cfg.Movement.DisplayIdleS),
 		VlmMode:                  cfg.VLM.Mode,
 		VlmActiveProvider:        cfg.VLM.ActiveProvider,
 		VlmProviders:             make(map[string]*ProviderConfig),
@@ -225,6 +227,8 @@ func protoToConfig(data *ConfigData) *config.Config {
 	cfg.Movement.SampleIntervalMs = int(data.MovementSampleIntervalMs)
 	cfg.Movement.IdleTimeoutS = int(data.MovementIdleTimeoutS)
 	cfg.Movement.Precision = data.MovementPrecision
+	cfg.Movement.InputIdleS = int(data.MovementInputIdleS)
+	cfg.Movement.DisplayIdleS = int(data.MovementDisplayIdleS)
 
 	cfg.Hotkeys.Record = data.HotkeyRecord
 	cfg.Hotkeys.Screenshot = data.HotkeyScreenshot

@@ -10,8 +10,9 @@ import (
 //
 // 关键概念:
 //   - range = day / week / month,支撑概览页 今天/本周/本月 切换
-//   - interrupt_count(打断次数)= 当天 active↔idle 的切换次数(决策 A)
-//     即:state 从 idle 变 active 的次数(每次"离开后恢复工作"算一次打断)
+//   - "工作时长" = state 为 engaged(强活跃) 或 active(余热) 的段;idle 不计入。
+//   - interrupt_count(打断次数)= state 从 idle 恢复到非 idle(engaged/active)的次数。
+//     engaged↔active 之间的切换不算打断(同属"在工作")。
 
 // RangeBounds 把 (date, range) 解析成 [start, end) 的查询边界。
 // date 为零值时取今天;range 取 day/week/month,默认 day。
@@ -32,7 +33,7 @@ func RangeBounds(day time.Time, rng string) (time.Time, time.Time) {
 		start := day.AddDate(0, 0, -(wd - 1))
 		return start, start.AddDate(0, 0, 7)
 	case "month":
-		start := day.AddDate(0, 0, -(int(day.Day())-1))
+		start := day.AddDate(0, 0, -(int(day.Day()) - 1))
 		return start, start.AddDate(0, 1, 0)
 	default: // day
 		return day, day.Add(24 * time.Hour)
@@ -53,13 +54,13 @@ func PreviousRangeBounds(day time.Time, rng string) (time.Time, time.Time) {
 	}
 }
 
-// RangeActiveMinutes 统计时间范围内白名单应用的活跃总分钟数(state=active)。
+// RangeActiveMinutes 统计时间范围内白名单应用的工作总分钟数(engaged+active)。
 func (db *DB) RangeActiveMinutes(start, end time.Time) (int, error) {
 	var totalSec int64
 	err := db.QueryRow(
 		`SELECT COALESCE(SUM(end_ts - start_ts), 0)
 		 FROM activity_segments
-		 WHERE state = 'active' AND start_ts >= ? AND end_ts <= ?`,
+		 WHERE state IN ('engaged','active') AND start_ts >= ? AND end_ts <= ?`,
 		toUnix(start), toUnix(end),
 	).Scan(&totalSec)
 	if err != nil {
@@ -68,12 +69,12 @@ func (db *DB) RangeActiveMinutes(start, end time.Time) (int, error) {
 	return int(totalSec / 60), nil
 }
 
-// RangeActiveSegments 统计时间范围内的活动段数(state=active)。
+// RangeActiveSegments 统计时间范围内的工作段数(engaged+active)。
 func (db *DB) RangeActiveSegments(start, end time.Time) (int, error) {
 	var n int64
 	err := db.QueryRow(
 		`SELECT COUNT(*) FROM activity_segments
-		 WHERE state = 'active' AND start_ts >= ? AND end_ts <= ?`,
+		 WHERE state IN ('engaged','active') AND start_ts >= ? AND end_ts <= ?`,
 		toUnix(start), toUnix(end),
 	).Scan(&n)
 	if err != nil {
@@ -83,8 +84,9 @@ func (db *DB) RangeActiveSegments(start, end time.Time) (int, error) {
 }
 
 // InterruptCount 统计时间范围内的打断次数。
-// 定义(决策 A):state 从 idle 变 active 的切换次数。
-// 实现:取范围内按 start_ts 升序的相邻段,数 prev.state='idle' && curr.state='active' 的次数。
+// 定义:state 从 idle 恢复到非 idle(engaged 或 active)的次数。
+// engaged↔active 之间的切换不算打断(同属"在工作")。
+// 实现:取范围内按 start_ts 升序的相邻段,数 prev='idle' && curr∈{engaged,active} 的次数。
 // 注意:跨范围边界时,边界前一段不参与(只看范围内),简单实现。
 func (db *DB) InterruptCount(start, end time.Time) (int, error) {
 	rows, err := db.Query(
@@ -105,12 +107,12 @@ func (db *DB) InterruptCount(start, end time.Time) (int, error) {
 		if err := rows.Scan(&state); err != nil {
 			return 0, fmt.Errorf("扫描打断状态失败: %w", err)
 		}
-		if prevState == "idle" && state == "active" {
+		if prevState == "idle" && (state == "active" || state == "engaged") {
 			count++
 		}
 		prevState = state
 	}
-	if err := rows.Err(); err != nil {
+	if err := rows.Err(); nil != err {
 		return 0, fmt.Errorf("遍历打断状态失败: %w", err)
 	}
 	return count, nil
@@ -128,7 +130,7 @@ func (db *DB) AppMinutesByRange(start, end time.Time) ([]AppMinutes, error) {
 	rows, err := db.Query(
 		`SELECT app_name, category, COALESCE(SUM(end_ts - start_ts), 0) AS sec
 		 FROM activity_segments
-		 WHERE state = 'active' AND start_ts >= ? AND end_ts <= ?
+		 WHERE state IN ('engaged','active') AND start_ts >= ? AND end_ts <= ?
 		 GROUP BY app_name, category
 		 ORDER BY sec DESC`,
 		toUnix(start), toUnix(end),
@@ -166,7 +168,7 @@ func (db *DB) WhitelistAppsWithMinutes(start, end time.Time) ([]AppMinutes, erro
 		 FROM app_categories ac
 		 LEFT JOIN activity_segments seg
 		   ON seg.app_path = ac.path
-		  AND seg.state = 'active'
+		  AND seg.state IN ('engaged','active')
 		  AND seg.start_ts >= ? AND seg.end_ts <= ?
 		 GROUP BY ac.path, ac.name, ac.category
 		 ORDER BY sec DESC, ac.added_at`,
@@ -205,7 +207,7 @@ func (db *DB) CategoryAggregate(start, end time.Time) ([]CategoryMinutes, error)
 	rows, err := db.Query(
 		`SELECT category, COALESCE(SUM(end_ts - start_ts), 0) AS sec
 		 FROM activity_segments
-		 WHERE state = 'active' AND start_ts >= ? AND end_ts <= ?
+		 WHERE state IN ('engaged','active') AND start_ts >= ? AND end_ts <= ?
 		 GROUP BY category
 		 ORDER BY sec DESC`,
 		toUnix(start), toUnix(end),
@@ -242,7 +244,7 @@ func (db *DB) DailyMinutes(start, end time.Time) ([]DailyMinutesRow, error) {
 	rows, err := db.Query(
 		`SELECT date(start_ts, 'unixepoch') AS day, COALESCE(SUM(end_ts - start_ts), 0) AS sec
 		 FROM activity_segments
-		 WHERE state = 'active' AND start_ts >= ? AND end_ts <= ?
+		 WHERE state IN ('engaged','active') AND start_ts >= ? AND end_ts <= ?
 		 GROUP BY day
 		 ORDER BY day`,
 		toUnix(start), toUnix(end),

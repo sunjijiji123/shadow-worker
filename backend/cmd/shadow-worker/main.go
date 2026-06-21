@@ -71,7 +71,7 @@ func runBackgroundService() {
 	defer db.Close()
 
 	// 3. 启动采集引擎
-	coll := collector.NewCollector(db, cfg.Movement.Precision, nil)
+	coll := collector.NewCollector(db, cfg.Movement, nil)
 	coll.Start()
 	defer coll.Stop()
 

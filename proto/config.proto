@@ -41,6 +41,8 @@ message ConfigData {
   int32 movement_sample_interval_ms = 9;
   int32 movement_idle_timeout_s = 10;
   string movement_precision = 11;   // low | medium | high
+  int32 movement_input_idle_s = 27;  // 输入超时:GetLastInputInfo 近该秒数内有输入 → engaged
+  int32 movement_display_idle_s = 28; // 展示超时:距上次 engaged 超该秒数 → idle
 
   // VLM
   string vlm_mode = 12;             // scheduled | on_demand | off

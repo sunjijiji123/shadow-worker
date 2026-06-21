@@ -1,7 +1,10 @@
 // TimelineTrack.qml - single-focus horizontal track of category color blocks (v2).
 // model: segments [{startTs, endTs, category, state, appName, windowTitle, ...}]
 // hourStart/hourEnd define the visible window (default 9..18).
-// idle segments use Theme.muted; others use Theme.colorOf(category).
+// 三态显示:
+//   engaged(强活跃)= 类别色 + 满不透明(opacity 1.0)
+//   active (余热)  = 类别色 + 半透明(opacity 0.55)
+//   idle   (静默)  = Theme.muted
 
 import QtQuick
 import QtQuick.Layouts
@@ -80,8 +83,12 @@ Item {
                         x: x1
                         width: Math.max(x2 - x1, 1)
                         height: parent.height
+                        // 三态颜色:idle=muted;engaged=类别色满;active=类别色半透明。
                         color: modelData.state === "idle" ? Theme.muted
                              : (modelData.category ? Theme.colorOf(modelData.category) : Theme.muted)
+                        opacity: modelData.state === "engaged" ? 1.0
+                               : modelData.state === "active" ? 0.55
+                               : 1.0
                         // no border -> segments flow continuously (no dark gaps between them)
 
                         MouseArea {
@@ -89,10 +96,14 @@ Item {
                             hoverEnabled: true
                             onEntered: {
                                 var mins = modelData.durationMin || Math.round((segEndSec - segStartSec) / 60)
+                                // 三态标签:idle/engaged/active 各显示对应文字。
                                 var cat = modelData.state === "idle" ? "idle" : (modelData.category || "?")
+                                var stateTag = modelData.state === "engaged" ? "engaged"
+                                             : modelData.state === "active" ? "active"
+                                             : "idle"
                                 var txt = (modelData.startTime || "") + "-" + (modelData.endTime || "")
                                          + "  " + (modelData.appName || "")
-                                         + "  [" + cat + "]  " + mins + "min"
+                                         + "  [" + cat + "/" + stateTag + "]  " + mins + "min"
                                 tip.show(txt, mouseX, mouseY)
                             }
                             onExited: tip.hide()

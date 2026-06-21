@@ -128,13 +128,16 @@ Item {
                         font.weight: Font.DemiBold
                     }
                     Text {
-                        // total active (non-idle) minutes + segment count
+                        // total work minutes (engaged + active, idle 不计) + segment count
                         text: {
                             var segs = root.allSegments()
                             var mins = 0
                             var count = 0
                             for (var i = 0; i < segs.length; i++) {
-                                if (segs[i].category !== "idle") {
+                                // 用 state 字段判断(修正旧版用 category 误判的 bug):
+                                // engaged/active 计入工作时长,idle 不计。
+                                var st = segs[i].state
+                                if (st === "engaged" || st === "active") {
                                     mins += segs[i].durationMin || 0
                                     count++
                                 }
