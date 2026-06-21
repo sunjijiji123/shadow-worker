@@ -1,8 +1,15 @@
-// timelinemodels.h - Timeline 段/事件的 QAbstractListModel 实现。
+// timelinemodels.h - Timeline 段/事件的 source model。
 //
-// 用 Model 替代原先的 QVariantList，解决 30s 轮询刷新时全量重建 delegate
-// 导致的界面卡顿：replaceAll 做 diff 增量更新，只对变化的行发 dataChanged，
-// 未变化的 delegate 不重建。过滤与倒序也在 C++ 侧完成，QML 直接绑 model。
+// 职责（重构后）：只持有全量数据 + 增量刷新（diff）+ 全量统计。
+// 过滤职责已移交给 RoleFilterProxyModel（categoryproxy.h），本类不再做过滤，
+// rowCount/data 恒为 O(1)。
+//
+// 数据流：
+//   TimelineViewModel.m_segModel (source, 全量)
+//     └── RoleFilterProxyModel (filterValue=catFilter)  ← QML ListView 绑这个
+//     └── TimelineTrack 直接绑 source（要全量画轨道）
+//
+// replaceAll 保留 diff 增量逻辑（轮询刷新的最常见场景，绝大多数行命中旧 key）。
 
 #pragma once
 
@@ -37,9 +44,9 @@ struct EvItem {
   QString appName;
 };
 
-// SegmentListModel 是 worklog 列表与 timeline track 的数据源。
+// SegmentListModel 是 worklog 列表与 timeline track 的全量数据源。
 // - replaceAll 做 diff 增量更新（用 startTs+appName 复合 key 匹配旧行）。
-// - setCategoryFilter 内置过滤（"all" 或具体类别），过滤变化时 reset。
+// - 过滤不在本层做（交给 RoleFilterProxyModel），rowCount/data 恒 O(1)。
 // - 数据按 endTs 倒序存储（最新在前），QML 无需 reverse。
 class SegmentListModel : public QAbstractListModel {
   Q_OBJECT
@@ -75,25 +82,17 @@ public:
   // items 必须已按 endTs 倒序排好（由 ViewModel 保证）。
   void replaceAll(const QList<SegItem> &items);
 
-  // setCategoryFilter 设置类别过滤（"all"=不过滤，或具体类别如 "coding"）。
-  // 过滤变化时整体 reset（filter 是低频操作，reset 可接受）。
-  void setCategoryFilter(const QString &filter);
-  QString categoryFilter() const { return m_filter; }
-
-  // 统计全量数据（忽略 catFilter）中 engaged/active 段的总秒数/段数。
+  // 统计全量数据中 engaged/active 段的总秒数/段数。
   // 供顶部"Work Xh · N segments"使用，避免 QML 遍历整个列表。
+  // 注意：本类不再做过滤，统计的就是全量（与 proxy 的 catFilter 无关）。
   int activeDurationSec() const;
   int activeSegmentCount() const;
 
-signals:
-  void categoryFilterChanged();
-
 private:
   QList<SegItem> m_items;   // 全量数据（倒序）
-  QString m_filter;         // "all" 或具体类别
 };
 
-// EventListModel 是 events 列表的数据源。结构与 SegmentListModel 一致。
+// EventListModel 是 events 列表的全量数据源。结构与 SegmentListModel 一致。
 class EventListModel : public QAbstractListModel {
   Q_OBJECT
   QML_ELEMENT
@@ -118,14 +117,6 @@ public:
   // replaceAll 增量替换。items 须已按 ts 倒序排好。
   void replaceAll(const QList<EvItem> &items);
 
-  // setTypeFilter 设置事件类型过滤（"all" 或具体类型如 "voice"）。
-  void setTypeFilter(const QString &filter);
-  QString typeFilter() const { return m_filter; }
-
-signals:
-  void typeFilterChanged();
-
 private:
   QList<EvItem> m_items;
-  QString m_filter;
 };

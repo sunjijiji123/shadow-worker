@@ -90,9 +90,11 @@ Item {
                         x: x1
                         width: Math.max(x2 - x1, 1)
                         height: parent.height
-                        // 三态颜色:idle=muted;engaged=类别色满;active=类别色半透明。
-                        color: state === "idle" ? Theme.muted
-                             : (category.length > 0 ? Theme.colorOf(category) : Theme.muted)
+                        // 三态颜色:idle=#2A2A2A(接近背景，弱化离开段);engaged=类别色满;active=类别色半透明。
+                        // idle 用 #2A2A2A 而非 Theme.muted(#9CA3AF)：muted 与 other(#6B7280) 太接近，
+                        // 难以区分"离开"和"其他工作"。#2A2A2A 接近背景，让离开段视觉上更弱。
+                        color: state === "idle" ? "#2A2A2A"
+                             : (category.length > 0 ? Theme.colorOf(category) : "#2A2A2A")
                         opacity: state === "engaged" ? 1.0
                                : state === "active" ? 0.55
                                : 1.0

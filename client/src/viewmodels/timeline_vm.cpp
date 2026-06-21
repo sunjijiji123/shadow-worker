@@ -5,8 +5,11 @@
 #include <QDate>
 #include <QDateTime>
 #include <QDebug>
+#include <QDir>
+#include <QFile>
 #include <QGrpcCallReply>
 #include <QGrpcStatus>
+#include <QTextStream>
 #include <algorithm>
 
 using shadowworker::TimelineRequest;
@@ -34,6 +37,14 @@ static QString formatDuration(int sec) {
 TimelineViewModel::TimelineViewModel(QObject *parent) : QObject(parent) {
   m_date = QDate::currentDate().toString("yyyy-MM-dd");
 
+  // 串接 source → proxy。filterRoleName 指定按哪个 role 等值过滤。
+  // segments 按 category 过滤（catFilter ∈ all/coding/browser/...）。
+  m_segProxy.setSourceModel(&m_segModel);
+  m_segProxy.setFilterRoleName("category");
+  // events 按 type 过滤（evFilter ∈ all/voice/screenshot/...）。
+  m_evProxy.setSourceModel(&m_evModel);
+  m_evProxy.setFilterRoleName("type");
+
   // 周期刷新：停留在 timeline 页时，每 30 秒自动拉一次最新采集数据，
   // 让用户新产生的活动段/事件能及时出现在列表里（无需手动点 Today）。
   m_pollTimer.setInterval(30000);
@@ -55,13 +66,19 @@ void TimelineViewModel::setDate(const QString &date) {
 }
 
 void TimelineViewModel::setCatFilter(const QString &f) {
-  m_segModel.setCategoryFilter(f);
-  emit catFilterChanged();
+  // 转发给 proxy：proxy 内部 invalidateFilter 增量增/删可见行，
+  // 不再触发 beginResetModel 全量重建。
+  // 注意：filterValue 相同时 proxy 短路返回，但本层仍需发 catFilterChanged
+  // 让 QML Chip 的 checked 绑定保持一致（虽然值没变，绑定本身会幂等）。
+  QString old = m_segProxy.filterValue();
+  m_segProxy.setFilterValue(f);
+  if (old != f) emit catFilterChanged();
 }
 
 void TimelineViewModel::setEvFilter(const QString &f) {
-  m_evModel.setTypeFilter(f);
-  emit evFilterChanged();
+  QString old = m_evProxy.filterValue();
+  m_evProxy.setFilterValue(f);
+  if (old != f) emit evFilterChanged();
 }
 
 int TimelineViewModel::activeDurationSec() const {

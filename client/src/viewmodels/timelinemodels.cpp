@@ -1,8 +1,9 @@
 // timelinemodels.cpp - SegmentListModel / EventListModel 实现。
+//
+// 重构后：本层只负责持有全量数据 + diff 增量刷新 + 全量统计。
+// 过滤已移交给 RoleFilterProxyModel（categoryproxy.h），故 rowCount/data 恒 O(1)。
 
 #include "timelinemodels.h"
-
-#include <QHash>
 
 // ============================================================
 // SegmentListModel
@@ -13,34 +14,14 @@ SegmentListModel::SegmentListModel(QObject *parent)
 
 int SegmentListModel::rowCount(const QModelIndex &parent) const {
   if (parent.isValid()) return 0;
-  if (m_filter == "all" || m_filter.isEmpty()) return m_items.size();
-  // 过滤态：统计匹配项。filter 是低频操作，rowCount 线性遍历可接受。
-  int n = 0;
-  for (const auto &s : m_items) {
-    if (s.category == m_filter) ++n;
-  }
-  return n;
+  return m_items.size();
 }
 
 QVariant SegmentListModel::data(const QModelIndex &index, int role) const {
   if (!index.isValid()) return {};
   int row = index.row();
-
-  // 过滤态下需把可见行号映射回 m_items 的真实下标。
-  const SegItem *p = nullptr;
-  if (m_filter == "all" || m_filter.isEmpty()) {
-    if (row < 0 || row >= m_items.size()) return {};
-    p = &m_items[row];
-  } else {
-    int visible = 0;
-    for (const auto &s : m_items) {
-      if (s.category != m_filter) continue;
-      if (visible == row) { p = &s; break; }
-      ++visible;
-    }
-    if (!p) return {};
-  }
-  const SegItem &s = *p;
+  if (row < 0 || row >= m_items.size()) return {};
+  const SegItem &s = m_items[row];
 
   switch (role) {
     case StartTsRole: return s.startTs;
@@ -80,6 +61,10 @@ void SegmentListModel::replaceAll(const QList<SegItem> &items) {
   // 简化策略：若新旧数量一致且复合 key 序列相同，只逐行 dataChanged(roles)；
   // 否则 beginResetModel/endResetModel（换日期等场景，低频，可接受）。
   // 这覆盖了轮询刷新（最常见、最需要增量）的场景，又不会在结构剧变时出错。
+  //
+  // 注意：过滤已交给 proxy，本层 reset 不会引发 QML 全量重建 delegate ——
+  // proxy 在 source reset 时会重算过滤并增/删可见行，配合 ListView 虚拟化，
+  // 即使 reset 也只重建当前可视区的少数 delegate。
 
   bool sameStructure =
       items.size() == m_items.size() &&
@@ -118,14 +103,6 @@ void SegmentListModel::replaceAll(const QList<SegItem> &items) {
   endResetModel();
 }
 
-void SegmentListModel::setCategoryFilter(const QString &filter) {
-  if (m_filter == filter) return;
-  beginResetModel();
-  m_filter = filter;
-  endResetModel();
-  emit categoryFilterChanged();
-}
-
 int SegmentListModel::activeDurationSec() const {
   int total = 0;
   for (const auto &s : m_items) {
@@ -153,32 +130,14 @@ EventListModel::EventListModel(QObject *parent)
 
 int EventListModel::rowCount(const QModelIndex &parent) const {
   if (parent.isValid()) return 0;
-  if (m_filter == "all" || m_filter.isEmpty()) return m_items.size();
-  int n = 0;
-  for (const auto &e : m_items) {
-    if (e.type == m_filter) ++n;
-  }
-  return n;
+  return m_items.size();
 }
 
 QVariant EventListModel::data(const QModelIndex &index, int role) const {
   if (!index.isValid()) return {};
   int row = index.row();
-
-  const EvItem *p = nullptr;
-  if (m_filter == "all" || m_filter.isEmpty()) {
-    if (row < 0 || row >= m_items.size()) return {};
-    p = &m_items[row];
-  } else {
-    int visible = 0;
-    for (const auto &e : m_items) {
-      if (e.type != m_filter) continue;
-      if (visible == row) { p = &e; break; }
-      ++visible;
-    }
-    if (!p) return {};
-  }
-  const EvItem &e = *p;
+  if (row < 0 || row >= m_items.size()) return {};
+  const EvItem &e = m_items[row];
 
   switch (role) {
     case TsRole: return e.ts;
@@ -195,7 +154,11 @@ QHash<int, QByteArray> EventListModel::roleNames() const {
       {TsRole, "ts"},
       {TimeRole, "time"},
       {TypeRole, "type"},
-      {TextRole, "text"},
+      // 注意：role 名用 "evText" 而非 "text"。"text" 是 QML 内置属性名，
+      // delegate 用 required property string text 时会与 QML 的 text 属性
+      // 机制冲突，导致 role 值无法绑定到 delegate（实测 text role 永远为空）。
+      // 改名后 QML 用 required property string evText 即可正确绑定。
+      {TextRole, "evText"},
       {AppNameRole, "appName"},
   };
 }
@@ -228,12 +191,4 @@ void EventListModel::replaceAll(const QList<EvItem> &items) {
   beginResetModel();
   m_items = items;
   endResetModel();
-}
-
-void EventListModel::setTypeFilter(const QString &filter) {
-  if (m_filter == filter) return;
-  beginResetModel();
-  m_filter = filter;
-  endResetModel();
-  emit typeFilterChanged();
 }
