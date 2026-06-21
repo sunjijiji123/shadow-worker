@@ -133,6 +133,28 @@ backend\test-asr-e2e.bat
 
 27. **构建报 `LNK1168: 无法打开 xxx.dll 进行写入` = 客户端在运行**：链接阶段 DLL 写入失败（错误码 1168）几乎都是 `shadow-worker-client.exe` 正在运行，锁住了它加载的 `config_proto.dll` 等产物。`taskkill /F` 掉客户端进程后重新 `cmake --build` 即可。不是代码问题。
 
+28. **【重要，坑 25 的修正】GetDC+BitBlt 对硬件加速窗口（Electron/CEF）只能截到加载态/空白**：VS Code、ZCode、TRAE 等基于 Chromium/Electron 的 IDE 用 GPU 合成渲染，`GetDC(hwnd)+BitBlt` 拿到的是窗口框架 DC，内容是空白或启动加载画面（症状：截图文件恒定 13195 字节、VLM 永远回答"用户正在等待页面加载"）。**必须用 `PrintWindow(hwnd, memDC, PW_RENDERFULLCONTENT=2)`**（Windows 8.1+），它让窗口把合成后的真实内容绘制到我们提供的 DC。`winapi.PrintWindow` + `PW_RENDERFULLCONTENT` 常量已加在 `user32.go`。`CaptureWindow`（movement 帧差）和 `CaptureWindowPNG`（VLM 截图）都已改用此方式，整屏截图 `CaptureScreenPNG` 不受影响（GetDC(0) 是屏幕 DC）。排查截图问题时开 `debug.save_screenshots` 落盘看原图（见坑 32）。
+
+29. **【致命】modernc/sqlite 不允许把 NULL 列扫进 Go string**（与 mattn 驱动行为不同）：`ADD COLUMN` 新加的列，旧行默认 NULL；用 `&seg.Summary`（string）扫会报 `sql: Scan error on column index N: converting NULL to string is unsupported`，导致整个 `ListActivitySegments` 失败 → QueryTimeline 返回 gRPC error → 前端 timeline 全空（但前端只显示"No activity"空态，掩盖了真实 error）。**必须用 `sql.NullString` 扫可空列，再取 `.String`**。`scanActivitySegment` 和 `LatestVLMSummary` 都已改用 NullString。教训：新增可空列后，所有 Scan 该列的地方都要 NullString 兜底；前端应渲染 `viewModel.error`（timeline_vm 有 error 属性但 TimelinePage 一直没显示，导致 error 被吞）。
+
+30. **QVariantList + emit dataChanged 会让 Repeater 全量销毁重建所有 delegate**：ViewModel 用 `QVariantList m_segments` 存数据，refresh 时 `clear()`+重建+`emit dataChanged()`，QML 的 `Repeater { model: filteredSegments() }` 把返回值当"全新数组"→ 销毁并重建全部 delegate（269 个 × 布局重算 = 明显卡顿，30s 轮询时尤其明显）。**改用 `QAbstractListModel` 子类 + diff 增量更新**：`replaceAll` 用复合 key（如 startTs+appName）匹配旧行，结构一致时只对变化行发 `dataChanged(roles)`，未变的 delegate 不重建；结构剧变（换日期）才 `beginResetModel/endResetModel`。范式照抄 `whitelist_vm.h/.cpp`（Role 枚举 + Q_ENUM + rowCount/data/roleNames override）。delegate 从 `modelData.xxx` 改为 `required property <type> <role>`（Qt6 推荐范式）。过滤/倒序逻辑下移到 C++（Model 内置 filter 属性），QML 删掉所有 `slice/push/reverse` JS 数组操作。
+
+31. **段聚合的语义：同一应用连续工作应合并为一段，只有切换应用才开新段**：`updateSegment` 的开新段判据是**"仅 app 变化"**（`c.curApp.Path != app.Path`），engaged/active/idle 之间的翻转都在段内滚动（idle 只是"在这件事上暂时思考"，不算离开）。早期版本用 `c.curState != state` 当判据，导致每秒的 state 翻转切碎成"每分钟一条"碎片。此外查询层 `aggregateSegments` 会把历史 DB 里已有的同 app 碎片段合并（兼容旧数据），聚合段无单一 DB ID，summary 回填只更新返回值不落库。`UpdateActivitySegmentEndTSAndState` 用于段内滚动更新 end_ts + state（一次 UPDATE 省 IO）。
+
+32. **debug 截图落盘开关**：排查截图/VLM 识别问题时，在 config.yaml 加 `debug.save_screenshots: true`，所有截图（VLM 截图 `<时分秒>-<app>.png` + movement 帧 `<时分秒>-mv-<app>.png`）会落盘到 `%APPDATA%\shadow-worker\screenshots\<日期>\` 供分析。默认关闭（不落盘，截图只在内存流转给识别引擎）。开关由 `main.go` 从 `cfg.Debug.SaveScreenshots` 注入到 `cfg.VLM.SaveScreenshots` 和 `cfg.Movement.SaveScreenshots`（后者经 `PrecisionConfig` 传给 collector）。movement 只在帧差超阈值时保存（避免每 300ms 落盘刷屏）。
+
+33. **【环境陷阱】PowerShell `Start-Process -RedirectStandardOutput` 会阻塞调用方**：在 bash 里用 `powershell.exe -Command "Start-Process ... -RedirectStandardOutput <path>"` 启动后台进程，PowerShell 会等待子进程的 stdout 管道关闭，导致命令"卡住"直到 5 分钟超时（但子进程其实已正常启动）。**改用工具的 `run_in_background: true` 直接跑 exe**（不重定向），或用 `cmd.exe /c start /B`。
+
+34. **【环境陷阱】Windows GUI 程序无控制台时 stderr/stdout 不输出**：`shadow-worker-client.exe` 是 GUI 程序，没有 attach 的控制台时，`qDebug()` / `qWarning()` 的输出**不会**写到任何文件（即使 `run_in_background` 捕获的 stderr.log 也是空的）。排查 QML/Qt 运行时问题时，不要依赖 qDebug 日志——改用**可见副作用**诊断（如在 QML 临时把调试信息显示到某个 Text，或设 `visible: true` 的占位元素验证渲染路径）。后端 `shadow-worker.exe` 是控制台程序，stderr 正常输出。
+
+35. **`gen_proto.bat` 只覆盖 `overview.proto`，collection.proto/voice.proto 要手动 protoc**：改了 `proto/collection.proto`（或 voice.proto）后，Go stub 不会自动重生。手动跑（参考 AGENTS.md 顶部"重新生成 proto"段落）。Qt 侧 stub 由 `qt_add_protobuf` 在 `cmake --build` 时自动重生（但注意坑 #20：ninja 可能 "no work to do"，需删 `build\.qt\rcc\*` 强制重打 qrc）。
+
+36. **proto TimelineSegment 加字段后，Qt gRPC client 的 `.summary()` getter 要 Qt stub 重生才存在**：proto 加 `string summary = 7` 后，Go stub 手动 protoc 重生（坑 35），Qt stub `cmake --build` 自动重生。但 C++ ViewModel 里调 `seg.summary()` 前，必须确认 Qt stub 已重生（否则编译报 undefined）——构建日志里应有 `Generating QtProtobuf collection_proto sources`。若 getter 仍 undefined，删 `client\build\` 下 collection 相关产物强制重生。
+
+37. **【数据陷阱】InsertEvent 必须带 TS 和 app 信息，否则时间窗查询永远查不到**：`ListEvents` 用 `WHERE ts >= start AND ts < end` 半开区间，**TS 零值（time.Time{} → toUnix 返回 0）的 event 永远查不到**。早期 `voice_server.go` 的 StopRecording 写 event 时漏了 `TS: time.Now().UTC()` 和 `ForegroundApp()`，产生大量 ts=0 的孤儿行（timeline events tab 显示空）。写 event 范式照抄 `asr_server.go`：带 TS + app.Path/app.Name。schema.go 的 migrate 已加 `DELETE FROM events WHERE ts = 0` 清理历史孤儿。
+
+38. **ViewModel 首次数据加载的时序坑：refresh 不要放在 setChannel 里**：`main.cpp` 里 `timelineVm.setChannel(channel)`（第73行）在 `setContextProperty`（第95行）**之前**调用。若在 setChannel 里立即 refresh，gRPC 本地回调（<50ms）可能早于 QML 绑定建立，`dataChanged` 信号发完时 QML 还没监听 → 首次进入页面无数据。**正确做法：refresh 放在 `main.qml` 的 `Component.onCompleted` 里调**（此时所有 context property 已绑定）。overview_vm 的 setChannel 末尾调 refresh 能工作只是碰巧时序对，不要照抄。
+
 ## 项目结构
 
 ```
