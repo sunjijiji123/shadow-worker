@@ -237,9 +237,10 @@ import ShadowWorker
             } else {
                 recordingWindow.asrModelName = activeProviderModel(settingsVm.asrProviders, settingsVm.asrActiveProvider)
             }
-            // 润色模型名：未启用时留空（ResultBubble 显示 "No polish"）
-            recordingWindow.polishModelName = settingsVm.llmEnabled
-                ? activeProviderModel(settingsVm.llmProviders, settingsVm.llmActiveProvider) : ""
+            // 润色模型名：只要配置了 LLM provider 就显示模型名，
+            // 不受"自动润色"开关（llmEnabled）影响——后者只控制识别后是否
+            // 自动触发，手动润色始终可用（与后端 llm.New 解耦 enabled 一致）。
+            recordingWindow.polishModelName = activeProviderModel(settingsVm.llmProviders, settingsVm.llmActiveProvider)
         }
         recordingWindow.startRealRecording()
     }
@@ -257,8 +258,25 @@ import ShadowWorker
     }
     function stopRealRecording() {
         // backend stops capture + runs ASR; result arrives via onResultReady
+        // 注入模式（injectMode=auto）：识别/润色过程中不弹结果气泡。
+        recordingWindow.injecting = (settingsVm && settingsVm.llmInjectMode === "auto")
         recordingWindow.startTranscribing()
         voiceClient.stop()
+    }
+
+    // 尝试把文本注入当前焦点输入框（injectMode=auto 时调用）。
+    // 成功返回 true（调用方据此收起气泡窗口）；失败返回 false（调用方降级弹气泡）。
+    function tryInject(text) {
+        if (!textInjector || !text) return false
+        if (textInjector.inject(text)) {
+            // 注入成功：收起录音窗口，不弹结果气泡。
+            recordingWindow.hide()
+            toast(qsTr("Injected"), "success")
+            return true
+        }
+        // 注入失败：清除 injecting 标志，让结果气泡能显示（降级）。
+        recordingWindow.injecting = false
+        return false
     }
 
     // live spectrum frames from the backend -> recording window
@@ -272,6 +290,15 @@ import ShadowWorker
             if (recordingWindow.abandoned) return
             if (error && error !== "") {
                 recordingWindow.applyTranscriptionError(error)
+                return
+            }
+            // injectMode=auto 且非自动润色：直接注入 ASR 原文。
+            // 自动润色时注入延后到 onPolishReady（注入润色后结果）。
+            if (settingsVm && settingsVm.llmInjectMode === "auto"
+                && !(settingsVm.llmEnabled)) {
+                if (tryInject(text)) return
+                // 注入失败 → 降级：弹气泡 + 降级提示
+                recordingWindow.applyTranscription(text, true)
             } else {
                 recordingWindow.applyTranscription(text)
             }
@@ -288,9 +315,22 @@ import ShadowWorker
         // 用户已放弃则忽略（和 onResultReady 一致）。
         function onPolishReady(originalText, polishedText, error) {
             if (recordingWindow.abandoned) return
-            recordingWindow.applyPolishResult(originalText, polishedText, error)
-            if (error && error !== "") {
-                toast(qsTr("Polish failed: ") + error, "warning")
+            // injectMode=auto 且开启自动润色：注入润色后结果（润色失败用原文兜底）。
+            // 非自动润色或 preview 模式：正常走气泡显示。
+            if (settingsVm && settingsVm.llmInjectMode === "auto"
+                && settingsVm.llmEnabled) {
+                var finalText = (error && error !== "") ? originalText : polishedText
+                if (finalText && tryInject(finalText)) return
+                // 注入失败 → 降级
+                recordingWindow.applyPolishResult(originalText, polishedText, error, true)
+                if (error && error !== "") {
+                    toast(qsTr("Polish failed: ") + error, "warning")
+                }
+            } else {
+                recordingWindow.applyPolishResult(originalText, polishedText, error)
+                if (error && error !== "") {
+                    toast(qsTr("Polish failed: ") + error, "warning")
+                }
             }
         }
     }

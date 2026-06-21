@@ -32,6 +32,9 @@ Item {
     property bool resultPolishing: false
     // resultPolished: 当前结果是否已完成润色（控制 ResultBubble 的 Polish 按钮状态）
     property bool resultPolished: false
+    // degradedHint: injectMode=auto 注入失败降级到气泡时为 true，
+    // 结果气泡顶部显示"未检测到输入框，已切回预览"提示。
+    property bool degradedHint: false
     // abandoned=true 表示用户点了 × 放弃，后续的 ASR 结果应被忽略
     property bool abandoned: false
     // 当前使用的模型名（显示在结果气泡右下角）
@@ -83,6 +86,10 @@ Item {
 
     // ---- visibility ----
     readonly property bool anyVisible: state !== "hidden"
+    // injecting: 本次录音走"直接注入"模式（injectMode=auto）。
+    // 注入模式下识别/润色过程中不弹结果气泡，只有降级（注入失败）才显示。
+    // main.qml 的 tryInject 成功调 hide() 清此标志，失败降级时也清掉。
+    property bool injecting: false
 
     // 主窗口最小化/隐藏后，Tool 类型的子窗口会被 Win32 强制隐藏
     // （因为它们的 transientParent 是主窗口）。解法：把浮窗的
@@ -106,6 +113,8 @@ Item {
         transcript = ""
         result = ""
         resultPolishing = false
+        degradedHint = false
+        injecting = false
         placePill()
     }
     function hide() {
@@ -114,6 +123,8 @@ Item {
         transcript = ""
         result = ""
         resultPolishing = false
+        degradedHint = false
+        injecting = false
     }
     // close = ABANDON at any state: discard recording/partial result, just hide.
     // Distinct from stopRealRecording (which transcribes + polishes).
@@ -198,9 +209,11 @@ Item {
         // no timer here — the result arrives async via the gRPC stream
     }
     // backend returned recognized text -> 若开启自动润色则调 LLM，否则直接完成。
-    function applyTranscription(text) {
+    // degraded=true 表示 injectMode=auto 注入失败，降级弹气泡（顶部显示提示）。
+    function applyTranscription(text, degraded) {
         result = text
         resultPolished = false   // ASR 原文，尚未润色
+        degradedHint = degraded === true
         if (autoPolish && voiceClient) {
             state = "polishing"
             resultPolishing = true
@@ -211,7 +224,8 @@ Item {
     }
     // 润色结果回调（由 main.qml 的 onPolishReady 转发）。
     // 成功：替换 result 为润色文字，标记已润色；失败：保留原文。
-    function applyPolishResult(originalText, polishedText, error) {
+    // degraded=true 表示 injectMode=auto 注入失败，降级弹气泡（顶部显示提示）。
+    function applyPolishResult(originalText, polishedText, error, degraded) {
         if (error && error.length > 0) {
             // 润色失败：保留原文，结果气泡仍显示 ASR 文字（未润色）
             result = originalText
@@ -221,6 +235,7 @@ Item {
             resultPolished = true
         }
         resultPolishing = false
+        degradedHint = degraded === true
         state = "completed"
     }
     // backend reported an ASR error -> pill 显示红色叉叉 error 状态，
@@ -310,7 +325,12 @@ Item {
     // ================================================================
     Window {
         id: resultWindow
-        visible: root.anyVisible && root.state !== "listening" && root.state !== "idle"
+        // 注入模式（injecting=true）期间隐藏结果气泡——识别/润色过程不弹窗，
+        // 只有注入成功 hide() 或失败降级（injecting 被清 + state=completed）后才显隐。
+        visible: root.anyVisible
+                && root.state !== "listening"
+                && root.state !== "idle"
+                && !root.injecting
         flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
         Component.onCompleted: resultWindow.transientParent = null
         color: "transparent"
@@ -340,6 +360,7 @@ Item {
             polishing: root.resultPolishing
             polished: root.resultPolished
             autoPolish: root.autoPolish
+            degradedHint: root.degradedHint
             asrModelName: root.asrModelName
             polishModelName: root.polishModelName
             onCloseRequested: {

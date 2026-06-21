@@ -20,6 +20,7 @@
 #include "viewmodels/whitelist_vm.h"
 #include "window/windowpicker.h"
 #include "window/windowhelper.h"
+#include "window/textinjector.h"
 #include "audio/audiodevicemanager.h"
 
 #include <fstream>
@@ -77,6 +78,7 @@ int main(int argc, char *argv[]) {
         QCoreApplication::arguments().contains(QLatin1String("--autostart"));
     WindowPicker picker;
     WindowHelper windowHelper;
+    TextInjector textInjector;
     AudioRecorder audioRecorder;
     AudioDeviceManager audioDeviceManager;
     GlobalHotkey globalHotkey;
@@ -97,6 +99,7 @@ int main(int argc, char *argv[]) {
     engine.rootContext()->setContextProperty("autostartMode", autostartMode);
     engine.rootContext()->setContextProperty("windowPicker", &picker);
     engine.rootContext()->setContextProperty("windowHelper", &windowHelper);
+    engine.rootContext()->setContextProperty("textInjector", &textInjector);
     engine.rootContext()->setContextProperty("audioRecorder", &audioRecorder);
     engine.rootContext()->setContextProperty("audioDeviceManager", &audioDeviceManager);
     engine.rootContext()->setContextProperty("globalHotkey", &globalHotkey);
