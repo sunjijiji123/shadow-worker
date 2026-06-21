@@ -74,20 +74,27 @@ Item {
                 Repeater {
                     model: root.segments
                     delegate: Rectangle {
-                        required property var modelData
+                        required property int startTs
+                        required property int endTs
+                        required property string state
+                        required property string category
+                        required property int durationMin
+                        required property string startTime
+                        required property string endTime
+                        required property string appName
                         // clamp segment into visible window
-                        property real segStartSec: root.secOfDay(modelData.startTs)
-                        property real segEndSec: root.secOfDay(modelData.endTs)
+                        property real segStartSec: root.secOfDay(startTs)
+                        property real segEndSec: root.secOfDay(endTs)
                         property real x1: Math.max(root.secToX(segStartSec), 0)
                         property real x2: Math.min(root.secToX(segEndSec), track.width)
                         x: x1
                         width: Math.max(x2 - x1, 1)
                         height: parent.height
                         // 三态颜色:idle=muted;engaged=类别色满;active=类别色半透明。
-                        color: modelData.state === "idle" ? Theme.muted
-                             : (modelData.category ? Theme.colorOf(modelData.category) : Theme.muted)
-                        opacity: modelData.state === "engaged" ? 1.0
-                               : modelData.state === "active" ? 0.55
+                        color: state === "idle" ? Theme.muted
+                             : (category.length > 0 ? Theme.colorOf(category) : Theme.muted)
+                        opacity: state === "engaged" ? 1.0
+                               : state === "active" ? 0.55
                                : 1.0
                         // no border -> segments flow continuously (no dark gaps between them)
 
@@ -95,14 +102,14 @@ Item {
                             anchors.fill: parent
                             hoverEnabled: true
                             onEntered: {
-                                var mins = modelData.durationMin || Math.round((segEndSec - segStartSec) / 60)
+                                var mins = durationMin > 0 ? durationMin : Math.round((segEndSec - segStartSec) / 60)
                                 // 三态标签:idle/engaged/active 各显示对应文字。
-                                var cat = modelData.state === "idle" ? "idle" : (modelData.category || "?")
-                                var stateTag = modelData.state === "engaged" ? "engaged"
-                                             : modelData.state === "active" ? "active"
+                                var cat = state === "idle" ? "idle" : (category.length > 0 ? category : "?")
+                                var stateTag = state === "engaged" ? "engaged"
+                                             : state === "active" ? "active"
                                              : "idle"
-                                var txt = (modelData.startTime || "") + "-" + (modelData.endTime || "")
-                                         + "  " + (modelData.appName || "")
+                                var txt = startTime + "-" + endTime
+                                         + "  " + appName
                                          + "  [" + cat + "/" + stateTag + "]  " + mins + "min"
                                 tip.show(txt, mouseX, mouseY)
                             }

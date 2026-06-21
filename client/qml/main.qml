@@ -404,6 +404,10 @@ import ShadowWorker
     Component.onCompleted: {
         // pull overview once on startup
         if (overviewVm) overviewVm.refresh()
+        // 首次拉取 timeline（此时所有 context property 已绑定，
+        // dataChanged 信号能正确传到 QML；放在 setChannel 里太早，
+        // gRPC 本地回调可能早于 QML 绑定建立，导致首次数据丢失）
+        if (timelineVm) timelineVm.refresh()
         // Load config from backend; once loaded, register the record hotkey
         // from the SAVED value (settingsVm.hotkeyRecord is just the default
         // "F9" until load() completes). This is the single source of truth for

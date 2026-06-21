@@ -4,11 +4,12 @@
 
 #include <QObject>
 #include <QString>
-#include <QVariantList>
+#include <QTimer>
 #include <memory>
 
 #include "collection.qpb.h"
 #include "collection_client.grpc.qpb.h"
+#include "timelinemodels.h"
 #include <QAbstractGrpcChannel>
 #include <QGrpcChannelOptions>
 #include <QGrpcHttp2Channel>
@@ -16,12 +17,16 @@
 class TimelineViewModel : public QObject {
   Q_OBJECT
   Q_PROPERTY(QString date READ date WRITE setDate NOTIFY dateChanged)
-  Q_PROPERTY(QVariantList segments READ segments NOTIFY dataChanged)
-  Q_PROPERTY(QVariantList events READ events NOTIFY dataChanged)
+  // segments/events 改为 QAbstractListModel*：QML 直接绑到 Repeater.model，
+  // Model 内部做 diff 增量更新，避免每次刷新全量重建 delegate。
+  Q_PROPERTY(SegmentListModel *segments READ segments CONSTANT)
+  Q_PROPERTY(EventListModel *events READ events CONSTANT)
+  Q_PROPERTY(QString catFilter READ catFilter WRITE setCatFilter NOTIFY catFilterChanged)
+  Q_PROPERTY(QString evFilter READ evFilter WRITE setEvFilter NOTIFY evFilterChanged)
   Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged)
   Q_PROPERTY(QString error READ error NOTIFY errorChanged)
 
-public:
+ public:
   explicit TimelineViewModel(QObject *parent = nullptr);
 
   void setChannel(std::shared_ptr<QAbstractGrpcChannel> channel);
@@ -29,20 +34,31 @@ public:
   QString date() const { return m_date; }
   void setDate(const QString &date);
 
-  QVariantList segments() const { return m_segments; }
-  QVariantList events() const { return m_events; }
+  SegmentListModel *segments() { return &m_segModel; }
+  EventListModel *events() { return &m_evModel; }
+
+  QString catFilter() const { return m_segModel.categoryFilter(); }
+  void setCatFilter(const QString &f);
+  QString evFilter() const { return m_evModel.typeFilter(); }
+  void setEvFilter(const QString &f);
+
   bool loading() const { return m_loading; }
   QString error() const { return m_error; }
 
+  // 顶部统计上移到 C++：避免 QML 遍历整个 model。只统计 engaged/active 段。
+  Q_INVOKABLE int activeDurationSec() const;
+  Q_INVOKABLE int activeSegmentCount() const;
+
   Q_INVOKABLE void refresh();
 
-signals:
+ signals:
   void dateChanged();
-  void dataChanged();
+  void catFilterChanged();
+  void evFilterChanged();
   void loadingChanged();
   void errorChanged();
 
-private:
+ private:
   void setLoading(bool v);
   void setError(const QString &e);
 
@@ -50,8 +66,11 @@ private:
   std::shared_ptr<QAbstractGrpcChannel> m_channel;
 
   QString m_date;
-  QVariantList m_segments;
-  QVariantList m_events;
+  SegmentListModel m_segModel;
+  EventListModel m_evModel;
   bool m_loading = false;
   QString m_error;
+
+  // 周期刷新定时器：timeline 页面停留在当天时，自动拉取最新采集数据。
+  QTimer m_pollTimer;
 };

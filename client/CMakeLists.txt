@@ -138,6 +138,8 @@ qt_add_executable(shadow-worker-client
     src/viewmodels/whitelist_vm.cpp
     src/viewmodels/timeline_vm.h
     src/viewmodels/timeline_vm.cpp
+    src/viewmodels/timelinemodels.h
+    src/viewmodels/timelinemodels.cpp
     src/viewmodels/settings_vm.h
     src/viewmodels/settings_vm.cpp
     src/window/windowpicker.h

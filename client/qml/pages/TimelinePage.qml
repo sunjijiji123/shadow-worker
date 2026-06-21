@@ -12,41 +12,24 @@ Item {
 
     property var viewModel: null
     property string activeListTab: "worklog"
-    property string catFilter: "all"
-    property string evFilter: "all"
-
-    // segments/events come from the viewModel (backend). Empty until data is
-    // collected; the UI shows an empty-state hint in that case.
-    function allSegments() {
-        return viewModel && viewModel.segments ? viewModel.segments : []
-    }
-    function allEvents() {
-        return viewModel && viewModel.events ? viewModel.events : []
-    }
-
-    function filteredSegments() {
-        var segs = allSegments()
-        if (catFilter === "all") return segs
-        var out = []
-        for (var i = 0; i < segs.length; i++) {
-            if (segs[i].category === catFilter) out.push(segs[i])
-        }
-        return out
-    }
-    function filteredEvents() {
-        var evs = allEvents()
-        if (evFilter === "all") return evs
-        var out = []
-        for (var j = 0; j < evs.length; j++) {
-            if (evs[j].type === evFilter) out.push(evs[j])
-        }
-        return out
-    }
 
     // badge bg color for a category (translucent like HTML)
     function catBadgeBg(cat) {
         var c = Theme.colorOf(cat)
         return Qt.rgba(parseFloat(c.r), parseFloat(c.g), parseFloat(c.b), 0.15)
+    }
+
+    // formatDuration 把秒数格式化为智能进位的时长文本。
+    //   < 60s    → "45s"
+    //   < 3600s  → "12 min"（秒部分舍去）
+    //   ≥ 3600s  → "1h 23min"（整点小时不显示 0min）
+    // 供顶部统计渲染 ViewModel.activeDurationSec() 返回的秒数。
+    function formatDuration(sec) {
+        if (sec < 60) return Math.max(0, sec) + "s"
+        if (sec < 3600) return Math.floor(sec / 60) + " min"
+        var h = Math.floor(sec / 3600)
+        var m = Math.floor((sec % 3600) / 60)
+        return m > 0 ? (h + "h " + m + "min") : (h + "h")
     }
 
     Flickable {
@@ -106,7 +89,12 @@ Item {
                         onClicked: {
                             var t = new Date()
                             var iso = t.getFullYear() + "-" + ("0"+(t.getMonth()+1)).slice(-2) + "-" + ("0"+t.getDate()).slice(-2)
-                            if (viewModel) viewModel.date = iso
+                            if (viewModel) {
+                                viewModel.date = iso
+                                // setDate 对同一天有短路保护（不重复 refresh），
+                                // Today 通常就是当天，故显式强制刷新一次。
+                                viewModel.refresh()
+                            }
                         }
                     }
                 }
@@ -128,25 +116,12 @@ Item {
                         font.weight: Font.DemiBold
                     }
                     Text {
-                        // total work minutes (engaged + active, idle 不计) + segment count
-                        text: {
-                            var segs = root.allSegments()
-                            var mins = 0
-                            var count = 0
-                            for (var i = 0; i < segs.length; i++) {
-                                // 用 state 字段判断(修正旧版用 category 误判的 bug):
-                                // engaged/active 计入工作时长,idle 不计。
-                                var st = segs[i].state
-                                if (st === "engaged" || st === "active") {
-                                    mins += segs[i].durationMin || 0
-                                    count++
-                                }
-                            }
-                            var h = Math.floor(mins / 60)
-                            var m = mins % 60
-                            return qsTr("Work %1h %2m  ·  %3 active segments")
-                                   .arg(h).arg(m).arg(count)
-                        }
+                        // 统计上移到 ViewModel：engaged/active 段的总时长 + 段数。
+                        // Model 变化时（replaceAll 内 dataChanged/reset）触发重算。
+                        text: viewModel ? qsTr("Work %1  ·  %2 active segments")
+                                          .arg(root.formatDuration(viewModel.activeDurationSec()))
+                                          .arg(viewModel.activeSegmentCount())
+                                      : ""
                         color: Theme.muted
                         font.pixelSize: 12
                     }
@@ -155,7 +130,7 @@ Item {
                 // timeline track
                 TimelineTrack {
                     Layout.fillWidth: true
-                    segments: filteredSegments()
+                    segments: viewModel ? viewModel.segments : null
                 }
 
                 // legend
@@ -218,6 +193,17 @@ Item {
                         }
                     }
 
+                    // loading indicator: 异步 gRPC 查询期间显示，避免空白被误认为卡死
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.topMargin: 24
+                        visible: viewModel && viewModel.loading
+                        text: qsTr("Loading…")
+                        color: Theme.muted
+                        font.pixelSize: 13
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+
                     // ---- worklog tab ----
                     ColumnLayout {
                         Layout.fillWidth: true
@@ -238,9 +224,9 @@ Item {
                                 ]
                                 delegate: Chip {
                                     text: modelData.label
-                                    checked: catFilter === modelData.v
+                                    checked: (viewModel && viewModel.catFilter || "all") === modelData.v
                                     dotColor: modelData.v === "all" ? "transparent" : Theme.colorOf(modelData.v)
-                                    onClicked: catFilter = modelData.v
+                                    onClicked: if (viewModel) viewModel.catFilter = modelData.v
                                 }
                             }
                         }
@@ -251,9 +237,18 @@ Item {
                             spacing: 0
 
                                 Repeater {
-                                    model: root.filteredSegments()
+                                    model: viewModel ? viewModel.segments : null
                                     delegate: ColumnLayout {
-                                        required property var modelData
+                                        // 用 required property 声明 roles（Qt6 推荐范式），
+                                        // 替代旧的 modelData.xxx。Model 变化时只更新这些绑定。
+                                        required property string startTime
+                                        required property string endTime
+                                        required property string appName
+                                        required property string category
+                                        required property string state
+                                        required property string summary
+                                        required property string durationText
+
                                         Layout.fillWidth: true
                                         spacing: 6
                                         Layout.topMargin: 10
@@ -265,7 +260,7 @@ Item {
                                             spacing: 10
 
                                             Text {
-                                                text: modelData.startTime + " - " + modelData.endTime
+                                                text: startTime + " - " + endTime
                                                 color: Theme.ink
                                                 font.pixelSize: 13
                                                 font.weight: Font.DemiBold
@@ -277,17 +272,18 @@ Item {
                                                 Layout.minimumWidth: 100
                                                 Rectangle {
                                                     width: 20; height: 20; radius: 5
-                                                    color: Theme.colorOf(modelData.category)
+                                                    color: Theme.colorOf(category)
                                                     Text {
                                                         anchors.centerIn: parent
-                                                        text: modelData.appIcon
+                                                        // 后端无 app_icon 字段，取 appName 首字母兜底
+                                                        text: appName.substring(0, 1).toUpperCase()
                                                         color: "#ffffff"
                                                         font.pixelSize: 9
                                                         font.weight: Font.Bold
                                                     }
                                                 }
                                                 Text {
-                                                    text: modelData.appName
+                                                    text: appName
                                                     color: Theme.ink
                                                     font.pixelSize: 13
                                                     anchors.verticalCenter: parent.verticalCenter
@@ -298,24 +294,26 @@ Item {
                                                 width: catBadgeLbl.implicitWidth + 14
                                                 height: 18
                                                 radius: 4
-                                                color: root.catBadgeBg(modelData.category)
+                                                color: root.catBadgeBg(category)
                                                 Text {
                                                     id: catBadgeLbl
                                                     anchors.centerIn: parent
-                                                    text: modelData.category
-                                                    color: Theme.colorOf(modelData.category)
+                                                    text: category
+                                                    color: Theme.colorOf(category)
                                                     font.pixelSize: 11
                                                 }
                                             }
                                             Text {
-                                                text: modelData.durationMin + " min"
+                                                text: durationText
                                                 color: Theme.muted
                                                 font.pixelSize: 12
                                             }
                                         }
                                         // summary line (indented, with └ prefix like HTML)
+                                        // 无摘要时不显示该行（VLM 摘要由后端惰性回填，可能为空）
                                         Text {
-                                            text: "└ " + modelData.summary
+                                            visible: summary.length > 0
+                                            text: "└ " + summary
                                             color: Theme.muted
                                             font.pixelSize: 12
                                             Layout.leftMargin: 30
@@ -333,7 +331,7 @@ Item {
                             Text {
                                 Layout.fillWidth: true
                                 Layout.topMargin: 24
-                                visible: root.filteredSegments().length === 0
+                                visible: !viewModel || viewModel.segments.rowCount === 0
                                 text: qsTr("No activity recorded for this day yet.")
                                 color: Theme.muted
                                 font.pixelSize: 13
@@ -360,9 +358,9 @@ Item {
                                 ]
                                 delegate: Chip {
                                     text: modelData.label
-                                    checked: evFilter === modelData.v
+                                    checked: (viewModel && viewModel.evFilter || "all") === modelData.v
                                     dotColor: modelData.v === "all" ? "transparent" : (Theme.eventTypeColor[modelData.v] || "transparent")
-                                    onClicked: evFilter = modelData.v
+                                    onClicked: if (viewModel) viewModel.evFilter = modelData.v
                                 }
                             }
                         }
@@ -373,9 +371,11 @@ Item {
                             spacing: 0
 
                                 Repeater {
-                                    model: root.filteredEvents()
+                                    model: viewModel ? viewModel.events : null
                                     delegate: RowLayout {
-                                        required property var modelData
+                                        required property string time
+                                        required property string type
+                                        required property string text
                                         Layout.fillWidth: true
                                         spacing: 10
                                         Layout.topMargin: 8
@@ -383,15 +383,15 @@ Item {
 
                                         Rectangle {
                                             width: 8; height: 8; radius: 4
-                                            color: Theme.eventTypeColor[modelData.type] || Theme.muted
+                                            color: Theme.eventTypeColor[type] || Theme.muted
                                         }
                                         Text {
-                                            text: modelData.time
+                                            text: time
                                             color: Theme.muted
                                             font.pixelSize: 13
                                         }
                                         Text {
-                                            text: modelData.type + ": " + (modelData.text || "")
+                                            text: type + ": " + text
                                             color: Theme.ink
                                             font.pixelSize: 13
                                             Layout.fillWidth: true
@@ -409,7 +409,7 @@ Item {
                             Text {
                                 Layout.fillWidth: true
                                 Layout.topMargin: 24
-                                visible: root.filteredEvents().length === 0
+                                visible: !viewModel || viewModel.events.rowCount === 0
                                 text: qsTr("No events recorded for this day yet.")
                                 color: Theme.muted
                                 font.pixelSize: 13
