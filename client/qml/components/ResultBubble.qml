@@ -36,7 +36,9 @@ Rectangle {
     }
 
     // .result-bubble
-    width: 320
+    // width 由外层（RecordingWindow 的 ResultBubble 实例）设为 parent.width，
+    // 与录音气泡 pillWindow 保持一致宽度。这里不写死默认值，避免与外部
+    // width: parent.width 绑定冲突导致宽度不一致。
     implicitHeight: content.implicitHeight + 28   // padding 14*2
     radius: 12
     color: Theme.bg3

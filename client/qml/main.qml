@@ -28,6 +28,27 @@ import ShadowWorker
         mainWindow.hide()
     }
 
+    // 录音浮窗（pillWindow/resultWindow）是 Qt.Tool 类型，属于主窗口的
+    // transient 子窗口。当主窗口最小化时，Win32 会自动隐藏 Tool 窗口——
+    // 即使浮窗的 visible=true。这违背"浮窗完全独立于主窗口"的需求。
+    // 监听主窗口 visibility：最小化/隐藏后，若浮窗应该可见，强制重新显示。
+    onVisibilityChanged: {
+        if (mainWindow.visibility === Window.Minimized && recordingWindow.anyVisible) {
+            Qt.callLater(refreshFloatingWindows)
+        }
+    }
+    onVisibleChanged: {
+        if (!mainWindow.visible && recordingWindow.anyVisible) {
+            Qt.callLater(refreshFloatingWindows)
+        }
+    }
+    function refreshFloatingWindows() {
+        // 重新 show 被系统隐藏的浮窗（仅当它本应可见）
+        if (recordingWindow.anyVisible) {
+            recordingWindow.refreshVisibility()
+        }
+    }
+
     // tray menu / icon click handlers
     Connections {
         target: trayController

@@ -84,6 +84,22 @@ Item {
     // ---- visibility ----
     readonly property bool anyVisible: state !== "hidden"
 
+    // 主窗口最小化/隐藏后，Tool 类型的子窗口会被 Win32 强制隐藏
+    // （因为它们的 transientParent 是主窗口）。解法：把浮窗的
+    // transientParent 设为 null，让它脱离主窗口的可见性影响，独立显示。
+    // 注意：不做 visible=false;visible=true 的闪烁刷新——那会中断子控件
+    // （如 × 按钮）正在进行的事件处理，导致点击失效。
+    function refreshVisibility() {
+        if (anyVisible) {
+            // 解绑 transientParent，使浮窗不再跟随主窗口的显示状态
+            pillWindow.transientParent = null
+            resultWindow.transientParent = null
+            // 仅 raise，不闪烁
+            pillWindow.raise()
+            if (resultWindow.visible) resultWindow.raise()
+        }
+    }
+
     // ---- state machine functions ----
     function show() {
         state = "listening"
@@ -236,6 +252,11 @@ Item {
         id: pillWindow
         visible: root.anyVisible
         flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
+        // transientParent: null —— 脱离主窗口的可见性影响。默认 Tool 窗口
+        // 的 transientParent 是创建它的主窗口，主窗口最小化/隐藏时 Win32 会
+        // 强制隐藏 Tool 子窗口。设为 null 后浮窗完全独立，不受主窗口影响。
+        // 注意：必须在 Component.onCompleted 后设（声明时设可能被 Qt 覆盖）。
+        Component.onCompleted: pillWindow.transientParent = null
         color: "transparent"
         width: 320
         height: 44
@@ -255,7 +276,6 @@ Item {
                 if (voiceClient && voiceClient.recording) {
                     voiceClient.stop()
                 }
-                polishTimer.stop()
                 finishTimer.stop()
                 root.hide()
             }
@@ -292,6 +312,7 @@ Item {
         id: resultWindow
         visible: root.anyVisible && root.state !== "listening" && root.state !== "idle"
         flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
+        Component.onCompleted: resultWindow.transientParent = null
         color: "transparent"
         width: 320
         // height tracks the bubble's content height (header + textarea + actions)
