@@ -103,6 +103,8 @@ Item {
     property string vlmModelType: "cloud"  // cloud | local (from active chip)
     property string captureRange: "active" // screen | active
     property int vlmInterval: 5            // scheduled 模式定时截图间隔（分钟）
+    property int vlmSwitchGap: 20          // on-demand: 切窗口触发冷却秒
+    property int vlmMotionGap: 60          // on-demand: 活跃点触发冷却秒
     // VLM model list (mutable so chips can be removed at runtime)
     property var vlmModels: []
     // VLM 云端字段暂存（仿 LLM 的 llm* 字段，无 binding，显式赋值）
@@ -269,6 +271,8 @@ Item {
             viewModel.vlmProvidersChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
             viewModel.vlmIntervalChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
             viewModel.vlmCaptureRangeChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
+            viewModel.vlmSwitchGapChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
+            viewModel.vlmMotionGapChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
             // Movement 信号
             viewModel.movementSampleMsChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
             viewModel.movementIdleSChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
@@ -351,6 +355,8 @@ Item {
         vlmMode = vm.mode
         vlmInterval = viewModel.vlmInterval || 5
         captureRange = (viewModel.vlmCaptureRange === "screen") ? "screen" : "active"
+        vlmSwitchGap = viewModel.vlmSwitchGap || 20
+        vlmMotionGap = viewModel.vlmMotionGap || 60
         vlmModels = providersToChips(viewModel.vlmProviders || [])
         vlmActiveModel = viewModel.vlmActiveProvider || ""
         vlmModelType = activeProviderType(vlmActiveModel, "vlm")
@@ -556,6 +562,8 @@ Item {
         viewModel.vlmMode = toBackendVlmMode(vlmMode, vlmEnabled)
         viewModel.vlmInterval = vlmInterval
         viewModel.vlmCaptureRange = captureRange
+        viewModel.vlmSwitchGap = vlmSwitchGap
+        viewModel.vlmMotionGap = vlmMotionGap
         viewModel.vlmActiveProvider = vlmActiveModel
         flushVlmFields()
 
@@ -1132,6 +1140,9 @@ Item {
                         Radio {
                             text: qsTr("On-Demand Screenshot")
                             checked: vlmMode === "ondemand"
+                            // 整屏模式无活跃窗口概念，on_demand 无触发源 → 禁用（与后端降级对齐）。
+                            enabled: captureRange !== "screen"
+                            opacity: captureRange !== "screen" ? 1.0 : 0.5
                             onClicked: vlmMode = "ondemand"
                         }
                     }
@@ -1156,18 +1167,50 @@ Item {
                         }
                     }
 
-                    // ondemand config: 本轮不实现热键触发，仅展示说明，隐藏 modifier/key 死控件。
+                    // ondemand config: 切窗口/活跃点两个冷却参数（秒）。
+                    // on_demand 不走热键，而是由后端 Collector 的活跃信号驱动：
+                    // 切换前台窗口或当前窗口出现活跃点（画面运动/键鼠/标题变化）时触发截图。
+                    // 两个 gap 防止频繁采集浪费资源，共用"上次采集时刻"计时。
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 6
-                        visible: vlmMode === "ondemand"
+                        // screen 模式无活跃窗口概念，on_demand 被禁用，此块也不显示。
+                        visible: vlmMode === "ondemand" && captureRange !== "screen"
 
                         Text {
-                            text: qsTr("On-demand trigger (global hotkey) will be supported in a later version. For now, use Scheduled mode.")
+                            text: qsTr("On-demand captures when you switch windows or work actively. Set cooldowns to avoid frequent captures.")
                             color: Theme.muted
                             font.pixelSize: 13
                             wrapMode: Text.WordWrap
                             Layout.fillWidth: true
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 16
+
+                            TextField {
+                                id: vlmSwitchGapField
+                                Layout.fillWidth: true
+                                label: qsTr("Window switch cooldown (s)")
+                                // 无 text 绑定（AGENTS.md 坑 #2）：onTextEdited 回写，
+                                // syncFromViewModel/Component.onCompleted 命令式赋值。
+                                onTextEdited: function(newText) {
+                                    var n = parseInt(newText, 10)
+                                    vlmSwitchGap = isNaN(n) || n < 1 ? 1 : n
+                                }
+                                Component.onCompleted: vlmSwitchGapField.text = vlmSwitchGap
+                            }
+                            TextField {
+                                id: vlmMotionGapField
+                                Layout.fillWidth: true
+                                label: qsTr("Activity cooldown (s)")
+                                onTextEdited: function(newText) {
+                                    var n = parseInt(newText, 10)
+                                    vlmMotionGap = isNaN(n) || n < 1 ? 1 : n
+                                }
+                                Component.onCompleted: vlmMotionGapField.text = vlmMotionGap
+                            }
                         }
                     }
                 }
@@ -1365,7 +1408,12 @@ Item {
                     Radio {
                         text: qsTr("Entire Screen (all monitors)")
                         checked: captureRange === "screen"
-                        onClicked: captureRange = "screen"
+                        onClicked: {
+                            captureRange = "screen"
+                            // 整屏无活跃窗口概念，on_demand 无触发源 → 强制定时模式。
+                            // （后端 VLMHolder.Rebuild 也会兜底降级，此处保证 UI 一致。）
+                            vlmMode = "scheduled"
+                        }
                     }
                     Radio {
                         text: qsTr("Active Window Only")

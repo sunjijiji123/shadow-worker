@@ -82,8 +82,16 @@ type VLMConfig struct {
 	//   active = 当前前台窗口（默认，与白名单配合聚焦正在做的事）
 	//   screen = 整个虚拟屏幕（含所有显示器，适合多屏工作流）
 	CaptureRange string `yaml:"capture_range"`
-	// SaveScreenshots 由 main.go 从 cfg.Debug.SaveScreenshots 注入（非 yaml 字段）。
-	// true 时 VLM 截图落盘到 screenshots/ 目录供调试。
+	// OnDemandSwitchGapS 仅 on_demand 模式：切换到新活跃窗口后，距上次采集
+	// 超过该秒数才触发一次截图。用于过滤 Alt+Tab 抖动（人在两窗口间来回切）。
+	// 默认 20s。
+	OnDemandSwitchGapS int `yaml:"on_demand_switch_gap_s"`
+	// OnDemandMotionGapS 仅 on_demand 模式：当前窗口出现活跃信号（画面运动/
+	// 键鼠输入/标题变化）后，距上次采集超过该秒数才触发一次截图。同一场景内
+	// 不频繁采集，避免资源损耗。默认 60s。与 SwitchGap 共用"上次采集时刻"。
+	OnDemandMotionGapS int `yaml:"on_demand_motion_gap_s"`
+	// SaveScreenshots 由 main.go 从 cfg.Debug.SaveVLMScreenshots 注入（非 yaml 字段）。
+	// true 时送去 VLM 分析的截图落盘到 screenshots/ 目录供调试（文件名无 -mv- 前缀）。
 	SaveScreenshots bool `yaml:"-"`
 }
 
@@ -125,8 +133,13 @@ type MovementConfig struct {
 	// 两者为 0 时 NewCollector 用 Precision 对应 Preset 的默认值。
 	InputIdleS   int `yaml:"input_idle_s"`
 	DisplayIdleS int `yaml:"display_idle_s"`
-	// SaveScreenshots 由 main.go 从 cfg.Debug.SaveScreenshots 注入（非 yaml 字段）。
-	// true 时 movement 活动窗口帧落盘到 screenshots/ 目录供调试。
+	// AwayThresholdS:离开阈值。idle 持续超该秒数 → 判定"离开"，
+	// 结束当前段（不再写覆盖整个离开期间的 idle 段），回来后开新段。
+	// 短 idle（< 阈值）仍视为"思考"，段不断（见 movement.go 的段合并语义）。
+	// 为 0 时 NewCollector 用 Preset 默认值（600=10min）。
+	AwayThresholdS int `yaml:"away_threshold_s"`
+	// SaveScreenshots 由 main.go 从 cfg.Debug.SaveMotionScreenshots 注入（非 yaml 字段）。
+	// true 时 movement 活动窗口帧落盘到 screenshots/ 目录供调试（文件名带 -mv- 前缀）。
 	SaveScreenshots bool `yaml:"-"`
 }
 
@@ -138,16 +151,37 @@ type Config struct {
 	Movement MovementConfig `yaml:"movement"`
 	Hotkeys  HotkeyConfig   `yaml:"hotkeys"`
 	Hotwords []string       `yaml:"hotwords"`
+	Log      LogConfig      `yaml:"log"`
 	Debug    DebugConfig    `yaml:"debug"`
 }
 
+// LogConfig 控制后端日志输出。排查采集/识别问题时设 level=debug。
+//
+// 日志按天滚动：每天一个 shadow-worker-YYYY-MM-DD.log，写到 logs/ 目录。
+// 旧文件按 RetentionDays 自动清理（默认保留 7 天）。
+// level: debug（全量，含每 tick 强信号/state 翻转）| info（关键事件）| warn（仅警告+错误）。
+type LogConfig struct {
+	// Level 日志级别：debug | info | warn。默认 info。
+	Level string `yaml:"level"`
+	// Console 是否同时输出到控制台（stderr）。默认 true。
+	// 后端是控制台程序时有用；GUI 后台运行时关掉省资源。
+	Console bool `yaml:"console"`
+	// RetentionDays 日志文件保留天数，超过自动清理。默认 7。
+	RetentionDays int `yaml:"retention_days"`
+}
+
 // DebugConfig 是调试开关。默认全部关闭，不影响正常使用。
-// 排查截图/识别问题时在 config.yaml 设 debug.save_screenshots: true，
-// 所有截图（VLM 截图 + movement 活动窗口帧）会落盘到 screenshots/ 目录供分析。
+// 两类截图独立控制，按需开启，避免互相干扰：
+//   - SaveVLMScreenshots: 只保存"真正送去 VLM 分析"的截图（文件名 <时分秒>-<app>.png）。
+//     排查"VLM 识别内容对不对"时开这个——能直接比对截图内容和 VLM 摘要是否一致。
+//   - SaveMotionScreenshots: 只保存"帧差判定用的活动窗口帧"（文件名 <时分秒>-mv-<app>.png）。
+//     排查 movement 采集/帧差判定问题时开这个。注意：Electron 类应用 GPU 动画频繁，
+//     会高频落盘（每秒数张），仅短时排查用。
 type DebugConfig struct {
-	// SaveScreenshots 开启时保存所有截图到磁盘（VLM 截图 + movement 帧差用的活动窗口帧）。
-	// 关闭时（默认）截图只在内存流转，不落盘。
-	SaveScreenshots bool `yaml:"save_screenshots"`
+	// SaveVLMScreenshots 只保存送去 VLM 分析的截图（推荐排查用，量小）。
+	SaveVLMScreenshots bool `yaml:"save_vlm_screenshots"`
+	// SaveMotionScreenshots 只保存帧差判定的活动窗口帧（高频，仅短时排查 movement 用）。
+	SaveMotionScreenshots bool `yaml:"save_motion_screenshots"`
 }
 
 // Default 返回默认配置。
@@ -171,6 +205,9 @@ func Default() *Config {
 			ActiveProvider:      "",
 			ScheduleIntervalMin: 5,
 			CaptureRange:        "active",
+			// on_demand 默认冷却：切窗口 20s（过滤 Alt+Tab 抖动），活跃点 60s。
+			OnDemandSwitchGapS: 20,
+			OnDemandMotionGapS: 60,
 			// 初始无 provider，用户通过 Add Model 添加。
 			Providers: map[string]VLMProvider{},
 		},
@@ -188,6 +225,9 @@ func Default() *Config {
 			Precision:        "medium",
 			InputIdleS:       15,
 			DisplayIdleS:     90,
+			// idle 超 10 分钟判为离开（吃饭/开会），结束当前段。
+			// 短 idle（看文档/思考）仍不打断段。
+			AwayThresholdS: 600,
 		},
 		Hotkeys: HotkeyConfig{
 			Record:       "F9",
@@ -195,6 +235,11 @@ func Default() *Config {
 			PromptPrefix: "Ctrl",
 		},
 		Hotwords: []string{},
+		Log: LogConfig{
+			Level:         "info",
+			Console:       true,
+			RetentionDays: 7,
+		},
 	}
 }
 

@@ -93,6 +93,20 @@ void SettingsViewModel::setVlmCaptureRange(const QString &v) {
   emit vlmCaptureRangeChanged();
 }
 
+void SettingsViewModel::setVlmSwitchGap(int v) {
+  if (m_vlmSwitchGap == v)
+    return;
+  m_vlmSwitchGap = v;
+  emit vlmSwitchGapChanged();
+}
+
+void SettingsViewModel::setVlmMotionGap(int v) {
+  if (m_vlmMotionGap == v)
+    return;
+  m_vlmMotionGap = v;
+  emit vlmMotionGapChanged();
+}
+
 // LLM setters
 void SettingsViewModel::setLlmEnabled(bool v) {
   if (m_llmEnabled == v)
@@ -429,6 +443,11 @@ void SettingsViewModel::applyConfig(const ConfigData &data) {
   setVlmActiveProvider(data.vlmActiveProvider());
   setVlmInterval((int)data.vlmScheduleIntervalMin());
   setVlmCaptureRange(data.vlmCaptureRange());
+  // on_demand gap：proto int32 零值=未设置，回落默认（switch 20 / motion 60）。
+  int sg = data.vlmOnDemandSwitchGapS();
+  setVlmSwitchGap(sg > 0 ? sg : 20);
+  int mg = data.vlmOnDemandMotionGapS();
+  setVlmMotionGap(mg > 0 ? mg : 60);
 
   QVariantList vlmList;
   const auto vlmMap = data.vlmProviders();
@@ -472,6 +491,8 @@ ConfigData SettingsViewModel::buildConfig() const {
   data.setVlmActiveProvider(m_vlmActiveProvider);
   data.setVlmScheduleIntervalMin((qint32)m_vlmInterval);
   data.setVlmCaptureRange(m_vlmCaptureRange);
+  data.setVlmOnDemandSwitchGapS((qint32)m_vlmSwitchGap);
+  data.setVlmOnDemandMotionGapS((qint32)m_vlmMotionGap);
   data.setVlmProviders(providersFromList(m_vlmProviders));
 
   data.setPolishEnabled(m_llmEnabled);

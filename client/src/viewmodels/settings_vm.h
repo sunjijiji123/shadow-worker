@@ -45,6 +45,10 @@ class SettingsViewModel : public QObject {
                  vlmIntervalChanged)
   Q_PROPERTY(QString vlmCaptureRange READ vlmCaptureRange WRITE
                  setVlmCaptureRange NOTIFY vlmCaptureRangeChanged)
+  Q_PROPERTY(int vlmSwitchGap READ vlmSwitchGap WRITE setVlmSwitchGap NOTIFY
+                 vlmSwitchGapChanged)
+  Q_PROPERTY(int vlmMotionGap READ vlmMotionGap WRITE setVlmMotionGap NOTIFY
+                 vlmMotionGapChanged)
 
   // LLM / Polish
   Q_PROPERTY(bool llmEnabled READ llmEnabled WRITE setLlmEnabled NOTIFY
@@ -107,6 +111,10 @@ public:
   void setVlmInterval(int v);
   QString vlmCaptureRange() const { return m_vlmCaptureRange; }
   void setVlmCaptureRange(const QString &v);
+  int vlmSwitchGap() const { return m_vlmSwitchGap; }
+  void setVlmSwitchGap(int v);
+  int vlmMotionGap() const { return m_vlmMotionGap; }
+  void setVlmMotionGap(int v);
 
   // LLM
   bool llmEnabled() const { return m_llmEnabled; }
@@ -162,6 +170,8 @@ signals:
   void vlmProvidersChanged();
   void vlmIntervalChanged();
   void vlmCaptureRangeChanged();
+  void vlmSwitchGapChanged();
+  void vlmMotionGapChanged();
 
   void llmEnabledChanged();
   void llmActiveProviderChanged();
@@ -207,6 +217,8 @@ private:
   QVariantList m_vlmProviders;
   int m_vlmInterval = 5;
   QString m_vlmCaptureRange = QStringLiteral("active");
+  int m_vlmSwitchGap = 20;  // on-demand: 切窗口触发冷却秒
+  int m_vlmMotionGap = 60;  // on-demand: 活跃点触发冷却秒
 
   bool m_llmEnabled = false;
   QString m_llmActiveProvider;
