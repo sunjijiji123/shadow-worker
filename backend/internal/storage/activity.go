@@ -102,6 +102,14 @@ func (db *DB) GetActivitySegment(id int64) (*ActivitySegment, error) {
 	return scanActivitySegment(row)
 }
 
+// startOfLocalDay 返回 t 所在本地日的 00:00（保留 t 的时区，通常是 time.Local）。
+// 用于按天切日：与 QueryTimeline 的本地时区切日语义一致，避免 UTC 切日导致
+// 跨本地午夜的事件错位归属（UTC+8 下凌晨 0-8 点事件被算进前一天）。
+func startOfLocalDay(t time.Time) time.Time {
+	y, m, d := t.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, t.Location())
+}
+
 // ListActivitySegments 查询时间范围内的活动段，按开始时间升序。
 func (db *DB) ListActivitySegments(start, end time.Time) ([]ActivitySegment, error) {
 	rows, err := db.Query(
@@ -131,16 +139,18 @@ func (db *DB) ListActivitySegments(start, end time.Time) ([]ActivitySegment, err
 }
 
 // ListActivitySegmentsByDate 查询某一天的全部活动段。
+// ListActivitySegmentsByDate 按天列出活动段。
+// 切日按 day 的本地时区零点（与 QueryTimeline 一致），确保 UI"日期"与本地作息对齐。
 func (db *DB) ListActivitySegmentsByDate(day time.Time) ([]ActivitySegment, error) {
-	day = day.UTC().Truncate(24 * time.Hour)
+	day = startOfLocalDay(day)
 	next := day.Add(24 * time.Hour)
 	return db.ListActivitySegments(day, next)
 }
 
 // TodayActivityMinutes 统计今日在白名单应用上的工作总分钟数(engaged+active)。
+// "今日"按本地时区零点切（与时间轴 QueryTimeline 一致）。
 func (db *DB) TodayActivityMinutes() (int, int, error) {
-	now := time.Now().UTC()
-	start := now.Truncate(24 * time.Hour)
+	start := startOfLocalDay(time.Now())
 	end := start.Add(24 * time.Hour)
 
 	var totalSec int64

@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -17,21 +18,27 @@ import (
 //     → 判为强信号(engaged)。默认短,反映"人正在动"。
 //   - DisplayIdleS: 展示超时。距上次 engaged 超过该秒数 → 从 active 退化为 idle。
 //     默认长,给静读/思考留宽限期(旧值 10s 是漏记主因)。
+//   - AwayThresholdS: 离开阈值。idle 持续超该秒数 → 判定"离开",
+//     结束当前段(不再写覆盖整个离开期间的 idle 段),回来后开新段。
+//     短 idle(< 阈值)仍视为"思考",段不断开。
 type PrecisionConfig struct {
 	Thresh       uint8
 	ChangeRatio  float64
 	SampleMs     int
 	InputIdleS   int
 	DisplayIdleS int
+	AwayThresholdS int
 	// SaveScreenshots 由 NewCollector 从 MovementConfig 复制；debug 模式时为 true。
 	SaveScreenshots bool
 }
 
 // Presets 是预定义的精度档位。
+// AwayThresholdS 各档统一 600s(10 分钟)——离开判定与精度无关:
+// 精度只影响"正在动/思考"的灵敏度,而"离开"是绝对时长概念(10 分钟无交互即离开)。
 var Presets = map[string]PrecisionConfig{
-	"low":    {Thresh: 50, ChangeRatio: 0.005, SampleMs: 500, InputIdleS: 20, DisplayIdleS: 120},
-	"medium": {Thresh: 30, ChangeRatio: 0.002, SampleMs: 300, InputIdleS: 15, DisplayIdleS: 90},
-	"high":   {Thresh: 15, ChangeRatio: 0.001, SampleMs: 200, InputIdleS: 10, DisplayIdleS: 60},
+	"low":    {Thresh: 50, ChangeRatio: 0.005, SampleMs: 500, InputIdleS: 20, DisplayIdleS: 120, AwayThresholdS: 600},
+	"medium": {Thresh: 30, ChangeRatio: 0.002, SampleMs: 300, InputIdleS: 15, DisplayIdleS: 90, AwayThresholdS: 600},
+	"high":   {Thresh: 15, ChangeRatio: 0.001, SampleMs: 200, InputIdleS: 10, DisplayIdleS: 60, AwayThresholdS: 600},
 }
 
 // 三态取值常量。写入 activity_segments.state。
@@ -59,6 +66,25 @@ type Collector struct {
 	curApp      App
 	curState    string // engaged / active / idle
 	curCategory string
+
+	// away 标记"已离开"(idle 超 AwayThresholdS)。仅 loop goroutine 读写,
+	// CurrentApp 不读,故无需锁。置 true 时已 curSegID=0 关段；离开期间每 tick
+	// 都命中离开分支跳过写段;只有再次强信号才清零,此时 updateSegment 因
+	// curSegID==0 自然开新段。
+	away bool
+
+	// vlmHolder 注入 VLM 采集器持有者，供 loop 在活跃信号上回调 on_demand 触发。
+	// 装配阶段（main.go，Start 之后）通过 SetVLMHolder 写，loop goroutine 读，
+	// 用 c.mu 保护指针读写（holder 内部的 atomic.Pointer 保证 Get 并发安全）。
+	vlmHolder *VLMHolder
+}
+
+// SetVLMHolder 注入 VLM holder，供 loop 在活跃信号上回调 on_demand 触发。
+// 应在 Start() 之前或装配阶段调用（main.go 在 coll.Start() 后、gRPC 注册前注入）。
+func (c *Collector) SetVLMHolder(h *VLMHolder) {
+	c.mu.Lock()
+	c.vlmHolder = h
+	c.mu.Unlock()
 }
 
 // NewCollector 创建采集引擎。
@@ -83,6 +109,9 @@ func NewCollector(db *storage.DB, mc config.MovementConfig, logger *slog.Logger)
 	}
 	if mc.DisplayIdleS > 0 {
 		cfg.DisplayIdleS = mc.DisplayIdleS
+	}
+	if mc.AwayThresholdS > 0 {
+		cfg.AwayThresholdS = mc.AwayThresholdS
 	}
 	cfg.SaveScreenshots = mc.SaveScreenshots
 	return &Collector{
@@ -199,6 +228,9 @@ func (c *Collector) loop() {
 	var prevFrame []byte
 	var prevTitle string
 	var lastEngaged time.Time
+	// 诊断用：记录上一 tick 的 strong/state，仅在翻转时打日志（避免每 tick 刷屏）。
+	var prevStrong bool
+	var prevState string
 	inputIdle := time.Duration(c.cfg.InputIdleS) * time.Second
 	displayIdle := time.Duration(c.cfg.DisplayIdleS) * time.Second
 
@@ -227,25 +259,38 @@ func (c *Collector) loop() {
 		now := time.Now().UTC()
 
 		// ---- 三路强信号 ----
+		// 记录每路信号的具体值（用于日志诊断 7.5h active 段问题：
+		// 确认是哪路信号在"续命"，便于定位帧差误报/键鼠噪声/标题抖动）。
 		strong := false
+		var frameRatio float64   // s1 帧差比例（<0 表示未计算/截图失败）
+		var inputIdleMs uint64   // s2 距上次系统输入的毫秒
+		var titleChanged bool    // s3 标题是否变化
+		const sigNone = ""       // 无信号
+		strongReason := sigNone  // 触发强信号的路："frame"/"input"/"title"（调试用）
 
 		// s1: 帧差(屏幕在变)
 		curr := CaptureWindow(app.HWND)
 		if curr == nil {
 			c.logger.Debug("截图失败", "app", app.Name)
 			// 截图失败不阻断其它信号判定，但帧差缺失。
+			frameRatio = -1
 		} else if prevFrame != nil {
 			ratio, err := FrameDiff(prevFrame, curr, CaptureTargetWidth, CaptureTargetHeight)
 			if err != nil {
 				c.logger.Warn("帧差计算失败", "err", err)
-			} else if ratio > c.cfg.ChangeRatio {
-				strong = true
-				// debug 模式：画面变化时保存完整截图，便于排查 movement 判断依据。
-				// 帧差超阈值才保存，避免每 tick 落盘（300ms 一次太密）。
-				if c.cfg.SaveScreenshots {
-					if debugPng := CaptureWindowPNG(app.HWND); debugPng != nil {
-						if _, saveErr := saveScreenshot(debugPng, "mv-"+app.Name, time.Now().UTC()); saveErr != nil {
-							c.logger.Debug("debug 保存 movement 截图失败", "err", saveErr)
+				frameRatio = -1
+			} else {
+				frameRatio = ratio
+				if ratio > c.cfg.ChangeRatio {
+					strong = true
+					strongReason = "frame"
+					// debug 模式：画面变化时保存完整截图，便于排查 movement 判断依据。
+					// 帧差超阈值才保存，避免每 tick 落盘（300ms 一次太密）。
+					if c.cfg.SaveScreenshots {
+						if debugPng := CaptureWindowPNG(app.HWND); debugPng != nil {
+							if _, saveErr := saveScreenshot(debugPng, "mv-"+app.Name, time.Now().UTC()); saveErr != nil {
+								c.logger.Debug("debug 保存 movement 截图失败", "err", saveErr)
+							}
 						}
 					}
 				}
@@ -254,6 +299,8 @@ func (c *Collector) loop() {
 		} else {
 			// 第一帧:无前帧可比,默认认为有变化(沿用旧行为)。
 			strong = true
+			strongReason = "frame(first)"
+			frameRatio = -1 // 首帧未实际计算
 			prevFrame = curr
 		}
 
@@ -261,24 +308,86 @@ func (c *Collector) loop() {
 		// 系统输入几乎必然进了该前台应用,故可作为"该应用在用"的强信号。
 		if !strong {
 			if tick, ok := winapi.LastInputTick(); ok {
-				idleMs := winapi.GetTickCount64() - uint64(tick)
-				if idleMs < uint64(inputIdle/time.Millisecond) {
+				inputIdleMs = winapi.GetTickCount64() - uint64(tick)
+				if inputIdleMs < uint64(inputIdle/time.Millisecond) {
 					strong = true
+					strongReason = "input"
 				}
 			}
+		} else if tick, ok := winapi.LastInputTick(); ok {
+			// 即使 s1 已命中，也记录输入空闲时长（诊断用）。
+			inputIdleMs = winapi.GetTickCount64() - uint64(tick)
 		}
 
 		// s3: 窗口标题变化(切标签/导航/文件)。
 		if !strong && app.WindowTitle != prevTitle {
 			strong = true
+			strongReason = "title"
 		}
+		titleChanged = app.WindowTitle != prevTitle
 		prevTitle = app.WindowTitle
 
 		if strong {
 			lastEngaged = now
+			// 活跃点 → on_demand 回调（非阻塞）。strong 是三路信号
+			// （帧差/键鼠/标题变化）的合集，完全复用，不新写活跃判断。
+			c.notifyVLMActivity("motion", app, now)
 		}
 
 		state := inferState(strong, time.Since(lastEngaged), displayIdle)
+
+		// 状态变化诊断日志：只在 strong 翻转 或 state 变化 时打，
+		// 避免每 tick（300ms）刷屏。覆盖 7.5h 段排查所需的全部信息：
+		// 哪路信号触发、帧差比例、输入空闲时长、标题是否变、推断的 state。
+		// idle→active/engaged 等"人在回来"的翻转最关键（能看到是什么唤醒的）。
+		if c.logger.Enabled(nil, slog.LevelDebug) {
+			sinceEngagedSec := int(time.Since(lastEngaged) / time.Second)
+			if strong != prevStrong || state != prevState {
+				c.logger.Debug("信号/状态翻转",
+					"app", app.Name,
+					"strong", strong, "reason", strongReason, "prev_strong", prevStrong,
+					"frame_ratio", fmt.Sprintf("%.4f", frameRatio),
+					"frame_thresh", c.cfg.ChangeRatio,
+					"input_idle_ms", inputIdleMs, "input_thresh_ms", inputIdle/time.Millisecond,
+					"title_changed", titleChanged,
+					"state", state, "prev_state", prevState,
+					"since_engaged_s", sinceEngagedSec,
+					"seg_id", c.curSegID, "away", c.away)
+			}
+			prevStrong = strong
+			prevState = state
+		}
+
+		// 离开检测：idle 持续超 AwayThresholdS → 判定"离开"。
+		// 离开 ≠ 思考(短 idle)：离开时结束当前段，段在最后一次真实交互处
+		// 干净结束（end=lastEngaged，state 回写 engaged），避免离开期间写成
+		// 覆盖数小时的 idle 段把时间轴撑爆。离开期间（away=true）每 tick 都
+		// 跳过写段，DB 里留下真正的空档（时间轴轨道上显示为空白断档）。
+		// 只有再次强信号才解除 away（下一行 updateSegment 会因 curSegID==0 开新段）。
+		awayThreshold := time.Duration(c.cfg.AwayThresholdS) * time.Second
+		if state == StateIdle && time.Since(lastEngaged) >= awayThreshold {
+			if c.curSegID != 0 && !c.away {
+				// 段在最后一次真实交互处干净结束（lastEngaged 时刻必然是 engaged）。
+				if err := c.db.UpdateActivitySegmentEndTSAndState(c.curSegID, lastEngaged, StateEngaged); err != nil {
+					c.logger.Warn("离开断段失败", "err", err)
+				}
+				// 关键事件：记录段被"离开"打断。含 since_engaged（距最后交互多久）
+				// 便于排查 7.5h active 段问题——能看到断段时 lastEngaged 是否被帧差污染。
+				c.logger.Info("离开断段",
+					"seg_id", c.curSegID, "end", lastEngaged.Format("15:04:05"),
+					"since_engaged_s", int(time.Since(lastEngaged)/time.Second))
+				c.curSegID = 0
+				c.curState = ""
+				c.curApp = App{}
+			}
+			c.away = true
+			continue
+		}
+		if strong {
+			// 强信号解除 away；接着 updateSegment 会因 curSegID==0 开新段。
+			c.away = false
+		}
+
 		c.updateSegment(app, state)
 	}
 }
@@ -307,7 +416,9 @@ func (c *Collector) updateSegment(app App, state string) {
 	needNew := c.curSegID == 0 || c.curApp.Path != app.Path
 
 	if needNew {
-		if c.curSegID != 0 {
+		// hadPrev 标记切换前已有段（非首次开段）——切窗口 on_demand 回调用。
+		hadPrev := c.curSegID != 0
+		if hadPrev {
 			if err := c.db.UpdateActivitySegmentEndTS(c.curSegID, now); err != nil {
 				c.logger.Warn("结束活动段失败", "err", err)
 			}
@@ -340,6 +451,13 @@ func (c *Collector) updateSegment(app App, state string) {
 		c.curApp = app
 		c.curCategory = category
 		c.curState = state
+
+		// 切窗口 → on_demand 回调（非阻塞）。判据与开新段一致（进程路径变化）。
+		// 注意：curSegID==0 的"首次开段"不算切换，不发回调。
+		// 若上面的 InsertActivitySegment 失败已提前 return，这里不会执行。
+		if hadPrev {
+			c.notifyVLMActivity("switch", app, time.Now().UTC())
+		}
 		return
 	}
 
@@ -347,5 +465,25 @@ func (c *Collector) updateSegment(app App, state string) {
 	c.curState = state
 	if err := c.db.UpdateActivitySegmentEndTSAndState(c.curSegID, now, state); err != nil {
 		c.logger.Warn("更新活动段失败", "err", err)
+	}
+}
+
+// notifyVLMActivity 是 on_demand VLM 触发的钩子入口（非阻塞）。
+//
+// 由 loop 在两处调用：
+//   - updateSegment 开新段且非首次时（切窗口）→ reason="switch"
+//   - loop strong 信号成立时（活跃点）→ reason="motion"
+//
+// holder/Get 均可为 nil（VLM 关闭 / 未配置 / screen 模式降级），此时跳过。
+// OnActivity 内部做 gap 判定和防重入，这里只负责取实例并转发。
+func (c *Collector) notifyVLMActivity(reason string, app App, at time.Time) {
+	c.mu.RLock()
+	holder := c.vlmHolder
+	c.mu.RUnlock()
+	if holder == nil {
+		return
+	}
+	if cap := holder.Get(); cap != nil {
+		cap.OnActivity(reason, app, at)
 	}
 }

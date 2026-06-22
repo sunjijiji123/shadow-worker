@@ -35,7 +35,7 @@ QtObject {
         "browser": "#F59E0B",
         "chat":    "#10B981",
         "other":   "#6B7280",
-        "idle":    "#9CA3AF"
+        "idle":    "#6B7280"   // 中灰：可见但弱于工作段。图例小方块也看得见。
     })
 
     // event type colors (timeline markers + event list)

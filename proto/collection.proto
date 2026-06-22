@@ -59,6 +59,11 @@ message TimelineSnapshot {
   string date = 1;
   repeated TimelineSegment segments = 2;
   repeated TimelineEvent events = 3;
+  // 时间轴可视窗口（unix sec）。由后端按当天首末事件动态计算：
+  // floor(首条事件整点) ~ ceil(末条事件整点)，minWindow 2h，今天 end 含 now。
+  // 空天为 0，前端按 fallback [9,18] 渲染。前端据此画动态整点刻度。
+  int64 window_start_ts = 4;
+  int64 window_end_ts = 5;
 }
 
 message TriggerVLMRequest {}

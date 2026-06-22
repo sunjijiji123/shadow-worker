@@ -81,16 +81,6 @@ void TimelineViewModel::setEvFilter(const QString &f) {
   if (old != f) emit evFilterChanged();
 }
 
-int TimelineViewModel::activeDurationSec() const {
-  // 统计整天（忽略 catFilter）engaged/active 段的总秒数。
-  // 转发给 Model，避免 QML 遍历整个列表。
-  return m_segModel.activeDurationSec();
-}
-
-int TimelineViewModel::activeSegmentCount() const {
-  return m_segModel.activeSegmentCount();
-}
-
 void TimelineViewModel::refresh() {
   if (!m_channel) {
     setError(QStringLiteral("gRPC channel not initialized"));
@@ -126,6 +116,10 @@ void TimelineViewModel::refresh() {
 
         const TimelineSnapshot &snapshot = *opt;
 
+        // 时间轴可视窗口：直接透传后端算好的整点边界。
+        setWindowStartTs(snapshot.windowStartTs());
+        setWindowEndTs(snapshot.windowEndTs());
+
         // 转 SegItem 列表。后端返回已按 start_ts 升序，这里按 endTs 倒序
         // （最新在前，worklog 列表顶部是最近的记录）。
         QList<SegItem> segs;
@@ -156,6 +150,10 @@ void TimelineViewModel::refresh() {
                     return a.endTs > b.endTs;  // 倒序：endTs 大的在前
                   });
         m_segModel.replaceAll(segs);
+        // 数据已更新，通知顶部统计 Q_PROPERTY 绑定重算。
+        // activeDurationSec/activeSegmentCount 读 m_segModel，replaceAll 后已是新值。
+        emit activeDurationSecChanged();
+        emit activeSegmentCountChanged();
 
         // 转 EvItem 列表，按 ts 倒序。
         QList<EvItem> evs;
@@ -188,4 +186,16 @@ void TimelineViewModel::setError(const QString &e) {
   if (m_error == e) return;
   m_error = e;
   emit errorChanged();
+}
+
+void TimelineViewModel::setWindowStartTs(qint64 v) {
+  if (m_windowStartTs == v) return;
+  m_windowStartTs = v;
+  emit windowStartTsChanged();
+}
+
+void TimelineViewModel::setWindowEndTs(qint64 v) {
+  if (m_windowEndTs == v) return;
+  m_windowEndTs = v;
+  emit windowEndTsChanged();
 }

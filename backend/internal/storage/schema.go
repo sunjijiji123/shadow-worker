@@ -106,6 +106,13 @@ func (db *DB) migrate() error {
 		// 被存为 ts=0，永远无法被时间窗查询命中（ListEvents 用 ts >= start），
 		// 且无任何列可推断真实时间。直接删除这些孤儿行。
 		`DELETE FROM events WHERE ts = 0;`,
+		// 清理历史脏数据：离开检测（idle 超 away_threshold 判为"离开"并断段）上线前，
+		// 采集层把"前台是白名单 app 但人已离开"的整个期间写成一条覆盖数小时的 idle 段，
+		// 把时间轴撑爆。这些段 state='idle' 且时长异常（>30min，真实"思考"不会这么久）。
+		// 直接删除时长 > 30 分钟的 idle 段；真实短 idle（看文档/思考）保留。
+		// 30min 阈值与离开检测的 10min 判定不冲突：检测上线后不会再产生 >10min 的 idle 段，
+		// 故此清理只命中历史脏数据，对新数据是 no-op。每次启动幂等执行。
+		`DELETE FROM activity_segments WHERE state = 'idle' AND (end_ts - start_ts) > 1800;`,
 	}
 
 	for _, stmt := range stmts {

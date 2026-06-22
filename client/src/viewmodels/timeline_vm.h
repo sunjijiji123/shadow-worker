@@ -40,6 +40,15 @@ class TimelineViewModel : public QObject {
   Q_PROPERTY(QString evFilter READ evFilter WRITE setEvFilter NOTIFY evFilterChanged)
   Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged)
   Q_PROPERTY(QString error READ error NOTIFY errorChanged)
+  // 时间轴可视窗口（unix sec，已整点取整）。由后端动态计算：
+  // floor(首条事件整点) ~ ceil(末条事件整点)，minWindow 2h，今天 end 含 now。
+  // 空天为 [当天 09:00, 18:00] UTC fallback。TimelineTrack 据此画动态整点刻度。
+  Q_PROPERTY(qint64 windowStartTs READ windowStartTs NOTIFY windowStartTsChanged)
+  Q_PROPERTY(qint64 windowEndTs READ windowEndTs NOTIFY windowEndTsChanged)
+  // 顶部统计：engaged/active 段的总时长（秒）和段数。refresh 完发 changed 信号，
+  // QML 绑定自动重算（之前用 Q_INVOKABLE 导致只首次求值、数据到了不刷新）。
+  Q_PROPERTY(int activeDurationSec READ activeDurationSec NOTIFY activeDurationSecChanged)
+  Q_PROPERTY(int activeSegmentCount READ activeSegmentCount NOTIFY activeSegmentCountChanged)
 
  public:
   explicit TimelineViewModel(QObject *parent = nullptr);
@@ -63,10 +72,16 @@ class TimelineViewModel : public QObject {
 
   bool loading() const { return m_loading; }
   QString error() const { return m_error; }
+  qint64 windowStartTs() const { return m_windowStartTs; }
+  qint64 windowEndTs() const { return m_windowEndTs; }
 
-  // 顶部统计上移到 C++：避免 QML 遍历整个 model。只统计 engaged/active 段。
-  Q_INVOKABLE int activeDurationSec() const;
-  Q_INVOKABLE int activeSegmentCount() const;
+  // 顶部统计：engaged/active 段的总时长（秒）和段数。
+  // 用 Q_PROPERTY + NOTIFY 让 QML 绑定自动响应（Q_INVOKABLE 不会触发绑定重算）。
+  // 数据在 refresh 后 replaceAll 时更新，refresh 完 emit changed 信号通知 QML。
+  // 注意：m_segModel 的 activeDurationSec() 在 replaceAll 内已经更新好，
+  // 这里只是转发 + 通知，避免 QML 遍历整个 model。
+  int activeDurationSec() const { return m_segModel.activeDurationSec(); }
+  int activeSegmentCount() const { return m_segModel.activeSegmentCount(); }
 
   Q_INVOKABLE void refresh();
 
@@ -76,10 +91,16 @@ class TimelineViewModel : public QObject {
   void evFilterChanged();
   void loadingChanged();
   void errorChanged();
+  void windowStartTsChanged();
+  void windowEndTsChanged();
+  void activeDurationSecChanged();
+  void activeSegmentCountChanged();
 
  private:
   void setLoading(bool v);
   void setError(const QString &e);
+  void setWindowStartTs(qint64 v);
+  void setWindowEndTs(qint64 v);
 
   shadowworker::CollectionService::Client m_client;
   std::shared_ptr<QAbstractGrpcChannel> m_channel;
@@ -91,6 +112,9 @@ class TimelineViewModel : public QObject {
   RoleFilterProxyModel m_evProxy;       // 按 type 过滤
   bool m_loading = false;
   QString m_error;
+  // 时间轴可视窗口（unix sec）。默认 0，首次 refresh 后由后端填入。
+  qint64 m_windowStartTs = 0;
+  qint64 m_windowEndTs = 0;
 
   // 周期刷新定时器：timeline 页面停留在当天时，自动拉取最新采集数据。
   QTimer m_pollTimer;

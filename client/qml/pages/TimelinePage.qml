@@ -127,11 +127,12 @@ Item {
                     font.weight: Font.DemiBold
                 }
                 Text {
-                    // 统计上移到 ViewModel：engaged/active 段的总时长 + 段数。
-                    // Model 变化时（replaceAll 内 dataChanged/reset）触发重算。
+                    // 统计：engaged/active 段的总时长 + 段数。
+                    // 用 Q_PROPERTY 绑定（无括号），refresh 后 NOTIFY 自动刷新。
+                    // 之前用 Q_INVOKABLE 方法调用（带括号）导致只首次求值、数据到了不更新。
                     text: viewModel ? qsTr("Work %1  ·  %2 active segments")
-                                      .arg(root.formatDuration(viewModel.activeDurationSec()))
-                                      .arg(viewModel.activeSegmentCount())
+                                      .arg(root.formatDuration(viewModel.activeDurationSec))
+                                      .arg(viewModel.activeSegmentCount)
                                   : ""
                     color: Theme.muted
                     font.pixelSize: 12
@@ -139,9 +140,13 @@ Item {
             }
 
             // timeline track —— 绑 allSegments（全量 source），不随 catFilter 变。
+            // 窗口边界由后端动态计算（首末事件整点取整 + minWindow 2h + 今天含 now），
+            // TimelineTrack 据此画动态整点刻度。
             TimelineTrack {
                 Layout.fillWidth: true
                 segments: viewModel ? viewModel.allSegments : null
+                windowStartTs: viewModel ? viewModel.windowStartTs : 0
+                windowEndTs: viewModel ? viewModel.windowEndTs : 0
             }
 
             // legend

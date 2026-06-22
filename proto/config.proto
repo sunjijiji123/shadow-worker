@@ -43,6 +43,12 @@ message ConfigData {
   string movement_precision = 11;   // low | medium | high
   int32 movement_input_idle_s = 27;  // 输入超时:GetLastInputInfo 近该秒数内有输入 → engaged
   int32 movement_display_idle_s = 28; // 展示超时:距上次 engaged 超该秒数 → idle
+  int32 movement_away_threshold_s = 32; // 离开阈值:idle 持续超该秒数 → 判定离开，结束当前段（默认 600=10min）
+
+  // Log
+  string log_level = 33;          // debug | info | warn（默认 info）
+  bool log_console = 34;          // 是否同时输出到控制台（默认 true）
+  int32 log_retention_days = 35;  // 日志文件保留天数（默认 7）
 
   // VLM
   string vlm_mode = 12;             // scheduled | on_demand | off
@@ -50,6 +56,8 @@ message ConfigData {
   map<string, ProviderConfig> vlm_providers = 14;
   int32 vlm_schedule_interval_min = 15;
   string vlm_capture_range = 29;    // screen | active（截图范围：整屏多显示器 / 当前活动窗口）
+  int32 vlm_on_demand_switch_gap_s = 30;  // on_demand: 切窗口触发冷却秒（默认 20，防 Alt+Tab 抖动）
+  int32 vlm_on_demand_motion_gap_s = 31;  // on_demand: 活跃点触发冷却秒（默认 60）
 
   // MCP
   bool mcp_enabled = 16;
