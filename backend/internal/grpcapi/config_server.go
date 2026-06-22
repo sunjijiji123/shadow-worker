@@ -40,6 +40,15 @@ func (s *ConfigServer) GetConfig(ctx context.Context, req *GetConfigRequest) (*C
 // 用户下次修正配置后再次保存即可重建。旧引擎继续服务直到重建成功。
 func (s *ConfigServer) SaveConfig(ctx context.Context, req *ConfigData) (*Result, error) {
 	newCfg := protoToConfig(req)
+
+	// Log 和 Debug 段是"开发者级"配置，只通过 YAML 手动改，不在设置页 UI 暴露。
+	// proto 里没有这些字段（UI 的 buildConfig 不填），protoToConfig 转换后它们是
+	// config.Default() 的零值或 UI 未填的空值。若直接 Save 会把 yaml 里手改的
+	// log.level / debug.save_vlm_screenshots 等覆盖成零值。
+	// 保留当前内存配置（s.cfg，启动时 Load 的正确值）的这两个段，不参与 UI 往返。
+	newCfg.Log = s.cfg.Log
+	newCfg.Debug = s.cfg.Debug
+
 	if err := newCfg.Save(); err != nil {
 		return nil, fmt.Errorf("保存配置失败: %w", err)
 	}
