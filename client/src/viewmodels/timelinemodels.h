@@ -51,6 +51,10 @@ struct EvItem {
 class SegmentListModel : public QAbstractListModel {
   Q_OBJECT
   QML_ELEMENT
+  // count 暴露给 QML JS：QAbstractListModel 不像 QML 内置 ListModel 自动提供 count，
+  // 需显式 Q_PROPERTY + begin/end 时 emit countChanged，否则 JS 里 segments.count 是 undefined
+  //（曾导致 TimelineTrack 的 segmentAtX 命中测试拿不到数据，hover 无内容）。
+  Q_PROPERTY(int count READ count NOTIFY countChanged)
 
 public:
   enum Role {
@@ -77,6 +81,14 @@ public:
                 int role = Qt::DisplayRole) const override;
   QHash<int, QByteArray> roleNames() const override;
 
+  // count getter 供 Q_PROPERTY 用。等价 rowCount()，但 QML 友好（无参）。
+  int count() const { return m_items.size(); }
+
+  // get 暴露给 QML JS：按索引取一行的全部 role（QVariantMap）。
+  // QAbstractListModel 不像 QML ListModel 自动提供 get()，需显式 Q_INVOKABLE，
+  // 否则 JS 里 segments.get(i) 是 undefined（TimelineTrack 命中测试依赖此方法）。
+  Q_INVOKABLE QVariantMap get(int i) const;
+
   // replaceAll 用新数据增量替换：diff (startTs+appName) 复合 key，
   // 匹配旧行；变化行发 dataChanged(roles)，消失行 removeRows，新行 insertRows。
   // items 必须已按 endTs 倒序排好（由 ViewModel 保证）。
@@ -87,6 +99,9 @@ public:
   // 注意：本类不再做过滤，统计的就是全量（与 proxy 的 catFilter 无关）。
   int activeDurationSec() const;
   int activeSegmentCount() const;
+
+signals:
+  void countChanged();
 
 private:
   QList<SegItem> m_items;   // 全量数据（倒序）

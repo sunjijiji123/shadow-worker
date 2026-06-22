@@ -36,6 +36,24 @@ Item {
         return (rel / windowSecs) * track.width
     }
 
+    // 命中测试：根据 track 内的 x 坐标，返回该位置所属的段对象，无则空对象。
+    // 供 track 级 MouseArea 的 onPositionChanged 用——避免每段各自 MouseArea 的
+    // 跨段 hover 时序问题。segments 是 SegmentListModel（QAbstractListModel 子类），
+    // 用 Q_PROPERTY count + Q_INVOKABLE get 访问（QAbstractListModel 不自动提供这俩，
+    // 已在 SegmentListModel 补齐，否则 JS 访问 undefined）。
+    function segmentAtX(x) {
+        if (!segments || segments.count === undefined) return null
+        var n = segments.count
+        for (var i = 0; i < n; i++) {
+            var s = segments.get(i)
+            var x1 = Math.max(tsToX(s.startTs), 0)
+            var x2 = Math.min(tsToX(s.endTs), track.width)
+            // [x1, x2) 半开 + 容差 1px（极窄段也能命中）。
+            if (x >= x1 && x < x2 + 1) return s
+        }
+        return null
+    }
+
     // 整点刻度（unix 秒）：从 windowStart 到 windowEnd，按 1h（窗口≤12h）或 2h（>12h）步进。
     // 刻度边界取本地整点（new Date 自动按本地时区），故本地显示落在整点。
     function hourTicks() {
@@ -148,26 +166,39 @@ Item {
                                : state === "active" ? 0.55
                                : 1.0
                         // no border -> segments flow continuously (no dark gaps between them)
-
-                        MouseArea {
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onEntered: {
-                                var durSec = endTs - startTs
-                                var mins = durationMin > 0 ? durationMin : Math.round(durSec / 60)
-                                // 三态标签:idle/engaged/active 各显示对应文字。
-                                var cat = state === "idle" ? "idle" : (category.length > 0 ? category : "?")
-                                var stateTag = state === "engaged" ? "engaged"
-                                             : state === "active" ? "active"
-                                             : "idle"
-                                var txt = startTime + "-" + endTime
-                                         + "  " + appName
-                                         + "  [" + cat + "/" + stateTag + "]  " + mins + "min"
-                                tip.show(txt, mouseX, mouseY)
-                            }
-                            onExited: tip.hide()
-                        }
+                        // hover 不在每段各自处理（见 track 级 MouseArea 注释）。
                     }
+                }
+
+                // 单个覆盖整条轨道的 MouseArea：统一处理 hover。
+                // 用 onPositionChanged + 命中测试，而非每段各自 MouseArea——后者在相邻段
+                // 直接切换时，onExited(旧段)/onEntered(新段) 的时序会丢事件，导致 tip
+                // 跨段时被 hide 后不重新显示（要移出轨道再回来才恢复）。单 MouseArea 把
+                // 跨段变成同一区域内的 positionChanged，无时序问题。
+                MouseArea {
+                    id: trackHover
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onPositionChanged: function(mouse) {
+                        var hit = root.segmentAtX(mouse.x)
+                        // get() 越界/无段返回空对象（startTs undefined），判 undefined 而非 null。
+                        if (!hit || hit.startTs === undefined) {
+                            tip.hide()
+                            return
+                        }
+                        var durSec = hit.endTs - hit.startTs
+                        var mins = hit.durationMin > 0 ? hit.durationMin : Math.round(durSec / 60)
+                        var cat = hit.state === "idle" ? "idle"
+                                : (hit.category.length > 0 ? hit.category : "?")
+                        var stateTag = hit.state === "engaged" ? "engaged"
+                                     : hit.state === "active" ? "active"
+                                     : "idle"
+                        var txt = hit.startTime + "-" + hit.endTime
+                                 + "  " + hit.appName
+                                 + "  [" + cat + "/" + stateTag + "]  " + mins + "min"
+                        tip.show(txt, mouse.x, mouse.y)
+                    }
+                    onExited: tip.hide()
                 }
             }
 

@@ -53,6 +53,29 @@ QHash<int, QByteArray> SegmentListModel::roleNames() const {
   };
 }
 
+// get 暴露给 QML JS：按索引取一行，返回 role 名 → 值 的 map。
+// TimelineTrack.segmentAtX 用此做命中测试（hover 时根据 x 反查段）。
+// 越界返回空 map（调用方判空）。key 名与 roleNames() 一致，QML 端用 s.startTs 访问。
+QVariantMap SegmentListModel::get(int i) const {
+  QVariantMap m;
+  if (i < 0 || i >= m_items.size()) return m;
+  const SegItem &s = m_items[i];
+  m["startTs"] = s.startTs;
+  m["endTs"] = s.endTs;
+  m["durationSec"] = s.durationSec;
+  m["durationMin"] = s.durationMin;
+  m["durationText"] = s.durationText;
+  m["appName"] = s.appName;
+  m["category"] = s.category;
+  m["windowTitle"] = s.windowTitle;
+  m["state"] = s.state;
+  m["summary"] = s.summary;
+  m["appIcon"] = s.appIcon;
+  m["startTime"] = s.startTime;
+  m["endTime"] = s.endTime;
+  return m;
+}
+
 void SegmentListModel::replaceAll(const QList<SegItem> &items) {
   // diff 增量更新：用 (startTs, appName) 复合 key 匹配旧行。
   // 顺序变化（如换日期导致完全不同）会退化为大量 remove+insert，
@@ -98,9 +121,13 @@ void SegmentListModel::replaceAll(const QList<SegItem> &items) {
   }
 
   // 结构变化：整体 reset（换日期/数据剧变，低频）。
+  int oldCount = m_items.size();
   beginResetModel();
   m_items = items;
   endResetModel();
+  // count 仅在结构变化路径可能变（增量路径 sameStructure 保证 size 不变）。
+  // 用 Q_PROPERTY(count) 的 NOTIFY 驱动 QML 绑定（segmentAtX 遍历用 count）。
+  if (m_items.size() != oldCount) emit countChanged();
 }
 
 int SegmentListModel::activeDurationSec() const {
