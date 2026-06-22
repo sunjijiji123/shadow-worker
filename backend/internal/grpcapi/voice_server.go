@@ -3,7 +3,7 @@ package grpcapi
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"sync"
 	"time"
@@ -25,6 +25,7 @@ type VoiceServer struct {
 	holder    *asr.EngineHolder
 	llmHolder *llm.EngineHolder
 	db        *storage.DB
+	logger    *slog.Logger
 
 	mu      sync.Mutex
 	capture *audio.Capture
@@ -39,9 +40,12 @@ type VoiceServer struct {
 
 // NewVoiceServer creates a VoiceServer. The capture device is opened lazily on
 // StartRecording. The ASR + LLM engine holders allow hot-reload after config
-// changes.
-func NewVoiceServer(db *storage.DB, holder *asr.EngineHolder, llmHolder *llm.EngineHolder) *VoiceServer {
-	return &VoiceServer{holder: holder, llmHolder: llmHolder, db: db}
+// changes. logger 为 nil 时回退到 slog.Default()。
+func NewVoiceServer(db *storage.DB, holder *asr.EngineHolder, llmHolder *llm.EngineHolder, logger *slog.Logger) *VoiceServer {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &VoiceServer{holder: holder, llmHolder: llmHolder, db: db, logger: logger}
 }
 
 // StartRecording opens the waveIn device and begins capturing + spectrum
@@ -63,7 +67,7 @@ func (s *VoiceServer) StartRecording(ctx context.Context, req *StartRequest) (*S
 		SampleRate:    asr.SampleRate,
 		BitsPerSample: asr.BitsPerSample,
 		Channels:      asr.Channels,
-	}, devID)
+	}, devID, s.logger)
 
 	// spectrum analyzer: writes curBands on each frame
 	spec := audio.NewSpectrumAnalyzer(func(bands [16]float64) {
@@ -94,7 +98,7 @@ func (s *VoiceServer) StartRecording(ctx context.Context, req *StartRequest) (*S
 
 	s.capture = cap
 	s.spec = spec
-	log.Printf("[voice] recording started (device=%d)", devID)
+	s.logger.Info("录音开始", "device", devID)
 	return &StartResponse{Ok: true}, nil
 }
 
@@ -130,7 +134,8 @@ func (s *VoiceServer) StopRecording(ctx context.Context, req *StopRequest) (*Voi
 	}
 	text, err := engine.Recognize(ctx, pcm)
 	if err != nil {
-		log.Printf("[voice] ASR failed: %v", err)
+		// 严重故障：识别失败，本次录音无结果。用户能从返回的 Error 看到。
+		s.logger.Error("ASR 识别失败", "err", err)
 		return &VoiceResult{Error: err.Error(), DurationMs: int32(durationMs)}, nil
 	}
 
@@ -154,8 +159,9 @@ func (s *VoiceServer) StopRecording(ctx context.Context, req *StopRequest) (*Voi
 		})
 	}
 
-	log.Printf("[voice] recording stopped: %dms, %d bytes PCM, text=%q",
-		durationMs, len(pcm), text)
+	// 高频事件（每次录音停止都打）：降为 Debug，避免 Info 刷屏。
+	s.logger.Debug("录音结束",
+		"ms", durationMs, "pcm_bytes", len(pcm), "text", text)
 	return &VoiceResult{Text: text, DurationMs: int32(durationMs)}, nil
 }
 
@@ -335,9 +341,11 @@ func (s *VoiceServer) Polish(ctx context.Context, req *PolishRequest) (*PolishRe
 	}
 	text, err := engine.Polish(ctx, req.GetText())
 	if err != nil {
-		log.Printf("[voice] polish failed: %v", err)
+		// 严重故障：润色失败，用户看到原始未润色文本 + 错误。
+		s.logger.Error("润色失败", "err", err)
 		return &PolishResult{Error: err.Error()}, nil
 	}
-	log.Printf("[voice] polish ok: %d -> %d chars", len(req.GetText()), len(text))
+	// 高频事件：降为 Debug。
+	s.logger.Debug("润色完成", "in", len(req.GetText()), "out", len(text))
 	return &PolishResult{Text: text}, nil
 }

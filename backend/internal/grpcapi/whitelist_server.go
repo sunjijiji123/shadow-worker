@@ -3,7 +3,7 @@ package grpcapi
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"path/filepath"
 	"time"
 
@@ -14,12 +14,16 @@ import (
 // WhitelistServer 实现 WhitelistService 的 gRPC 服务。
 type WhitelistServer struct {
 	UnimplementedWhitelistServiceServer
-	db *storage.DB
+	db     *storage.DB
+	logger *slog.Logger
 }
 
-// NewWhitelistServer 创建 WhitelistServer 实例。
-func NewWhitelistServer(db *storage.DB) *WhitelistServer {
-	return &WhitelistServer{db: db}
+// NewWhitelistServer 创建 WhitelistServer 实例。logger 为 nil 时回退到 slog.Default()。
+func NewWhitelistServer(db *storage.DB, logger *slog.Logger) *WhitelistServer {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &WhitelistServer{db: db, logger: logger}
 }
 
 // List 列出所有白名单应用及今日时长。
@@ -128,7 +132,8 @@ func (s *WhitelistServer) UpdateCategory(ctx context.Context, req *UpdateCategor
 // 复用 collector.VisibleWindows（EnumWindows + IsWindowVisible 过滤）。
 func (s *WhitelistServer) ListWindows(ctx context.Context, req *ListWindowsRequest) (*WindowList, error) {
 	apps := collector.VisibleWindows()
-	log.Printf("[whitelist] ListWindows 返回 %d 个可见窗口", len(apps))
+	// 高频事件（每次客户端打开添加应用弹窗都调用）：降为 Debug。
+	s.logger.Debug("列举窗口", "count", len(apps))
 
 	out := &WindowList{Windows: make([]*WindowInfo, 0, len(apps))}
 	for _, app := range apps {

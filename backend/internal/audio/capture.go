@@ -11,7 +11,7 @@ package audio
 import (
 	"encoding/binary"
 	"fmt"
-	"log"
+	"log/slog"
 	"math"
 	"sync"
 	"syscall"
@@ -83,6 +83,7 @@ type Capture struct {
 	bufCount   int
 	bufSize    int
 	deviceID   uintptr
+	logger     *slog.Logger
 
 	// full accumulated PCM (for ASR after stop)
 	accumulated []byte
@@ -90,7 +91,11 @@ type Capture struct {
 
 // NewCapture creates a capture for the given format. deviceId <= 0 (or
 // WAVE_MAPPER) selects the system default recording device.
-func NewCapture(format PCMFormat, deviceID int) *Capture {
+// logger 为 nil 时回退到 slog.Default()，供采集启停日志使用。
+func NewCapture(format PCMFormat, deviceID int, logger *slog.Logger) *Capture {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	dev := uintptr(deviceID)
 	if deviceID <= 0 {
 		dev = WAVE_MAPPER
@@ -100,6 +105,7 @@ func NewCapture(format PCMFormat, deviceID int) *Capture {
 		bufCount:   8,
 		bufSize:    format.SampleRate * format.BitsPerSample / 8 * format.Channels / 10, // 100ms buffers
 		deviceID:   dev,
+		logger:     logger,
 	}
 }
 
@@ -177,8 +183,9 @@ func (c *Capture) Start() error {
 	}
 
 	c.running = true
-	log.Printf("[audio] capture started: %d Hz, device=%d, %d buffers x %d bytes",
-		c.sampleRate, c.deviceID, c.bufCount, c.bufSize)
+	c.logger.Info("音频采集已启动",
+		"hz", c.sampleRate, "device", c.deviceID,
+		"buffers", c.bufCount, "buf_bytes", c.bufSize)
 
 	go c.pollBuffers()
 	return nil
@@ -197,7 +204,8 @@ func (c *Capture) Stop() {
 	waveInStop.Call(c.hWaveIn)
 	waveInReset.Call(c.hWaveIn)
 	c.cleanup()
-	log.Printf("[audio] capture stopped, accumulated %d bytes", len(c.accumulated))
+	// 高频事件（每次停止录音都打）：降为 Debug。
+	c.logger.Debug("音频采集已停止", "pcm_bytes", len(c.accumulated))
 }
 
 func (c *Capture) IsRunning() bool {

@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"runtime"
 	"strings"
@@ -22,9 +22,13 @@ type localEngine struct {
 	cfg      config.LocalASRConfig
 	hotwords []string
 	model    whisper.Model
+	logger   *slog.Logger
 }
 
-func newLocalEngine(cfg config.LocalASRConfig, hotwords []string) (Engine, error) {
+func newLocalEngine(cfg config.LocalASRConfig, hotwords []string, logger *slog.Logger) (Engine, error) {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	if cfg.ModelPath == "" {
 		return nil, fmt.Errorf("local ASR: model_path is empty")
 	}
@@ -37,12 +41,13 @@ func newLocalEngine(cfg config.LocalASRConfig, hotwords []string) (Engine, error
 		return nil, fmt.Errorf("local ASR: failed to load model %s: %w",
 			cfg.ModelPath, err)
 	}
-	log.Printf("[asr] local whisper model loaded: %s", cfg.ModelPath)
+	logger.Info("本地 whisper 模型已加载", "model", cfg.ModelPath)
 
 	return &localEngine{
 		cfg:      cfg,
 		hotwords: hotwords,
 		model:    m,
+		logger:   logger,
 	}, nil
 }
 
@@ -81,8 +86,8 @@ func (e *localEngine) Recognize(ctx context.Context, pcm []byte) (string, error)
 		lang = "auto"
 	}
 	if err := wctx.SetLanguage(lang); err != nil {
-		// non-fatal: fall back to auto-detect
-		log.Printf("[asr] whisper SetLanguage(%s) failed: %v, using auto", lang, err)
+		// 可恢复：回退到自动语言检测，识别继续。
+		e.logger.Warn("SetLanguage 失败，回退自动检测", "lang", lang, "err", err)
 	}
 
 	// hotwords as initial prompt

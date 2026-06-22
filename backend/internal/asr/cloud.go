@@ -9,12 +9,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"strings"
 	"time"
 
 	"shadow-worker/backend/internal/config"
+	"shadow-worker/backend/internal/httputil"
 )
 
 // cloudEngine 实现 OpenAI 兼容的 /audio/transcriptions 识别。
@@ -33,7 +35,7 @@ type cloudEngine struct {
 	httpClient *http.Client
 }
 
-func newCloudEngine(cfg config.ASRProvider, hotwords []string) (Engine, error) {
+func newCloudEngine(cfg config.ASRProvider, hotwords []string, logger *slog.Logger) (Engine, error) {
 	if cfg.BaseURL == "" {
 		return nil, fmt.Errorf("cloud ASR: base_url 不能为空")
 	}
@@ -43,6 +45,10 @@ func newCloudEngine(cfg config.ASRProvider, hotwords []string) (Engine, error) {
 	if cfg.AuthType == "" {
 		cfg.AuthType = "bearer"
 	}
+	// logger 当前未在 cloudEngine 内部使用（识别走 httputil.DoWithRetry，
+	// 那里有自己的 logger）。保留参数为将来 cloud 引擎内部打日志预留，
+	// 并保持与 newLocalEngine 构造签名一致。
+	_ = logger
 	return &cloudEngine{
 		cfg:        cfg,
 		prompt:     joinHotwords(hotwords),
@@ -76,6 +82,11 @@ func (e *cloudEngine) Recognize(ctx context.Context, pcm []byte) (string, error)
 	return parseTranscriptionBody(body, e.cfg.Stream, nil)
 }
 
+// RecognizeStreaming 流式识别。onPartial 在识别过程中推送增量文本给前端。
+//
+// 流式请求不做重试（与 Recognize 不同）：onPartial 可能已推送部分文本到前端 UI，
+// 若失败后重试从头再来，前端会看到文本重复/错乱。瞬时失败由上层（录音流程）
+// 决定是否整体重录，不在引擎层重试。
 func (e *cloudEngine) RecognizeStreaming(ctx context.Context, pcm []byte, onPartial func(string)) (string, error) {
 	if onPartial == nil {
 		return e.Recognize(ctx, pcm)
@@ -101,18 +112,22 @@ func (e *cloudEngine) RecognizeStreaming(ctx context.Context, pcm []byte, onPart
 	return parseTranscriptionBody(body, e.cfg.Stream, onPartial)
 }
 
-// postTranscription 构造并发送一次 transcription 请求。
+// postTranscription 构造并发送一次 transcription 请求（带重试）。
 // 根据 BaseURL 自动判断协议：
 //   - 含 "/chat/completions" → 小米/智谱等 chat 格式：JSON body + base64 WAV + api-key 认证
 //   - 否则 → 标准 OpenAI transcription 格式：multipart + /audio/transcriptions 后缀 + Bearer 认证
+//
+// 用 httputil.DoWithRetry 包裹：429/5xx/网络错误自动重试。流式 ASR
+// （RecognizeStreaming）不走这里，其瞬时失败不重试（见 RecognizeStreaming 注释）。
 func (e *cloudEngine) postTranscription(ctx context.Context, pcm []byte) (*http.Response, error) {
 	wav := wrapWAV(pcm)
-
-	// 判断是否是 chat completions 格式（小米 MIMO、智谱等）
-	if isChatCompletionsURL(e.cfg.BaseURL) {
-		return e.postChatCompletions(ctx, wav)
+	reqBuilder := func() (*http.Request, error) {
+		if isChatCompletionsURL(e.cfg.BaseURL) {
+			return e.buildChatCompletionsRequest(ctx, wav)
+		}
+		return e.buildTranscriptionMultipartRequest(ctx, wav)
 	}
-	return e.postTranscriptionMultipart(ctx, wav)
+	return httputil.DoWithRetry(ctx, e.httpClient, reqBuilder, nil)
 }
 
 // isChatCompletionsURL 判断 URL 是否是 chat completions endpoint。
@@ -133,10 +148,11 @@ func transcriptionEndpoint(baseURL string) string {
 	return trimmed + "/audio/transcriptions"
 }
 
-// postChatCompletions 发送 chat completions 格式请求（小米 MIMO 等）。
+// buildChatCompletionsRequest 构建 chat completions 格式请求（小米 MIMO 等），不发送。
+// 由 postTranscription 在重试闭包里调用，每次重试重建 request body reader。
 // body 是 JSON，audio 以 base64 data URI 嵌在 message content 中。
 // 认证头用 api-key（不是 Bearer）。
-func (e *cloudEngine) postChatCompletions(ctx context.Context, wav []byte) (*http.Response, error) {
+func (e *cloudEngine) buildChatCompletionsRequest(ctx context.Context, wav []byte) (*http.Request, error) {
 	body, err := buildChatCompletionsBody(wav, e.cfg.Model, e.cfg.Language, e.prompt)
 	if err != nil {
 		return nil, fmt.Errorf("构建 chat 请求失败: %w", err)
@@ -153,14 +169,15 @@ func (e *cloudEngine) postChatCompletions(ctx context.Context, wav []byte) (*htt
 		// 小米用 api-key 头
 		req.Header.Set("api-key", e.cfg.APIKey)
 	}
-	return e.httpClient.Do(req)
+	return req, nil
 }
 
-// postTranscriptionMultipart 发送标准 OpenAI transcription 格式请求。
+// buildTranscriptionMultipartRequest 构建标准 OpenAI transcription 格式请求，不发送。
+// 由 postTranscription 在重试闭包里调用，每次重试重建 request。
 // body 是 multipart/form-data。endpoint 由 BaseURL 推导：
 //   - 若 BaseURL 已含 /audio/transcriptions（用户填了完整路径），直接用
 //   - 否则视为根 URL，自动拼接 /audio/transcriptions
-func (e *cloudEngine) postTranscriptionMultipart(ctx context.Context, wav []byte) (*http.Response, error) {
+func (e *cloudEngine) buildTranscriptionMultipartRequest(ctx context.Context, wav []byte) (*http.Request, error) {
 	body, contentType, err := buildMultipart(wav, e.cfg.Model, e.cfg.Language, e.prompt, e.cfg.Stream)
 	if err != nil {
 		return nil, fmt.Errorf("构建请求失败: %w", err)
@@ -176,7 +193,7 @@ func (e *cloudEngine) postTranscriptionMultipart(ctx context.Context, wav []byte
 	} else {
 		req.Header.Set("Authorization", "Bearer "+e.cfg.APIKey)
 	}
-	return e.httpClient.Do(req)
+	return req, nil
 }
 
 // buildChatCompletionsBody 构造小米/智谱 chat completions 格式的 JSON body。

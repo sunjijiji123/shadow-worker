@@ -10,6 +10,7 @@ package llm
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"shadow-worker/backend/internal/config"
 )
@@ -23,7 +24,7 @@ type Engine interface {
 // NewCloudEngineForTest 暴露给 grpcapi 用作临时连接测试，不依赖完整 config。
 // prompt 用一个最小占位，只验证连通性。
 func NewCloudEngineForTest(cfg config.LLMProvider) (Engine, error) {
-	return newCloudEngine(cfg, "test")
+	return newCloudEngine(cfg, "test", nil)
 }
 
 // New 根据配置创建润色引擎。
@@ -35,13 +36,20 @@ func NewCloudEngineForTest(cfg config.LLMProvider) (Engine, error) {
 //
 // 这样语义：配了 provider → 引擎存在 → 手动 Polish 永远可用；
 // 关闭"自动润色" → 仅不自动触发，手动点 Polish 仍生效。
-func New(cfg *config.Config) (Engine, error) {
+//
+// logger 为 nil 时回退到 slog.Default()。当前 cloud 引擎内部未直接使用 logger
+// （润色走 httputil.DoWithRetry，那里有自己的 logger），保留参数为将来扩展
+// 并与 asr.New 构造签名保持一致。
+func New(cfg *config.Config, logger *slog.Logger) (Engine, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config 不能为空")
+	}
+	if logger == nil {
+		logger = slog.Default()
 	}
 	p, ok := cfg.GetLLMProvider()
 	if !ok {
 		return nil, fmt.Errorf("未找到 LLM provider: %s", cfg.LLM.ActiveProvider)
 	}
-	return newCloudEngine(p, cfg.LLM.Prompt)
+	return newCloudEngine(p, cfg.LLM.Prompt, logger)
 }

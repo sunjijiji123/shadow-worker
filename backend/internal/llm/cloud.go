@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
 	"shadow-worker/backend/internal/config"
+	"shadow-worker/backend/internal/httputil"
 )
 
 // cloudEngine 实现 OpenAI 兼容的 /chat/completions 文字润色接口。
@@ -24,7 +26,7 @@ type cloudEngine struct {
 	httpClient *http.Client
 }
 
-func newCloudEngine(cfg config.LLMProvider, prompt string) (Engine, error) {
+func newCloudEngine(cfg config.LLMProvider, prompt string, logger *slog.Logger) (Engine, error) {
 	if cfg.BaseURL == "" {
 		return nil, fmt.Errorf("cloud LLM: base_url 不能为空")
 	}
@@ -34,6 +36,10 @@ func newCloudEngine(cfg config.LLMProvider, prompt string) (Engine, error) {
 	if cfg.AuthType == "" {
 		cfg.AuthType = "bearer"
 	}
+	// logger 当前未在 cloudEngine 内部使用（润色走 httputil.DoWithRetry，
+	// 那里有自己的 logger）。保留参数与 asr.newCloudEngine 构造签名一致，
+	// 并为将来 cloud 引擎内部打日志预留。
+	_ = logger
 	return &cloudEngine{
 		cfg:        cfg,
 		prompt:     prompt,
@@ -65,19 +71,22 @@ func (e *cloudEngine) Polish(ctx context.Context, text string) (string, error) {
 	}
 
 	endpoint := strings.TrimRight(e.cfg.BaseURL, "/") + "/chat/completions"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(jsonBody))
-	if err != nil {
-		return "", fmt.Errorf("创建润色请求失败: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	// 三态认证（仿 vlm/cloud.go）：api-key 头 / Bearer 头 / 无
-	if e.cfg.AuthType == "api-key" {
-		req.Header.Set("api-key", e.cfg.APIKey)
-	} else if e.cfg.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+e.cfg.APIKey)
-	}
 
-	resp, err := e.httpClient.Do(req)
+	// DoWithRetry 对 429/5xx/网络错误自动重试（指数退避）。
+	resp, err := httputil.DoWithRetry(ctx, e.httpClient, func() (*http.Request, error) {
+		r, rerr := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(jsonBody))
+		if rerr != nil {
+			return nil, rerr
+		}
+		r.Header.Set("Content-Type", "application/json")
+		// 三态认证（仿 vlm/cloud.go）：api-key 头 / Bearer 头 / 无
+		if e.cfg.AuthType == "api-key" {
+			r.Header.Set("api-key", e.cfg.APIKey)
+		} else if e.cfg.APIKey != "" {
+			r.Header.Set("Authorization", "Bearer "+e.cfg.APIKey)
+		}
+		return r, nil
+	}, nil)
 	if err != nil {
 		return "", fmt.Errorf("请求润色失败: %w", err)
 	}

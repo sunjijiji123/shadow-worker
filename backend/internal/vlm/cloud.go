@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"shadow-worker/backend/internal/config"
+	"shadow-worker/backend/internal/httputil"
 )
 
 const vlmPrompt = "请用一句话概括这张屏幕截图里用户正在做什么，不超过 50 字。"
@@ -59,7 +60,9 @@ func (e *cloudEngine) Describe(ctx context.Context, imagePNG []byte) (string, er
 				},
 			},
 		},
-		"max_tokens": 128,
+		// 128 太小：中文摘要常被截断成半句（"用户正在查看"）。提到 1024
+		// （中文约 500~700 字）保证一段完整描述不被 token 上限硬切。
+		"max_tokens": 1024,
 	}
 
 	jsonBody, err := json.Marshal(body)
@@ -68,18 +71,22 @@ func (e *cloudEngine) Describe(ctx context.Context, imagePNG []byte) (string, er
 	}
 
 	endpoint := strings.TrimRight(e.cfg.BaseURL, "/") + "/chat/completions"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(jsonBody))
-	if err != nil {
-		return "", fmt.Errorf("创建请求失败: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if e.cfg.AuthType == "api-key" {
-		req.Header.Set("api-key", e.cfg.APIKey)
-	} else if e.cfg.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+e.cfg.APIKey)
-	}
 
-	resp, err := e.httpClient.Do(req)
+	// DoWithRetry 对 429/5xx/网络错误自动重试（指数退避）。
+	// 闭包捕获 jsonBody（值不变，重建只读），每次重试重建 request body reader。
+	resp, err := httputil.DoWithRetry(ctx, e.httpClient, func() (*http.Request, error) {
+		r, rerr := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(jsonBody))
+		if rerr != nil {
+			return nil, rerr
+		}
+		r.Header.Set("Content-Type", "application/json")
+		if e.cfg.AuthType == "api-key" {
+			r.Header.Set("api-key", e.cfg.APIKey)
+		} else if e.cfg.APIKey != "" {
+			r.Header.Set("Authorization", "Bearer "+e.cfg.APIKey)
+		}
+		return r, nil
+	}, nil)
 	if err != nil {
 		return "", fmt.Errorf("请求 VLM 失败: %w", err)
 	}

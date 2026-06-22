@@ -3,24 +3,30 @@ package grpcapi
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"shadow-worker/backend/internal/asr"
+	"shadow-worker/backend/internal/collector"
 	"shadow-worker/backend/internal/config"
 	"shadow-worker/backend/internal/llm"
+	"shadow-worker/backend/internal/storage"
 )
 
 // ConfigServer 实现 ConfigService。
 type ConfigServer struct {
 	UnimplementedConfigServiceServer
 	cfg       *config.Config
-	holder    *asr.EngineHolder // 保存配置后热重载 ASR 引擎
-	llmHolder *llm.EngineHolder // 保存配置后热重载润色引擎
+	holder    *asr.EngineHolder     // 保存配置后热重载 ASR 引擎
+	llmHolder *llm.EngineHolder     // 保存配置后热重载润色引擎
+	vlmHolder *collector.VLMHolder  // 保存配置后热重载 VLM 采集器（含定时器/消费协程）
+	db        *storage.DB           // VLM 热重载重建 capturer 时需要
+	logger    *slog.Logger          // VLM 热重载日志
 }
 
-// NewConfigServer 创建 ConfigServer。holder/llmHolder 用于配置变更后热重载引擎。
-func NewConfigServer(cfg *config.Config, holder *asr.EngineHolder, llmHolder *llm.EngineHolder) *ConfigServer {
-	return &ConfigServer{cfg: cfg, holder: holder, llmHolder: llmHolder}
+// NewConfigServer 创建 ConfigServer。holder/llmHolder/vlmHolder 用于配置变更后热重载引擎。
+// db/logger 供 VLMHolder.Rebuild 重建 capturer 使用。
+func NewConfigServer(cfg *config.Config, holder *asr.EngineHolder, llmHolder *llm.EngineHolder, vlmHolder *collector.VLMHolder, db *storage.DB, logger *slog.Logger) *ConfigServer {
+	return &ConfigServer{cfg: cfg, holder: holder, llmHolder: llmHolder, vlmHolder: vlmHolder, db: db, logger: logger}
 }
 
 // GetConfig 返回当前配置。
@@ -40,15 +46,25 @@ func (s *ConfigServer) SaveConfig(ctx context.Context, req *ConfigData) (*Result
 	*s.cfg = *newCfg
 
 	// 热重载 ASR 引擎（失败仅记录，不阻断保存）。
+	// 严重故障：配置已保存到 DB，但引擎没换成——用户录音会继续用旧引擎
+	// （可能已不匹配新配置）。holder.Rebuild 内部也会打一条，这里补充"配置已保存"上下文。
 	if s.holder != nil {
 		if err := s.holder.Rebuild(s.cfg); err != nil {
-			log.Printf("[config] ASR 引擎热重载失败（配置已保存）: %v", err)
+			s.logger.Error("ASR 热重载失败（配置已保存）", "err", err)
 		}
 	}
 	// 热重载润色引擎（失败仅记录，不阻断保存）。
 	if s.llmHolder != nil {
 		if err := s.llmHolder.Rebuild(s.cfg); err != nil {
-			log.Printf("[config] LLM 引擎热重载失败（配置已保存）: %v", err)
+			s.logger.Error("LLM 热重载失败（配置已保存）", "err", err)
+		}
+	}
+	// 热重载 VLM 采集器（失败仅记录，不阻断保存）。与 ASR/LLM 不同：
+	// VLMCapturer 有定时器/消费协程生命周期，需整体重建（先启新后停旧）。
+	// screen+on_demand 非法组合在此降级为不启动（Rebuild 内处理）。
+	if s.vlmHolder != nil {
+		if err := s.vlmHolder.Rebuild(s.cfg.VLM, s.db, s.logger); err != nil {
+			s.logger.Error("VLM 热重载失败（配置已保存）", "err", err)
 		}
 	}
 	return &Result{Ok: true}, nil
@@ -115,11 +131,18 @@ func configToProto(cfg *config.Config) *ConfigData {
 		MovementPrecision:        cfg.Movement.Precision,
 		MovementInputIdleS:       int32(cfg.Movement.InputIdleS),
 		MovementDisplayIdleS:     int32(cfg.Movement.DisplayIdleS),
+		MovementAwayThresholdS:   int32(cfg.Movement.AwayThresholdS),
+
+		LogLevel:        cfg.Log.Level,
+		LogConsole:      cfg.Log.Console,
+		LogRetentionDays: int32(cfg.Log.RetentionDays),
 		VlmMode:                  cfg.VLM.Mode,
 		VlmActiveProvider:        cfg.VLM.ActiveProvider,
 		VlmProviders:             make(map[string]*ProviderConfig),
 		VlmScheduleIntervalMin:   int32(cfg.VLM.ScheduleIntervalMin),
 		VlmCaptureRange:          cfg.VLM.CaptureRange,
+		VlmOnDemandSwitchGapS:    int32(cfg.VLM.OnDemandSwitchGapS),
+		VlmOnDemandMotionGapS:    int32(cfg.VLM.OnDemandMotionGapS),
 		McpEnabled:               true,
 		HotkeyRecord:             cfg.Hotkeys.Record,
 		HotkeyScreenshot:         cfg.Hotkeys.Screenshot,
@@ -184,6 +207,10 @@ func protoToConfig(data *ConfigData) *config.Config {
 	} else {
 		cfg.VLM.CaptureRange = "active"
 	}
+	// on_demand gap 兼容旧配置：≤0 回落默认（switch 20 / motion 60）。
+	// 不用 config.Default() 的零值，因为 proto int32 零值 = 未设置。
+	cfg.VLM.OnDemandSwitchGapS = normalizeGap(data.VlmOnDemandSwitchGapS, 20)
+	cfg.VLM.OnDemandMotionGapS = normalizeGap(data.VlmOnDemandMotionGapS, 60)
 	if data.VlmProviders != nil {
 		cfg.VLM.Providers = make(map[string]config.VLMProvider)
 		for k, p := range data.VlmProviders {
@@ -236,10 +263,24 @@ func protoToConfig(data *ConfigData) *config.Config {
 	cfg.Movement.Precision = data.MovementPrecision
 	cfg.Movement.InputIdleS = int(data.MovementInputIdleS)
 	cfg.Movement.DisplayIdleS = int(data.MovementDisplayIdleS)
+	cfg.Movement.AwayThresholdS = int(data.MovementAwayThresholdS)
+
+	cfg.Log.Level = data.LogLevel
+	cfg.Log.Console = data.LogConsole
+	cfg.Log.RetentionDays = int(data.LogRetentionDays)
 
 	cfg.Hotkeys.Record = data.HotkeyRecord
 	cfg.Hotkeys.Screenshot = data.HotkeyScreenshot
 	cfg.Hotkeys.PromptPrefix = data.HotkeyPromptPrefix
 
 	return cfg
+}
+
+// normalizeGap 把 proto 回来的 on_demand gap 字段规范化：≤0（未设置/非法）
+// 回落到 def 默认值。与 capture_range 的兼容处理同理。
+func normalizeGap(v int32, def int) int {
+	if v <= 0 {
+		return def
+	}
+	return int(v)
 }

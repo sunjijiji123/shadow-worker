@@ -10,6 +10,7 @@ package asr
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"shadow-worker/backend/internal/config"
@@ -44,13 +45,19 @@ type StreamingEngine interface {
 
 // NewCloudEngineForTest 暴露给 grpcapi 用作临时连接测试，不依赖完整 config。
 func NewCloudEngineForTest(cfg config.ASRProvider) (Engine, error) {
-	return newCloudEngine(cfg, nil)
+	return newCloudEngine(cfg, nil, nil)
 }
 
 // New 根据配置创建 ASR 引擎。
-func New(cfg *config.Config) (Engine, error) {
+//
+// logger 为 nil 时回退到 slog.Default()。引擎内部日志（模型加载、语言设置失败等）
+// 统一通过注入的 logger 输出，便于按级别/文件统一管理。
+func New(cfg *config.Config, logger *slog.Logger) (Engine, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config 不能为空")
+	}
+	if logger == nil {
+		logger = slog.Default()
 	}
 
 	switch strings.ToLower(cfg.ASR.Mode) {
@@ -67,13 +74,13 @@ func New(cfg *config.Config) (Engine, error) {
 				local.Language = p.Language
 			}
 		}
-		return newLocalEngine(local, cfg.Hotwords)
+		return newLocalEngine(local, cfg.Hotwords, logger)
 	case "cloud", "":
 		p, ok := cfg.GetASRProvider()
 		if !ok {
 			return nil, fmt.Errorf("未找到 ASR provider: %s", cfg.ASR.ActiveProvider)
 		}
-		return newCloudEngine(p, cfg.Hotwords)
+		return newCloudEngine(p, cfg.Hotwords, logger)
 	default:
 		return nil, fmt.Errorf("不支持的 ASR 模式: %s", cfg.ASR.Mode)
 	}
