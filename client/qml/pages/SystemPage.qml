@@ -13,7 +13,6 @@ Item {
 
     // ---- local state (will bind to a viewModel later) ----
     property bool launchAtStartup: true
-    property bool mcpRunning: true
     property bool checkUpdateOnStartup: true
     property bool checkUpdateDaily: true
     property string activeMcpTab: "claude"   // claude | cursor | raw
@@ -27,18 +26,20 @@ Item {
     ]
 
     // ---- MCP config snippets (per tab) ----
-    // NOTE: the backend exe path is a placeholder; real path comes from runtime.
-    readonly property string mcpExePath: "C:\\Users\\Administrator\\code\\1-ai\\shadow-worker\\backend\\shadow-worker.exe"
+    // mcpExePath / mcpReady are injected from main.cpp (resolved against the
+    // actual backend exe location). Empty string means "not found".
+    readonly property string mcpResolvedExePath: mcpExePath !== undefined ? mcpExePath : ""
+    readonly property bool mcpResolvedReady: mcpReady !== undefined ? mcpReady : false
     readonly property string mcpClaudeConfig: {
-        var p = root.mcpExePath.replace(/\\/g, "\\\\")
+        var p = root.mcpResolvedExePath.replace(/\\/g, "\\\\")
         return '{\n  "mcpServers": {\n    "shadow-worker": {\n      "command": "' + p + '",\n      "args": ["--mcp"]\n    }\n  }\n}'
     }
     readonly property string mcpCursorConfig: {
-        var p = root.mcpExePath.replace(/\\/g, "\\\\")
+        var p = root.mcpResolvedExePath.replace(/\\/g, "\\\\")
         return '{\n  "mcp.servers": {\n    "shadow-worker": {\n      "command": "' + p + '",\n      "args": ["--mcp"]\n    }\n  }\n}'
     }
     readonly property string mcpRawConfig: {
-        var p = root.mcpExePath.replace(/\\/g, "\\\\")
+        var p = root.mcpResolvedExePath.replace(/\\/g, "\\\\")
         return '{\n  "command": "' + p + '",\n  "args": ["--mcp"]\n}'
     }
     function currentMcpConfig() {
@@ -133,13 +134,14 @@ Item {
                 headerExtra: [
                     RowLayout {
                         spacing: 6
-                        // status light (8px dot): accent when running, muted when off
+                        // status light (8px dot): accent when the backend exe is
+                        // found (MCP is usable on demand), muted when missing.
                         Rectangle {
                             width: 8; height: 8; radius: 4
-                            color: mcpRunning ? Theme.accent : Theme.muted
+                            color: mcpResolvedReady ? Theme.accent : Theme.muted
                         }
                         Text {
-                            text: mcpRunning ? qsTr("Running") : qsTr("Stopped")
+                            text: mcpResolvedReady ? qsTr("Ready") : qsTr("Backend not found")
                             color: Theme.ink
                             font.pixelSize: 13
                         }
@@ -150,14 +152,24 @@ Item {
                     Layout.fillWidth: true
                     spacing: 0
 
-                    Button {
-                        text: qsTr("Restart MCP")
-                        kind: "ghost"
-                        small: true
-                        onClicked: {
-                            var win = ApplicationWindow.window
-                            if (win && win.toast) win.toast(qsTr("Restarting MCP server..."))
-                        }
+                    // backend exe not found: show the resolved/expected path so
+                    // the user knows what to build or where to put the binary.
+                    Text {
+                        Layout.fillWidth: true
+                        visible: !mcpResolvedReady
+                        text: qsTr("Backend executable (shadow-worker.exe) not found. Build the backend first; the path below is what the client expects. MCP will start on demand when an agent spawns it.")
+                        color: Theme.muted
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                    }
+
+                    // resolved exe path (read-only display)
+                    TextField {
+                        Layout.fillWidth: true
+                        Layout.topMargin: 4
+                        label: qsTr("Backend executable")
+                        text: mcpResolvedExePath !== "" ? mcpResolvedExePath : qsTr("(not found)")
+                        readOnly: true
                     }
 
                     // ---- available tools ----

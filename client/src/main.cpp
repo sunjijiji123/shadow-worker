@@ -2,6 +2,8 @@
 
 #include <QAbstractGrpcChannel>
 #include <QApplication>
+#include <QDir>
+#include <QFileInfo>
 #include <QGrpcHttp2Channel>
 #include <QLoggingCategory>
 #include <QQmlApplicationEngine>
@@ -106,6 +108,30 @@ int main(int argc, char *argv[]) {
     engine.rootContext()->setContextProperty("asrClient", &asrClient);
     engine.rootContext()->setContextProperty("voiceClient", &voiceClient);
     engine.rootContext()->setContextProperty("trayController", &trayController);
+
+    // Resolve the backend executable path for the MCP config snippet.
+    // Probe in this order: 1) client exe's directory (release layout),
+    // 2) ../../build/ (dev layout: client/build/ -> repo/build/).
+    // Expose both the chosen path and a "ready" flag so the System page can
+    // show an accurate status light (MCP is usable iff the exe exists).
+    QString mcpExePath;
+    const QString exeName = QStringLiteral("shadow-worker.exe");
+    const QString clientDir =
+        QFileInfo(QCoreApplication::applicationFilePath()).absolutePath();
+    const QStringList candidates = {
+        QDir(clientDir).absoluteFilePath(exeName),
+        QDir(clientDir).absoluteFilePath(QStringLiteral("../../build/") +
+                                        exeName),
+    };
+    for (const QString &p : candidates) {
+      const QString abs = QDir(p).absolutePath();
+      if (QFileInfo::exists(abs)) {
+        mcpExePath = abs;
+        break;
+      }
+    }
+    engine.rootContext()->setContextProperty("mcpExePath", mcpExePath);
+    engine.rootContext()->setContextProperty("mcpReady", !mcpExePath.isEmpty());
 
     // Tray "Quit" -> actually quit the app (C++-level guarantee).
     QObject::connect(&trayController, &TrayController::quitRequested, &app,
