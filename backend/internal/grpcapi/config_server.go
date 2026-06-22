@@ -41,13 +41,16 @@ func (s *ConfigServer) GetConfig(ctx context.Context, req *GetConfigRequest) (*C
 func (s *ConfigServer) SaveConfig(ctx context.Context, req *ConfigData) (*Result, error) {
 	newCfg := protoToConfig(req)
 
-	// Log 和 Debug 段是"开发者级"配置，只通过 YAML 手动改，不在设置页 UI 暴露。
-	// proto 里没有这些字段（UI 的 buildConfig 不填），protoToConfig 转换后它们是
-	// config.Default() 的零值或 UI 未填的空值。若直接 Save 会把 yaml 里手改的
-	// log.level / debug.save_vlm_screenshots 等覆盖成零值。
-	// 保留当前内存配置（s.cfg，启动时 Load 的正确值）的这两个段，不参与 UI 往返。
+	// Log/Debug 段和 *SaveScreenshots 字段是"开发者级/运行时注入"配置，不通过
+	// 设置页 UI 往返（proto 里没有这些字段，buildConfig 不填）。protoToConfig 转换后
+	// 它们是 config.Default() 的零值（false/空），若直接 Save 会把 yaml 里手改的
+	// log.level / debug.save_vlm_screenshots 覆盖成零值，并丢失 main.go 启动时注入的
+	// SaveScreenshots（导致 on_demand 截图不落盘）。保留当前内存配置（s.cfg，启动时
+	// Load + main.go 注入的正确值），不参与 UI 往返。
 	newCfg.Log = s.cfg.Log
 	newCfg.Debug = s.cfg.Debug
+	newCfg.VLM.SaveScreenshots = s.cfg.VLM.SaveScreenshots
+	newCfg.Movement.SaveScreenshots = s.cfg.Movement.SaveScreenshots
 
 	if err := newCfg.Save(); err != nil {
 		return nil, fmt.Errorf("保存配置失败: %w", err)
