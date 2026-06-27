@@ -306,17 +306,15 @@ func (c *Collector) loop() {
 
 		// s2: GetLastInputInfo(系统级键鼠输入)。前台=白名单时,
 		// 系统输入几乎必然进了该前台应用,故可作为"该应用在用"的强信号。
-		if !strong {
-			if tick, ok := winapi.LastInputTick(); ok {
-				inputIdleMs = winapi.GetTickCount64() - uint64(tick)
-				if inputIdleMs < uint64(inputIdle/time.Millisecond) {
-					strong = true
-					strongReason = "input"
-				}
-			}
-		} else if tick, ok := winapi.LastInputTick(); ok {
-			// 即使 s1 已命中，也记录输入空闲时长（诊断用）。
+		// 每 tick 无条件计算 inputIdleMs——它除驱动本路强信号判定外,还供
+		// 离开检测（loop 末尾）直接使用:离开判据看真实键鼠空闲时间,不再依赖
+		// 被帧差污染的 lastEngaged（见坑 #45/#49 修复）。
+		if tick, ok := winapi.LastInputTick(); ok {
 			inputIdleMs = winapi.GetTickCount64() - uint64(tick)
+			if !strong && inputIdleMs < uint64(inputIdle/time.Millisecond) {
+				strong = true
+				strongReason = "input"
+			}
 		}
 
 		// s3: 窗口标题变化(切标签/导航/文件)。
@@ -358,24 +356,33 @@ func (c *Collector) loop() {
 			prevState = state
 		}
 
-		// 离开检测：idle 持续超 AwayThresholdS → 判定"离开"。
+		// 离开检测：真实键鼠空闲超 AwayThresholdS → 判定"离开"。
 		// 离开 ≠ 思考(短 idle)：离开时结束当前段，段在最后一次真实交互处
-		// 干净结束（end=lastEngaged，state 回写 engaged），避免离开期间写成
-		// 覆盖数小时的 idle 段把时间轴撑爆。离开期间（away=true）每 tick 都
+		// 干净结束（end=最后一次键鼠输入时刻，state 回写 engaged），避免离开期间写成
+		// 覆盖数小时的 idle/active 段把时间轴撑爆。离开期间（away=true）每 tick 都
 		// 跳过写段，DB 里留下真正的空档（时间轴轨道上显示为空白断档）。
 		// 只有再次强信号才解除 away（下一行 updateSegment 会因 curSegID==0 开新段）。
-		awayThreshold := time.Duration(c.cfg.AwayThresholdS) * time.Second
-		if state == StateIdle && time.Since(lastEngaged) >= awayThreshold {
+		//
+		// 判据直接看 inputIdleMs（真实键鼠空闲），不再看 state==idle。
+		// 历史缺陷（坑 #45/#49）：旧判据 state==idle && Since(lastEngaged)>=阈值，
+		// 但 lastEngaged 被三路 OR 的 strong 刷新，Electron 应用(ZCode/VSCode)空闲时
+		// GPU 合成层帧差误报让 strong 常真 → lastEngaged 永不老化 → 永远到不了 idle
+		// → 断段失效，产生跨数小时甚至跨天的巨怪段。改用 inputIdleMs 彻底绕开帧差污染：
+		// 键鼠是物理输入，无法被屏幕动画伪造。
+		awayThresholdMs := uint64(c.cfg.AwayThresholdS) * 1000
+		if inputIdleMs >= awayThresholdMs {
 			if c.curSegID != 0 && !c.away {
-				// 段在最后一次真实交互处干净结束（lastEngaged 时刻必然是 engaged）。
-				if err := c.db.UpdateActivitySegmentEndTSAndState(c.curSegID, lastEngaged, StateEngaged); err != nil {
+				// 段在最后一次真实键鼠输入处干净结束。inputIdleMs 是"距上次输入的毫秒数"，
+				// 反推最后一次输入时刻 = now - inputIdleMs。该时刻必然是 engaged（人在动）。
+				lastRealInput := time.Now().UTC().Add(-time.Duration(inputIdleMs) * time.Millisecond)
+				if err := c.db.UpdateActivitySegmentEndTSAndState(c.curSegID, lastRealInput, StateEngaged); err != nil {
 					c.logger.Warn("离开断段失败", "err", err)
 				}
-				// 关键事件：记录段被"离开"打断。含 since_engaged（距最后交互多久）
-				// 便于排查 7.5h active 段问题——能看到断段时 lastEngaged 是否被帧差污染。
+				// 关键事件：记录段被"离开"打断。含 input_idle_ms 便于回归验证
+				// 离开判据确实由真实键鼠空闲触发（而非帧差/state）。
 				c.logger.Info("离开断段",
-					"seg_id", c.curSegID, "end", lastEngaged.Format("15:04:05"),
-					"since_engaged_s", int(time.Since(lastEngaged)/time.Second))
+					"seg_id", c.curSegID, "end", lastRealInput.Format("15:04:05"),
+					"input_idle_ms", inputIdleMs, "away_thresh_ms", awayThresholdMs)
 				c.curSegID = 0
 				c.curState = ""
 				c.curApp = App{}
