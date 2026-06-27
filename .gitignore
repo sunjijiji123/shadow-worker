@@ -77,6 +77,7 @@ modules/
 scripts/_build_qt_run.bat
 scripts/_*.bat
 scripts/nul
+/nul
 scripts/build_qt*.log
 scripts/build_be*.log
 scripts/build_c*.log
