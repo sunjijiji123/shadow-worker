@@ -181,6 +181,115 @@ func TestComputeTimelineWindow_HistoricalDayEndAtLastEvent(t *testing.T) {
 	}
 }
 
+// === clipSegmentsToDay：按本地午夜虚拟切分跨天段（修复巨怪段撑爆窗口，坑 #49）===
+
+func TestClipSegmentsToDay_Empty(t *testing.T) {
+	day := time.Date(2026, 6, 23, 0, 0, 0, 0, time.UTC)
+	next := day.Add(24 * time.Hour)
+	if got := clipSegmentsToDay(nil, day, next); len(got) != 0 {
+		t.Fatalf("空输入应返回空，got %d", len(got))
+	}
+}
+
+func TestClipSegmentsToDay_WithinDay_Unchanged(t *testing.T) {
+	// 完全在当天内的段：原样保留，起止不变。
+	day := time.Date(2026, 6, 23, 0, 0, 0, 0, time.UTC)
+	next := day.Add(24 * time.Hour)
+	orig := segAt("VSCode", day.Add(9*time.Hour), day.Add(11*time.Hour), "engaged")
+	got := clipSegmentsToDay([]storage.ActivitySegment{orig}, day, next)
+	if len(got) != 1 {
+		t.Fatalf("当天内段应原样保留 1 条，got %d", len(got))
+	}
+	if !got[0].StartTS.Equal(orig.StartTS) || !got[0].EndTS.Equal(orig.EndTS) {
+		t.Errorf("起止不应改变，got %v~%v", got[0].StartTS, got[0].EndTS)
+	}
+	if got[0].AppName != "VSCode" {
+		t.Errorf("AppName/State 应沿用原段，got %q", got[0].AppName)
+	}
+}
+
+func TestClipSegmentsToDay_CrossDay_ClampsToEndpoints(t *testing.T) {
+	// 核心场景：46h 巨怪段横跨 6-22 23:37 ~ 6-24 22:19。
+	// 查 6-23 时应 clamp 到 [6-23 00:00, 6-24 00:00)。
+	day := time.Date(2026, 6, 23, 0, 0, 0, 0, time.UTC)
+	next := day.Add(24 * time.Hour)
+	monster := segAt("ZCode",
+		time.Date(2026, 6, 22, 23, 37, 0, 0, time.UTC),
+		time.Date(2026, 6, 24, 22, 19, 0, 0, time.UTC),
+		"engaged")
+	got := clipSegmentsToDay([]storage.ActivitySegment{monster}, day, next)
+	if len(got) != 1 {
+		t.Fatalf("跨天段应裁剪为 1 条当天段，got %d", len(got))
+	}
+	if !got[0].StartTS.Equal(day) {
+		t.Errorf("start 应 clamp 到当天 00:00，got %v want %v", got[0].StartTS, day)
+	}
+	if !got[0].EndTS.Equal(next) {
+		t.Errorf("end 应 clamp 到次日 00:00，got %v want %v", got[0].EndTS, next)
+	}
+}
+
+func TestClipSegmentsToDay_OutsideDay_Dropped(t *testing.T) {
+	// 完全在当天外的段：丢弃（区间重叠查询理论不返回，防御性）。
+	day := time.Date(2026, 6, 23, 0, 0, 0, 0, time.UTC)
+	next := day.Add(24 * time.Hour)
+	outside := []storage.ActivitySegment{
+		// 完全在 6-23 之前（6-22 全天）
+		segAt("VSCode",
+			time.Date(2026, 6, 22, 9, 0, 0, 0, time.UTC),
+			time.Date(2026, 6, 22, 18, 0, 0, 0, time.UTC), "engaged"),
+		// 完全在 6-23 之后（6-24 全天）
+		segAt("VSCode",
+			time.Date(2026, 6, 24, 9, 0, 0, 0, time.UTC),
+			time.Date(2026, 6, 24, 18, 0, 0, 0, time.UTC), "engaged"),
+	}
+	if got := clipSegmentsToDay(outside, day, next); len(got) != 0 {
+		t.Fatalf("完全在当天外的段应被丢弃，got %d", len(got))
+	}
+}
+
+func TestClipSegmentsToDay_BoundaryTangent_DropsZeroWidth(t *testing.T) {
+	// end 恰好等于 day（相切）：clamp 后 start==end 零宽段应丢弃。
+	day := time.Date(2026, 6, 23, 0, 0, 0, 0, time.UTC)
+	next := day.Add(24 * time.Hour)
+	tangent := segAt("VSCode",
+		time.Date(2026, 6, 22, 9, 0, 0, 0, time.UTC),
+		day, // end 恰在 6-23 00:00
+		"engaged")
+	if got := clipSegmentsToDay([]storage.ActivitySegment{tangent}, day, next); len(got) != 0 {
+		t.Fatalf("end 恰等于 dayStart 的段应丢弃（零宽），got %d", len(got))
+	}
+}
+
+func TestClipSegmentsToDay_MultipleSegments(t *testing.T) {
+	// 混合：跨天 + 当天内，应各自正确 clamp 且保留顺序。
+	day := time.Date(2026, 6, 23, 0, 0, 0, 0, time.UTC)
+	next := day.Add(24 * time.Hour)
+	segs := []storage.ActivitySegment{
+		// 1. 跨天（从前一天延续进来）：clamp 到 [00:00, end]
+		segAt("ZCode",
+			time.Date(2026, 6, 22, 23, 0, 0, 0, time.UTC),
+			time.Date(2026, 6, 23, 2, 0, 0, 0, time.UTC), "engaged"),
+		// 2. 当天内：原样
+		segAt("VSCode", day.Add(9*time.Hour), day.Add(12*time.Hour), "engaged"),
+		// 3. 跨天（延续到下一天）：clamp 到 [start, 次日00:00]
+		segAt("Chrome",
+			time.Date(2026, 6, 23, 23, 0, 0, 0, time.UTC),
+			time.Date(2026, 6, 24, 3, 0, 0, 0, time.UTC), "active"),
+	}
+	got := clipSegmentsToDay(segs, day, next)
+	if len(got) != 3 {
+		t.Fatalf("应保留 3 条（跨天/当天/跨天各 clamp 后非零宽），got %d", len(got))
+	}
+	// 验证 clamp 后的端点
+	if !got[0].StartTS.Equal(day) {
+		t.Errorf("段1 start 应 clamp 到 00:00，got %v", got[0].StartTS)
+	}
+	if !got[2].EndTS.Equal(next) {
+		t.Errorf("段3 end 应 clamp 到次日 00:00，got %v", got[2].EndTS)
+	}
+}
+
 // === 本地时区切日（修复跨午夜不切日的 bug）===
 
 func TestStartOfLocalDay_PreservesTimezone(t *testing.T) {

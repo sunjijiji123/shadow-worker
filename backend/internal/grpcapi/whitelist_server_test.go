@@ -21,7 +21,7 @@ func newWhitelistTestDB(t *testing.T) *storage.DB {
 
 func TestWhitelistServerAddListRemove(t *testing.T) {
 	db := newWhitelistTestDB(t)
-	srv := NewWhitelistServer(db)
+	srv := NewWhitelistServer(db, nil)
 	ctx := context.Background()
 
 	added, err := srv.Add(ctx, &AddAppRequest{
@@ -60,7 +60,7 @@ func TestWhitelistServerAddListRemove(t *testing.T) {
 
 func TestWhitelistServerListTodayMinutes(t *testing.T) {
 	db := newWhitelistTestDB(t)
-	srv := NewWhitelistServer(db)
+	srv := NewWhitelistServer(db, nil)
 	ctx := context.Background()
 
 	path := `C:\Program Files\Cursor\Cursor.exe`

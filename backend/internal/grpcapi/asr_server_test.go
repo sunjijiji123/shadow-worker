@@ -30,7 +30,7 @@ func TestAsrServerStreamRecognize(t *testing.T) {
 	defer db.Close()
 
 	engine := &mockASREngine{name: "mock"}
-	holder := asr.NewEngineHolder(engine)
+	holder := asr.NewEngineHolder(engine, nil)
 	srv := NewAsrServer(db, holder, nil)
 
 	// 构造双向流模拟
