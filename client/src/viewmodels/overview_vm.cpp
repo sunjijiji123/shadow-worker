@@ -190,7 +190,12 @@ void OverviewViewModel::applyOverviewData(const OverviewData &data) {
 }
 
 void OverviewViewModel::applyOverviewUpdate(const OverviewUpdate &update) {
-  m_todayMinutes = (int)update.todayMinutes();
+  // WatchOverview 流推送的 today_minutes 永远是"今天实时时长"
+  // （WatchOverviewRequest 无 range 参数）。当用户在查看 week/month 时，
+  // 不能用它覆盖 GetOverview 返回的范围时长，否则会跳回当天值。
+  if (m_range == "day") {
+    m_todayMinutes = (int)update.todayMinutes();
+  }
   m_collectionStatus = update.collectionStatus();
   m_activeApp = update.activeApp();
   emit dataChanged();
