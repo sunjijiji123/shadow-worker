@@ -97,6 +97,9 @@ func (s *CollectionServer) QueryTimeline(ctx context.Context, req *TimelineReque
 	// 合并后每个应用是一段连续记录，符合 worklog 的用户语义。
 	// 聚合判据：相邻且 app_name 相同（任何 app 切换都打断，idle 不打断）。
 	aggregated := aggregateSegments(segs)
+	// 按本地午夜裁剪：横跨数天的段（如离开检测失效产生的 46h 巨怪段，见坑 #45/#49）
+	// 只保留当天内部分，避免其端点把 computeTimelineWindow 撑爆、扭曲全天比例。
+	aggregated = clipSegmentsToDay(aggregated, day, next)
 
 	for _, seg := range aggregated {
 		// 惰性回填：若聚合段尚无摘要，取该时间窗内最后一条 vlm_summary 事件。
@@ -176,6 +179,46 @@ func aggregateSegments(segs []storage.ActivitySegment) []storage.ActivitySegment
 		cur = s
 	}
 	out = append(out, cur)
+	return out
+}
+
+// clipSegmentsToDay 把段按本地午夜虚拟切分到目标日内，仅改返回值不落库。
+//
+// 背景：ListActivitySegments 用区间重叠判据（start_ts<dayEnd AND end_ts>dayStart），
+// 一条横跨数天的段（如 id=518：6-22 23:37→6-24 22:19 的 46h 巨怪段）会完整命中
+// 每一天。若直接交给 computeTimelineWindow，其端点会把可视窗口撑到 ~48h（见坑 #49），
+// 当天真实时刻在窗口里只占一小段、刻度被压成 2h 步进，视觉上像"空白无记录"。
+//
+// 本函数对每条段取其与 [dayStart, dayEnd) 的交集：
+//   - 完全在当天内：原样保留。
+//   - 跨越当天边界：start/end clamp 到 [dayStart, dayEnd)，只保留当天内部分。
+//   - 完全在当天外：丢弃（区间重叠查询理论上不会返回这类，防御性丢弃）。
+//
+// clamp 只动 StartTS/EndTS，AppName/State/WindowTitle/Summary 等沿用原段。
+// 跨天段在 22/23/24 各天的查询里各自只看到属于自己的那一天部分，显示与统计都正确。
+// 配套 storage.TodayActivityMinutes 的 SQL 已用相同 clamp 语义做按天统计（不重复计跨天段）。
+func clipSegmentsToDay(segs []storage.ActivitySegment, dayStart, dayEnd time.Time) []storage.ActivitySegment {
+	if len(segs) == 0 {
+		return segs
+	}
+	out := make([]storage.ActivitySegment, 0, len(segs))
+	for _, s := range segs {
+		// 与当天无交集（完全在当天之前或之后）——区间重叠查询不应返回，防御性跳过。
+		if !s.EndTS.After(dayStart) || !s.StartTS.Before(dayEnd) {
+			continue
+		}
+		if s.StartTS.Before(dayStart) {
+			s.StartTS = dayStart
+		}
+		if s.EndTS.After(dayEnd) {
+			s.EndTS = dayEnd
+		}
+		// clamp 后若起止重合（边界恰好相切），不产生零宽段。
+		if !s.StartTS.Before(s.EndTS) {
+			continue
+		}
+		out = append(out, s)
+	}
 	return out
 }
 
