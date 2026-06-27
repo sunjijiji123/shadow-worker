@@ -149,16 +149,23 @@ func (db *DB) ListActivitySegmentsByDate(day time.Time) ([]ActivitySegment, erro
 
 // TodayActivityMinutes 统计今日在白名单应用上的工作总分钟数(engaged+active)。
 // "今日"按本地时区零点切（与时间轴 QueryTimeline 一致）。
+//
+// 跨天段处理：用区间重叠判据（start_ts<dayEnd AND end_ts>dayStart）命中当天，
+// 并对时长 SUM 做"按天 clamp"——只累加当天内部分 MIN(end_ts,dayEnd)-MAX(start_ts,dayStart)，
+// 避免一条横跨数天的巨怪段（如 46h 段，见坑 #49）被反复计入每一天、或因旧判据
+// start_ts>=? AND end_ts<=? 漏掉跨天段。与 QueryTimeline 的 clipSegmentsToDay 语义一致。
 func (db *DB) TodayActivityMinutes() (int, int, error) {
 	start := startOfLocalDay(time.Now())
 	end := start.Add(24 * time.Hour)
+	dayStartUnix := toUnix(start)
+	dayEndUnix := toUnix(end)
 
 	var totalSec int64
 	err := db.QueryRow(
-		`SELECT COALESCE(SUM(end_ts - start_ts), 0)
+		`SELECT COALESCE(SUM(MIN(end_ts, ?) - MAX(start_ts, ?)), 0)
 		 FROM activity_segments
-		 WHERE state IN ('engaged','active') AND start_ts >= ? AND end_ts <= ?`,
-		toUnix(start), toUnix(end),
+		 WHERE state IN ('engaged','active') AND start_ts < ? AND end_ts > ?`,
+		dayEndUnix, dayStartUnix, dayEndUnix, dayStartUnix,
 	).Scan(&totalSec)
 	if err != nil {
 		return 0, 0, fmt.Errorf("统计今日工作时长失败: %w", err)
@@ -167,8 +174,8 @@ func (db *DB) TodayActivityMinutes() (int, int, error) {
 	var segments int64
 	err = db.QueryRow(
 		`SELECT COUNT(*) FROM activity_segments
-		 WHERE state IN ('engaged','active') AND start_ts >= ? AND end_ts <= ?`,
-		toUnix(start), toUnix(end),
+		 WHERE state IN ('engaged','active') AND start_ts < ? AND end_ts > ?`,
+		dayEndUnix, dayStartUnix,
 	).Scan(&segments)
 	if err != nil {
 		return 0, 0, fmt.Errorf("统计今日活动段数失败: %w", err)
