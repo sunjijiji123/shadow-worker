@@ -5,9 +5,11 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QGrpcHttp2Channel>
+#include <QIcon>
 #include <QLoggingCategory>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QFile>
 #include <QQuickStyle>
 
 #include "asr/asrclient.h"
@@ -16,6 +18,8 @@
 #include "hotkey/globalhotkey.h"
 #include "ui/traycontroller.h"
 #include "utils/autostart.h"
+#include "utils/backendlauncher.h"
+#include "utils/singleinstance.h"
 #include "viewmodels/overview_vm.h"
 #include "viewmodels/settings_vm.h"
 #include "viewmodels/timeline_vm.h"
@@ -55,9 +59,34 @@ int main(int argc, char *argv[]) {
 
     QApplication::setApplicationName("Shadow Worker");
     QApplication::setOrganizationName("ShadowWorker");
+    // Product icon: loaded from qrc (assets/app.ico compiled into qrc via
+    // qt_add_qml_module RESOURCES). Affects window titlebar + taskbar.
+    // The same .ico is also embedded via app.rc for Windows Explorer/shortcuts.
+    QApplication::setWindowIcon(
+        QIcon(QStringLiteral(":/qt/qml/ShadowWorker/assets/app.ico")));
     // Keep the process alive when the main window is hidden to the tray.
     // Quit only happens via the tray menu's Quit item.
     QApplication::setQuitOnLastWindowClosed(false);
+
+    // --- Single instance check ---
+    // Named Mutex: second instance detects mutex already exists, activates
+    // the running instance's window, and exits.
+    if (!SingleInstance::tryLock()) {
+      logMsg("[main] another instance running, activating it and quit");
+      SingleInstance::activateExistingInstance();
+      return 0;
+    }
+
+    // --- Launch backend ---
+    // startDetached so the backend survives independently; we track its PID
+    // and kill it on aboutToQuit. If exe not found, run in degraded mode
+    // (gRPC calls will fail until backend is manually started).
+    BackendLauncher backend;
+    if (!backend.start()) {
+      logMsg("[main] backend exe not found or launch failed, degraded mode");
+    }
+    QObject::connect(&app, &QApplication::aboutToQuit, &backend,
+                     &BackendLauncher::stop);
 
     QLoggingCategory::setFilterRules(
         "qt.qml.binding.removal.warning=true\nqml=true");
@@ -92,6 +121,19 @@ int main(int argc, char *argv[]) {
     logMsg("[main] creating engine");
     QQmlApplicationEngine engine;
 
+    // Read version from VERSION file (exe's directory).
+    // Falls back to "unknown" if missing.
+    {
+      const QString exeDir =
+          QFileInfo(QCoreApplication::applicationFilePath()).absolutePath();
+      QFile vf(exeDir + QDir::separator() + QStringLiteral("VERSION"));
+      QString ver = QStringLiteral("unknown");
+      if (vf.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        ver = QString::fromUtf8(vf.readAll()).trimmed();
+      }
+      engine.rootContext()->setContextProperty("appVersion", ver);
+    }
+
     engine.rootContext()->setContextProperty("overviewVm", &overviewVm);
     engine.rootContext()->setContextProperty("whitelistVm", &whitelistVm);
     engine.rootContext()->setContextProperty("timelineVm", &timelineVm);
@@ -110,26 +152,9 @@ int main(int argc, char *argv[]) {
     engine.rootContext()->setContextProperty("trayController", &trayController);
 
     // Resolve the backend executable path for the MCP config snippet.
-    // Probe in this order: 1) client exe's directory (release layout),
-    // 2) ../../build/ (dev layout: client/build/ -> repo/build/).
     // Expose both the chosen path and a "ready" flag so the System page can
     // show an accurate status light (MCP is usable iff the exe exists).
-    QString mcpExePath;
-    const QString exeName = QStringLiteral("shadow-worker.exe");
-    const QString clientDir =
-        QFileInfo(QCoreApplication::applicationFilePath()).absolutePath();
-    const QStringList candidates = {
-        QDir(clientDir).absoluteFilePath(exeName),
-        QDir(clientDir).absoluteFilePath(QStringLiteral("../../build/") +
-                                        exeName),
-    };
-    for (const QString &p : candidates) {
-      const QString abs = QDir(p).absolutePath();
-      if (QFileInfo::exists(abs)) {
-        mcpExePath = abs;
-        break;
-      }
-    }
+    QString mcpExePath = BackendLauncher::resolveExePath();
     engine.rootContext()->setContextProperty("mcpExePath", mcpExePath);
     engine.rootContext()->setContextProperty("mcpReady", !mcpExePath.isEmpty());
 

@@ -97,7 +97,7 @@ Item {
                     Layout.fillWidth: true
                     spacing: 4
                     Text {
-                        text: "Shadow Worker v0.2.0"
+                        text: "Shadow Worker v" + appVersion
                         color: Theme.muted
                         font.pixelSize: 14
                     }
@@ -366,7 +366,7 @@ Item {
                         ColumnLayout {
                             spacing: 6
                             Text {
-                                text: qsTr("Current version v0.2.0 · last checked 2026-06-18")
+                                text: qsTr("Current version v" + appVersion + " · last checked 2026-06-18")
                                 color: Theme.muted
                                 font.pixelSize: 13
                             }

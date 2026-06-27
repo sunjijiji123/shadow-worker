@@ -17,6 +17,10 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"os/signal"
+	"path/filepath"
+	"strings"
+	"syscall"
 
 	"google.golang.org/grpc"
 
@@ -28,6 +32,7 @@ import (
 	"shadow-worker/backend/internal/logging"
 	mcpServer "shadow-worker/backend/internal/mcp"
 	"shadow-worker/backend/internal/storage"
+	"shadow-worker/backend/internal/winapi"
 )
 
 const (
@@ -57,9 +62,39 @@ func runMCPServer() {
 	}
 }
 
+// readVersion 从 exe 同目录的 VERSION 文件读取版本号。
+// 文件不存在或读取失败时返回 "unknown"。
+func readVersion() string {
+	exePath, err := os.Executable()
+	if err != nil {
+		return "unknown"
+	}
+	data, err := os.ReadFile(filepath.Join(filepath.Dir(exePath), "VERSION"))
+	if err != nil {
+		return "unknown"
+	}
+	return strings.TrimSpace(string(data))
+}
+
 // runBackgroundService 启动后台服务(gRPC + 采集引擎 + ASR)。
 func runBackgroundService() {
-	// 1. 加载配置
+	// 0. 单例检查（在所有初始化之前）。
+	// 用 Local\ 前缀：Global\ 需要 SeCreateGlobalPrivilege，非管理员用户会
+	// ACCESS_DENIED。桌面应用每个会话独立，不同 RDP 用户各跑一份。
+	// 进程崩溃时内核自动回收 mutex，不会死锁。
+	mu, exists, err := winapi.CreateMutex("Local\\Shadow-Worker-Backend")
+	if err != nil {
+		log.Fatalf("创建互斥体失败: %v", err)
+	}
+	if exists {
+		log.Fatal("另一个 Shadow Worker 后端实例已在运行，即将退出。")
+	}
+	defer winapi.ReleaseMutex(mu)
+
+	// 1. 读取版本号（从 exe 同目录的 VERSION 文件）
+	version := readVersion()
+
+	// 2. 加载配置
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("加载配置失败: %v", err)
@@ -72,6 +107,8 @@ func runBackgroundService() {
 		log.Fatalf("初始化日志失败: %v", err)
 	}
 	defer logCloser()
+
+	slog.Info("Shadow Worker 后端启动", "version", version)
 
 	// 将 debug 截图开关注入到各采集模块（独立控制，避免互相干扰）。
 	// 这样模块内部只需读自己的 cfg.SaveScreenshots，无需感知全局 Debug 结构。
@@ -165,8 +202,27 @@ func runBackgroundService() {
 	slog.Info("后台服务已启动", "grpc_addr", grpcAddr)
 	slog.Info("Qt 客户端请连接", "addr", grpcAddr)
 
-	// 7. 阻塞服务
-	if err := grpcServer.Serve(lis); err != nil {
-		log.Fatalf("gRPC 服务失败: %v", err)
+	// 7. 优雅退出：signal.NotifyContext + goroutine Serve。
+	// taskkill（不带 /F）或 Ctrl+C 触发 SIGTERM → GracefulStop → defer 正常执行。
+	// taskkill /F 是强杀，不触发信号——作为客户端的兜底手段。
+	ctx, stop := signal.NotifyContext(
+		context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	serverDone := make(chan struct{})
+	go func() {
+		if err := grpcServer.Serve(lis); err != nil {
+			log.Fatalf("gRPC 服务失败: %v", err)
+		}
+		close(serverDone)
+	}()
+
+	select {
+	case <-ctx.Done():
+		slog.Info("收到退出信号，开始优雅关闭...")
+		grpcServer.GracefulStop()
+		<-serverDone
+		slog.Info("已优雅关闭")
+	case <-serverDone:
 	}
 }

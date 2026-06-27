@@ -164,6 +164,11 @@ qt_add_executable(shadow-worker-client
     src/asr/voiceclient.cpp
     src/utils/autostart.h
     src/utils/autostart.cpp
+    src/utils/singleinstance.h
+    src/utils/singleinstance.cpp
+    src/utils/backendlauncher.h
+    src/utils/backendlauncher.cpp
+    src/app.rc
 )
 
 # 链接 Qt 模块 + 生成的 protobuf/grpc 桩
@@ -263,12 +268,18 @@ qt_add_qml_module(shadow-worker-client
         qml/icons/toast_warning.svg
         qml/icons/polish.svg
         qml/icons/polish_active.svg
+    RESOURCES
+        assets/app.ico
 )
 
-# Windows: keep console in DEBUG builds (to see errors); RELEASE would use WIN32 to hide it.
-set_target_properties(shadow-worker-client PROPERTIES
-    WIN32_EXECUTABLE OFF
-)
+# Windows GUI subsystem: hide console in Release, keep it in Debug.
+# Release: WIN32_EXECUTABLE ON -> /SUBSYSTEM:WINDOWS (no console)
+# Debug:   WIN32_EXECUTABLE OFF -> /SUBSYSTEM:CONSOLE (see stderr)
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    set_target_properties(shadow-worker-client PROPERTIES WIN32_EXECUTABLE ON)
+else()
+    set_target_properties(shadow-worker-client PROPERTIES WIN32_EXECUTABLE OFF)
+endif()
 
 # Install rules (for packaging)
 install(TARGETS shadow-worker-client

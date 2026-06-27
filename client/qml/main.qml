@@ -10,7 +10,7 @@ import ShadowWorker
 
     ApplicationWindow {
     id: mainWindow
-    visible: true
+    visible: !autostartMode
     width: 1200
     height: 720
     // Fixed size: no user resize (simplifies layout). DPI scaling handled by Qt6.

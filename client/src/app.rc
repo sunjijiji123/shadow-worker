@@ -1,0 +1,5 @@
+// app.rc - Windows resource file: embeds the product icon into the exe.
+// MSVC compiles this .rc at build time; the resulting ICON resource is what
+// Windows Explorer / taskbar / shortcuts read for the exe's display icon.
+// The path is resolved relative to the .rc file's directory at compile time.
+IDI_ICON1 ICON "assets/app.ico"

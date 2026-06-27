@@ -3,7 +3,6 @@
 #include <QAction>
 #include <QApplication>
 #include <QMenu>
-#include <QStyle>
 
 TrayController::TrayController(QObject *parent) : QObject(parent) {
   // Build the context menu (right-click).
@@ -13,11 +12,10 @@ TrayController::TrayController(QObject *parent) : QObject(parent) {
   m_menu->addSeparator();
   m_actQuit = m_menu->addAction(tr("Quit"));
 
-  // Tray icon. Uses Qt's standard computer icon as a placeholder until a
-  // branded .ico is added.
+  // Tray icon: reuse the application window icon (set in main.cpp via
+  // setWindowIcon). This is the branded product icon from app.ico.
   m_tray = new QSystemTrayIcon(this);
-  m_tray->setIcon(QIcon(QApplication::style()->standardIcon(
-      QStyle::SP_ComputerIcon)));
+  m_tray->setIcon(QApplication::windowIcon());
   m_tray->setToolTip(QStringLiteral("Shadow Worker"));
   m_tray->setContextMenu(m_menu);
   m_tray->show();
