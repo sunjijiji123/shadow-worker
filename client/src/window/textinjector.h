@@ -8,12 +8,15 @@
 // 技术方案（参考 ai-voice-tool）：剪贴板中转 + 模拟 Ctrl+V。
 //   1. GetGUIThreadInfo 取前台线程的焦点窗口 hwndFocus
 //   2. GetClassName 判断焦点控件是否为可编辑控件（Edit/RichEdit/IME 等）
-//   3. 备份当前剪贴板 → 写入待注入文本（CF_UNICODETEXT，支持中文）
+//   3. 写入待注入文本到剪贴板（CF_UNICODETEXT，支持中文）
 //   4. SendInput 模拟 Ctrl+V
-//   5. 异步（QTimer 延迟 300ms）恢复原剪贴板
 //
-// inject(text) 返回 true 表示注入成功，false 表示无可用焦点输入框
-// （调用方据此降级，如弹气泡）。
+// 不备份/恢复原剪贴板：识别文本注入后留在剪贴板里。
+// 因为 Ctrl+V 是否真正粘贴成功 Windows 不给反馈——若目标未响应粘贴，
+// 识别文本只躺在剪贴板里，用户可手动 Ctrl+V 找回，绝不丢失。
+//
+// inject(text) 返回 true 表示尝试了注入（焦点控件疑似可编辑），
+// false 表示无可用焦点输入框（调用方据此降级，如弹气泡）。
 class TextInjector : public QObject {
   Q_OBJECT
 

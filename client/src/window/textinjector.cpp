@@ -1,7 +1,6 @@
 #include "textinjector.h"
 
 #include <qt_windows.h>
-#include <QTimer>
 #include <QGuiApplication>
 #include <QClipboard>
 #include <QKeyEvent>
@@ -72,11 +71,8 @@ bool TextInjector::inject(const QString &text) {
     return false;
   }
 
-  // 2. 备份当前剪贴板内容（用 Qt 跨平台 API，保存 modes 避免丢失富格式）。
+  // 2. 写入待注入文本到剪贴板（不再备份/恢复原内容——见下方第 5 步说明）。
   QClipboard *cb = QGuiApplication::clipboard();
-  QString backupText = cb->text(QClipboard::Clipboard);
-
-  // 3. 写入待注入文本。
   cb->setText(text, QClipboard::Clipboard);
 
   // 4. 模拟 Ctrl+V。用 SendInput（比 keybd_event 更现代，UAC 下更可靠）。
@@ -105,18 +101,17 @@ bool TextInjector::inject(const QString &text) {
 
   UINT sent = SendInput(4, inputs, sizeof(INPUT));
   if (sent != 4) {
-    // 发送失败，恢复剪贴板并返回失败。
-    if (!backupText.isEmpty()) cb->setText(backupText, QClipboard::Clipboard);
+    // 发送失败：剪贴板已是识别文本，留着不恢复——用户可手动粘贴找回，
+    // 避免恢复原内容把刚识别的一大段文本抹掉（数据安全优先于剪贴板整洁）。
     return false;
   }
 
-  // 5. 异步恢复原剪贴板（延迟 300ms，确保目标应用已完成粘贴读取）。
-  if (!backupText.isEmpty()) {
-    QString backup = backupText;
-    QTimer::singleShot(300, cb, [cb, backup]() {
-      cb->setText(backup, QClipboard::Clipboard);
-    });
-  }
-
+  // 5. 不恢复原剪贴板：识别文本留在剪贴板里。
+  //    历史问题：原实现 300ms 后恢复原剪贴板，但 Ctrl+V 是否真正粘贴成功
+  //    Windows 不给反馈——若目标未响应粘贴（焦点不在输入框、应用拦截了 Ctrl+V），
+  //    识别文本只躺在剪贴板里，300ms 后又被恢复逻辑抹掉，导致识别内容彻底丢失。
+  //    现在保留识别文本：注入成功则输入框已有内容（剪贴板是否还原无所谓）；
+  //    注入失败则用户随时可手动 Ctrl+V 找回。代价是用户原剪贴板内容被替换——
+  //    相比丢失语音识别内容，这个代价小得多（且识别文本正是用户当前最需要的）。
   return true;
 }
