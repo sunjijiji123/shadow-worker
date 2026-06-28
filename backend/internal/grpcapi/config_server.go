@@ -159,6 +159,7 @@ func configToProto(cfg *config.Config) *ConfigData {
 		HotkeyRecord:             cfg.Hotkeys.Record,
 		HotkeyScreenshot:         cfg.Hotkeys.Screenshot,
 		HotkeyPromptPrefix:       cfg.Hotkeys.PromptPrefix,
+		ScreenshotWithVlm:        cfg.Screenshot.WithVLM,
 		Autostart:                false,
 		CollectOnStart:           true,
 	}
@@ -284,6 +285,7 @@ func protoToConfig(data *ConfigData) *config.Config {
 	cfg.Hotkeys.Record = data.HotkeyRecord
 	cfg.Hotkeys.Screenshot = data.HotkeyScreenshot
 	cfg.Hotkeys.PromptPrefix = data.HotkeyPromptPrefix
+	cfg.Screenshot.WithVLM = data.ScreenshotWithVlm
 
 	return cfg
 }

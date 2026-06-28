@@ -78,6 +78,10 @@ class SettingsViewModel : public QObject {
   Q_PROPERTY(QString hotkeyPromptPrefix READ hotkeyPromptPrefix WRITE
                  setHotkeyPromptPrefix NOTIFY hotkeyPromptPrefixChanged)
 
+  // Screenshot tool: 截图完成后是否自动触发 VLM 分析（写时间线事件）。
+  Q_PROPERTY(bool screenshotWithVlm READ screenshotWithVlm WRITE
+                 setScreenshotWithVlm NOTIFY screenshotWithVlmChanged)
+
 public:
   explicit SettingsViewModel(QObject *parent = nullptr);
 
@@ -143,6 +147,10 @@ public:
   QString hotkeyPromptPrefix() const { return m_hotkeyPromptPrefix; }
   void setHotkeyPromptPrefix(const QString &v);
 
+  // Screenshot
+  bool screenshotWithVlm() const { return m_screenshotWithVlm; }
+  void setScreenshotWithVlm(bool v);
+
   Q_INVOKABLE void addProvider(const QString &category, const QString &key);
   Q_INVOKABLE void removeProvider(const QString &category, const QString &key);
   Q_INVOKABLE void updateProvider(const QString &category, const QString &key,
@@ -186,6 +194,8 @@ signals:
   void hotkeyRecordChanged();
   void hotkeyScreenshotChanged();
   void hotkeyPromptPrefixChanged();
+
+  void screenshotWithVlmChanged();
 
 private:
   void setLoading(bool v);
@@ -233,4 +243,5 @@ private:
   QString m_hotkeyRecord = "F9";
   QString m_hotkeyScreenshot;
   QString m_hotkeyPromptPrefix = "Ctrl";
+  bool m_screenshotWithVlm = false;
 };

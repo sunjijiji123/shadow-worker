@@ -149,6 +149,10 @@ qt_add_executable(shadow-worker-client
     src/window/windowpicker.cpp
     src/window/windowhelper.h
     src/window/windowhelper.cpp
+    src/window/screenshotwindow.h
+    src/window/screenshotwindow.cpp
+    src/window/screenshotcontroller.h
+    src/window/screenshotcontroller.cpp
     src/window/textinjector.h
     src/window/textinjector.cpp
     src/audio/audiorecorder.h
@@ -163,6 +167,8 @@ qt_add_executable(shadow-worker-client
     src/asr/asrclient.cpp
     src/asr/voiceclient.h
     src/asr/voiceclient.cpp
+    src/asr/collectionclient.h
+    src/asr/collectionclient.cpp
     src/utils/autostart.h
     src/utils/autostart.cpp
     src/utils/singleinstance.h
@@ -253,6 +259,7 @@ qt_add_qml_module(shadow-worker-client
         qml/components/RecordingBubble.qml
         qml/components/ResultBubble.qml
         qml/RecordingWindow.qml
+        qml/ScreenshotResultWindow.qml
         # pages
         qml/main.qml
         qml/pages/OverviewPage.qml
@@ -291,8 +298,11 @@ qt_add_translations(shadow-worker-client
     TS_FILES
         ${CMAKE_SOURCE_DIR}/i18n/shadowworker_zh_CN.ts
     SOURCES
+        # C++ 源（tr() 翻译来源，如托盘菜单项）
+        ${CMAKE_SOURCE_DIR}/src/ui/traycontroller.cpp
         ${CMAKE_SOURCE_DIR}/qml/main.qml
         ${CMAKE_SOURCE_DIR}/qml/RecordingWindow.qml
+        ${CMAKE_SOURCE_DIR}/qml/ScreenshotResultWindow.qml
         ${CMAKE_SOURCE_DIR}/qml/theme/Theme.qml
         ${CMAKE_SOURCE_DIR}/qml/components/Card.qml
         ${CMAKE_SOURCE_DIR}/qml/components/Toggle.qml

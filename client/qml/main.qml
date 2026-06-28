@@ -67,6 +67,10 @@ import ShadowWorker
             mainWindow.raise()
             mainWindow.requestActivate()
         }
+        // 托盘菜单"截图"：弹全屏框选覆盖层（与热键走同一路径）。
+        function onScreenshotRequested() {
+            startScreenshot()
+        }
         // onQuitRequested handled in C++ (-> QApplication::quit), but we also
         // tear down any recording here for cleanliness.
         function onQuitRequested() {
@@ -77,6 +81,24 @@ import ShadowWorker
     color: Theme.bg2
 
     property string currentView: "overview"
+
+    // 截图防重入标志：press 模式热键按住期间 WM_HOTKEY 会重复触发（约 30ms
+    // 一次），若不挡会反复弹出框选覆盖层。用本地同步 state 挡，截图完成/
+    // 取消后清零（坑 #18 同款套路：不能用 gRPC 异步标志）。
+    property bool screenshotInFlight: false
+
+    // 弹出截图框选覆盖层。热键、托盘菜单、设置页"Capture Now"都走这里。
+    // saveDir 由 screenshotController 内部用默认（%APPDATA%\shadow-worker
+    // \screenshots，与后端 VLM 截图目录一致），QML 不需关心路径。
+    function startScreenshot() {
+        if (screenshotInFlight) return
+        if (!screenshotController) return
+        screenshotInFlight = true
+        screenshotController.capture()
+    }
+
+    // 截图完成/取消回调。放在 target:screenshotController 的 Connections 里
+    // （下方），用本地 state 触发。
 
     // ColumnLayout: TitleBar on top (fixed 36px) + RowLayout fills the rest.
     ColumnLayout {
@@ -235,6 +257,13 @@ import ShadowWorker
         id: recordingWindow
     }
 
+    // 截图 + VLM 分析结果窗口（独立置顶窗口，非依附主窗口）。
+    // 由 screenshotController.finished 触发显示（仅开启 VLM 时），由
+    // collectionClient.imageAnalyzed 信号回填摘要。
+    ScreenshotResultWindow {
+        id: screenshotResult
+    }
+
     // ---- real recording flow driven by the global hotkey (or demo button) ----
     // globalHotkey.activatedWithName fires when the registered OS hotkey is
     // pressed. We start a REAL capture (not the demo state machine) and show
@@ -360,6 +389,8 @@ import ShadowWorker
                     stopRealRecording()
                 else
                     startRealRecording()
+            } else if (name === "screenshot") {
+                startScreenshot()
             }
         }
         // hold 模式：按下开始录音。防重入：用 recordingWindow.state 同步判断
@@ -376,6 +407,46 @@ import ShadowWorker
             if (name === "record") {
                 if (recordingWindow.state === "listening")
                     stopRealRecording()
+            }
+        }
+    }
+
+    // 截图覆盖层完成/取消回调。finished 时落盘成功 + 已写剪贴板；
+    // 若开启"截图后自动 VLM 分析"，把【用户框选的这张图】送去后端分析
+    // （AnalyzeImage，不重新截图），并在独立结果窗口展示摘要。
+    Connections {
+        target: screenshotController
+        function onFinished(path) {
+            screenshotInFlight = false
+            // 截图本身已落盘 + 写剪贴板，提示一下
+            toast(qsTr("Screenshot saved"), "success")
+            if (settingsVm && settingsVm.screenshotWithVlm && collectionClient) {
+                // 弹结果窗口（analyzing 态），然后发起分析
+                screenshotResult.imagePath = path
+                screenshotResult.summary = ""
+                screenshotResult.errorText = ""
+                screenshotResult.analyzing = true
+                screenshotResult.show()
+                collectionClient.analyzeImage(path)
+            }
+        }
+        function onCancelled() {
+            screenshotInFlight = false
+        }
+    }
+
+    // VLM 图片分析结果（截图后自动分析）。
+    // 独立信号 imageAnalyzed，不复用 vlmSummaryReady（坑 #15：避免 error
+    // 参数语义混淆）。imagePath 用于结果窗口缩略图，error 非空则显示失败。
+    Connections {
+        target: collectionClient
+        function onImageAnalyzed(imagePath, summary, error) {
+            if (!screenshotResult.visible) return
+            screenshotResult.analyzing = false
+            if (error && error !== "") {
+                screenshotResult.errorText = error
+            } else {
+                screenshotResult.summary = summary
             }
         }
     }
@@ -432,14 +503,26 @@ import ShadowWorker
         if (settingsVm) settingsVm.load()
     }
 
-    // register the record hotkey as soon as the saved config arrives.
+    // register hotkeys as soon as the saved config arrives. 用 unregisterByName
+    // 定向注销（而非 unregisterAll），让 record / screenshot 两个热键互不影响：
+    // 改 record 只注销 record，改 screenshot 只注销 screenshot。
     Connections {
         target: settingsVm
         function onHotkeyRecordChanged() {
             if (globalHotkey) {
                 var sc = settingsVm.hotkeyRecord || "Ctrl+Shift+R"
-                globalHotkey.unregisterAll()
+                globalHotkey.unregisterByName("record")
                 globalHotkey.registerShortcut(sc, "record")
+            }
+        }
+        function onHotkeyScreenshotChanged() {
+            if (globalHotkey) {
+                var sc = settingsVm.hotkeyScreenshot
+                globalHotkey.unregisterByName("screenshot")
+                if (sc && sc.length > 0) {
+                    // 截图用 press 模式（按一次截一张），避免 hold 的按住连截。
+                    globalHotkey.registerShortcut(sc, "screenshot", "press")
+                }
             }
         }
     }

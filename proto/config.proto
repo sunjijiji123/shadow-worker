@@ -67,6 +67,9 @@ message ConfigData {
   string hotkey_screenshot = 18;
   string hotkey_prompt_prefix = 19; // Ctrl/Alt/Win
 
+  // Screenshot tool
+  bool screenshot_with_vlm = 36;   // 区域截图完成后是否自动触发 VLM 分析（默认 false）
+
   // General
   bool autostart = 20;
   bool collect_on_start = 21;

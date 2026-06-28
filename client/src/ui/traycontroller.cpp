@@ -9,6 +9,7 @@ TrayController::TrayController(QObject *parent) : QObject(parent) {
   m_menu = new QMenu();
   m_actShow = m_menu->addAction(tr("Show Main Window"));
   m_actSettings = m_menu->addAction(tr("Settings..."));
+  m_actScreenshot = m_menu->addAction(tr("Screenshot"));
   m_menu->addSeparator();
   m_actQuit = m_menu->addAction(tr("Quit"));
 
@@ -25,6 +26,8 @@ TrayController::TrayController(QObject *parent) : QObject(parent) {
           &TrayController::showMainRequested);
   connect(m_actSettings, &QAction::triggered, this,
           &TrayController::settingsRequested);
+  connect(m_actScreenshot, &QAction::triggered, this,
+          &TrayController::screenshotRequested);
   connect(m_actQuit, &QAction::triggered, this,
           &TrayController::quitRequested);
 
@@ -39,6 +42,16 @@ TrayController::TrayController(QObject *parent) : QObject(parent) {
 
 TrayController::~TrayController() {
   if (m_tray) m_tray->hide();
+}
+
+void TrayController::retranslateUi() {
+  // 此时翻译器已安装（installTranslator），tr() 会查到 .qm 里的中文。
+  // QMenu 的 actions 在构造时创建并连接好信号，这里只更新文字即可，
+  // 不重建 action（避免重连信号）。
+  if (m_actShow) m_actShow->setText(tr("Show Main Window"));
+  if (m_actSettings) m_actSettings->setText(tr("Settings..."));
+  if (m_actScreenshot) m_actScreenshot->setText(tr("Screenshot"));
+  if (m_actQuit) m_actQuit->setText(tr("Quit"));
 }
 
 void TrayController::showMessage(const QString &title, const QString &msg,

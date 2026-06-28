@@ -18,8 +18,11 @@ service CollectionService {
   rpc GetStatus(GetStatusRequest) returns (CollectionStatus);
   // 查询时间线(activity_segments + events)
   rpc QueryTimeline(TimelineRequest) returns (TimelineSnapshot);
-  // 手动触发一次 VLM 截图理解
+  // 手动触发一次 VLM 截图理解（后端按配置重新截整屏/活动窗口）
   rpc TriggerVLM(TriggerVLMRequest) returns (VLMSummary);
+  // 分析指定路径的 PNG 图片（用于"快捷工具-桌面截图"：把用户框选并保存的
+  // 区域截图送去 VLM 分析，而非后端重新截图）。VLM 未启用时返回 error。
+  rpc AnalyzeImage(AnalyzeImageRequest) returns (VLMSummary);
 }
 
 message PauseRequest {}
@@ -72,4 +75,9 @@ message VLMSummary {
   string summary = 1;
   string screenshot_path = 2;
   string app_name = 3;
+}
+
+// AnalyzeImage: 分析用户提供的截图文件（"快捷工具-桌面截图"框选结果）。
+message AnalyzeImageRequest {
+  string path = 1;  // PNG 绝对路径
 }

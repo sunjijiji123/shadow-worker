@@ -123,6 +123,13 @@ type HotkeyConfig struct {
 	PromptPrefix string `yaml:"prompt_prefix"` // Ctrl | Alt | Win
 }
 
+// ScreenshotConfig 是"快捷工具-桌面截图"配置块。
+type ScreenshotConfig struct {
+	// WithVLM: 区域截图完成后是否自动触发一次 VLM 截图理解，把摘要写进时间线。
+	// 默认 false（纯截图落盘 + 写剪贴板，不调 VLM）。
+	WithVLM bool `yaml:"with_vlm"`
+}
+
 // MovementConfig 是采集配置块。
 type MovementConfig struct {
 	SampleIntervalMs int    `yaml:"sample_interval_ms"`
@@ -145,14 +152,15 @@ type MovementConfig struct {
 
 // Config 是整体配置。
 type Config struct {
-	ASR      ASRConfig      `yaml:"asr"`
-	VLM      VLMConfig      `yaml:"vlm"`
-	LLM      LLMConfig      `yaml:"llm"`
-	Movement MovementConfig `yaml:"movement"`
-	Hotkeys  HotkeyConfig   `yaml:"hotkeys"`
-	Hotwords []string       `yaml:"hotwords"`
-	Log      LogConfig      `yaml:"log"`
-	Debug    DebugConfig    `yaml:"debug"`
+	ASR        ASRConfig        `yaml:"asr"`
+	VLM        VLMConfig        `yaml:"vlm"`
+	LLM        LLMConfig        `yaml:"llm"`
+	Movement   MovementConfig   `yaml:"movement"`
+	Hotkeys    HotkeyConfig     `yaml:"hotkeys"`
+	Screenshot ScreenshotConfig `yaml:"screenshot"`
+	Hotwords   []string         `yaml:"hotwords"`
+	Log        LogConfig        `yaml:"log"`
+	Debug      DebugConfig      `yaml:"debug"`
 }
 
 // LogConfig 控制后端日志输出。排查采集/识别问题时设 level=debug。
@@ -233,6 +241,9 @@ func Default() *Config {
 			Record:       "F9",
 			Screenshot:   "",
 			PromptPrefix: "Ctrl",
+		},
+		Screenshot: ScreenshotConfig{
+			WithVLM: false, // 默认纯截图，不调 VLM
 		},
 		Hotwords: []string{},
 		Log: LogConfig{

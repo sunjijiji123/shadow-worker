@@ -172,6 +172,26 @@ func (v *VLMCapturer) Trigger(ctx context.Context) (string, error) {
 	return summary, nil
 }
 
+// DescribePath 读取指定路径的 PNG 文件并送 VLM 分析，返回摘要。
+// 用于"快捷工具-桌面截图"：用户框选并保存的截图由前端送到这里分析，
+// 保证 VLM 分析的就是用户框选的那块图（而非后端重新截图）。
+// 不写时间线事件、不重新截图——只做"看图说话"。
+func (v *VLMCapturer) DescribePath(ctx context.Context, path string) (string, error) {
+	if v.engine == nil {
+		return "", fmt.Errorf("VLM 未启用")
+	}
+	png, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("读取截图失败: %w", err)
+	}
+	summary, err := v.engine.Describe(ctx, png)
+	if err != nil {
+		return "", fmt.Errorf("VLM 识别失败: %w", err)
+	}
+	v.logger.Info("VLM 分析截图文件", "path", path, "summary", summary)
+	return summary, nil
+}
+
 // OnActivity 由 Collector.loop 在判出活跃信号时调用（非阻塞，运行在 loop goroutine）。
 //
 //   - reason="switch": 切换了前台应用（进程路径变化）→ 受 OnDemandSwitchGapS 冷却

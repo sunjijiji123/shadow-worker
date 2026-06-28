@@ -92,6 +92,22 @@ void GlobalHotkey::unregisterAll() {
   m_registrations.clear();
 }
 
+void GlobalHotkey::unregisterByName(const QString &name) {
+  // 定向注销指定 name 的热键，不影响其他注册。
+  // 注意：不清 m_holdVk —— 截图热键用 press 模式，hold 状态由 record 热键
+  // 独占管理，这里不应触碰。若注销的恰好是 hold 热键，下次注册时会重设。
+  QList<int> toRemove;
+  for (auto it = m_registrations.begin(); it != m_registrations.end(); ++it) {
+    if (it.value().name == name) {
+      UnregisterHotKey(nullptr, it.key());
+      toRemove.append(it.key());
+    }
+  }
+  for (int id : toRemove) {
+    m_registrations.remove(id);
+  }
+}
+
 void GlobalHotkey::stopHoldPolling() {
   m_holdPollTimer.stop();
   // 注意：不清零 m_holdVk！它是注册时设的"配置"，不是运行状态。

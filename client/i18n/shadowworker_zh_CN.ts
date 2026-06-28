@@ -1021,6 +1021,22 @@
         <translation>截图已捕获</translation>
     </message>
     <message>
+        <source>Press the shortcut to drag-select a screen region. The crop is saved and copied to the clipboard.</source>
+        <translation>按下快捷键拖拽框选屏幕区域。裁剪后的图片会保存并复制到剪贴板。</translation>
+    </message>
+    <message>
+        <source>Enable Screenshot Shortcut</source>
+        <translation>启用截图快捷键</translation>
+    </message>
+    <message>
+        <source>Auto VLM analysis after capture</source>
+        <translation>截图后自动 VLM 分析</translation>
+    </message>
+    <message>
+        <source>Screenshot saved</source>
+        <translation>截图已保存</translation>
+    </message>
+    <message>
         <location filename="../qml/pages/SettingsPage.qml" line="2033" />
         <source>Data Management</source>
         <translation>数据管理</translation>
@@ -1520,6 +1536,67 @@
         <location filename="../qml/main.qml" line="402" />
         <source>■ Stop</source>
         <translation>■ 停止</translation>
+    </message>
+</context>
+<context>
+    <name>ScreenshotResultWindow</name>
+    <message>
+        <location filename="../qml/ScreenshotResultWindow.qml" line="3" />
+        <source>Screenshot Result</source>
+        <translation>截图结果</translation>
+    </message>
+    <message>
+        <location filename="../qml/ScreenshotResultWindow.qml" />
+        <source>Screenshot Analysis</source>
+        <translation>截图分析</translation>
+    </message>
+    <message>
+        <location filename="../qml/ScreenshotResultWindow.qml" />
+        <source>Analyzing with VLM...</source>
+        <translation>VLM 识别中...</translation>
+    </message>
+    <message>
+        <location filename="../qml/ScreenshotResultWindow.qml" />
+        <source>Analysis failed: </source>
+        <translation>分析失败：</translation>
+    </message>
+    <message>
+        <location filename="../qml/ScreenshotResultWindow.qml" />
+        <source>Copy Summary</source>
+        <translation>复制摘要</translation>
+    </message>
+    <message>
+        <location filename="../qml/ScreenshotResultWindow.qml" />
+        <source>Summary copied</source>
+        <translation>摘要已复制</translation>
+    </message>
+    <message>
+        <location filename="../qml/ScreenshotResultWindow.qml" />
+        <source>Retake</source>
+        <translation>重新截图</translation>
+    </message>
+</context>
+<context>
+    <name>TrayController</name>
+    <message>
+        <location filename="../src/ui/traycontroller.cpp" line="10" />
+        <source>Show Main Window</source>
+        <translation>显示主窗口</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/traycontroller.cpp" line="11" />
+        <source>Settings...</source>
+        <translation>设置...</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/traycontroller.cpp" line="12" />
+        <source>Screenshot</source>
+        <translation>截图</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/traycontroller.cpp" line="14" />
+        <source>Quit</source>
+        <translation>退出</translation>
     </message>
 </context>
 </TS>

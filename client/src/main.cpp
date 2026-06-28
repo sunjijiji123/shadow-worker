@@ -14,6 +14,7 @@
 
 #include "asr/asrclient.h"
 #include "asr/voiceclient.h"
+#include "asr/collectionclient.h"
 #include "audio/audiorecorder.h"
 #include "hotkey/globalhotkey.h"
 #include "ui/traycontroller.h"
@@ -27,6 +28,7 @@
 #include "viewmodels/whitelist_vm.h"
 #include "window/windowpicker.h"
 #include "window/windowhelper.h"
+#include "window/screenshotcontroller.h"
 #include "window/textinjector.h"
 #include "audio/audiodevicemanager.h"
 
@@ -110,6 +112,7 @@ int main(int argc, char *argv[]) {
         QCoreApplication::arguments().contains(QLatin1String("--autostart"));
     WindowPicker picker;
     WindowHelper windowHelper;
+    ScreenshotController screenshotController;
     TextInjector textInjector;
     AudioRecorder audioRecorder;
     AudioDeviceManager audioDeviceManager;
@@ -117,8 +120,18 @@ int main(int argc, char *argv[]) {
     AsrClient asrClient;
     VoiceClient voiceClient;
     voiceClient.setChannel(channel);
+    CollectionClient collectionClient;
+    collectionClient.setChannel(channel);
     TrayController trayController;
     Translator translator;
+    // Translator 构造时已 installTranslator（读 QSettings 默认 zh_CN）。
+    // 但 TrayController(L125) 在 Translator(L126) 之前构造，其菜单 tr()
+    // 执行时翻译器尚未安装，文字定格英文。这里显式重翻译一次。
+    trayController.retranslateUi();
+    // 运行时切换语言时，QML 有 engine->retranslate() 自动刷新，但 C++
+    // QAction 没有，需手动重翻译托盘菜单。
+    QObject::connect(&translator, &Translator::currentLanguageChanged,
+                     &trayController, &TrayController::retranslateUi);
 
     logMsg("[main] creating engine");
     QQmlApplicationEngine engine;
@@ -151,12 +164,16 @@ int main(int argc, char *argv[]) {
     engine.rootContext()->setContextProperty("autostartMode", autostartMode);
     engine.rootContext()->setContextProperty("windowPicker", &picker);
     engine.rootContext()->setContextProperty("windowHelper", &windowHelper);
+    engine.rootContext()->setContextProperty("screenshotController",
+                                             &screenshotController);
     engine.rootContext()->setContextProperty("textInjector", &textInjector);
     engine.rootContext()->setContextProperty("audioRecorder", &audioRecorder);
     engine.rootContext()->setContextProperty("audioDeviceManager", &audioDeviceManager);
     engine.rootContext()->setContextProperty("globalHotkey", &globalHotkey);
     engine.rootContext()->setContextProperty("asrClient", &asrClient);
     engine.rootContext()->setContextProperty("voiceClient", &voiceClient);
+    engine.rootContext()->setContextProperty("collectionClient",
+                                             &collectionClient);
     engine.rootContext()->setContextProperty("trayController", &trayController);
     engine.rootContext()->setContextProperty("translator", &translator);
 

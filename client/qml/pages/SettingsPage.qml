@@ -62,11 +62,12 @@ Item {
     function doRegisterRecordHotkey() {
         if (!globalHotkey) return
         if (!recordEnabled) {
-            globalHotkey.unregisterAll()
+            globalHotkey.unregisterByName("record")
             return
         }
         var sc = hotkeyString(hotkeyModifier, hotkeyKey)
-        globalHotkey.unregisterAll()
+        // 定向注销 record（不碰 screenshot 等其他热键），避免误杀。
+        globalHotkey.unregisterByName("record")
         if (settingsVm) settingsVm.hotkeyRecord = sc
         // 根据 recordMode 选择注册模式：hold（按住录音）或 press（toggle）
         var mode = recordMode === "hold" ? "hold" : "press"
@@ -91,6 +92,37 @@ Item {
         } else {
             hotkeyModifier = mods.join(" + ")
         }
+    }
+
+    // parse settingsVm.hotkeyScreenshot into modifier + key (seed UI fields).
+    // 空字符串（未绑定）→ screenshotEnabled=false，保留 UI 默认显示 Ctrl+Shift+S。
+    function initScreenshotFromSettings() {
+        if (settingsVm && settingsVm.screenshotWithVlm !== undefined) {
+            screenshotWithVlm = settingsVm.screenshotWithVlm
+        }
+        var sc = settingsVm && settingsVm.hotkeyScreenshot ? settingsVm.hotkeyScreenshot : ""
+        if (sc === "") {
+            screenshotEnabled = false
+            // 保留默认 UI 值，方便用户开启后直接保存
+            screenshotModifier = "Ctrl + Shift"
+            screenshotKey = "S"
+            return
+        }
+        screenshotEnabled = true
+        var parts = sc.split("+")
+        screenshotKey = parts[parts.length - 1]
+        var mods = parts.slice(0, parts.length - 1)
+        screenshotModifier = mods.length === 0 ? qsTr("None") : mods.join(" + ")
+    }
+
+    // screenshot 烘键变更时拼接写回 viewModel（与 record 走同一 hotkeyString）。
+    function flushScreenshotHotkey() {
+        if (!settingsVm) return
+        if (!screenshotEnabled) {
+            settingsVm.hotkeyScreenshot = ""
+            return
+        }
+        settingsVm.hotkeyScreenshot = hotkeyString(screenshotModifier, screenshotKey)
     }
     // ASR model chip list (derived from viewModel.asrProviders on load).
     // Structure: { key, label, type: "cloud"|"local", deletable: true }
@@ -201,9 +233,13 @@ Item {
     property int idleTimeoutMin: 5
 
     // ---- Quick Tools tab local state ----
+    // 截图热键由 settingsVm.hotkeyScreenshot 持久化（"Ctrl+Shift+S" 格式）。
+    // screenshotModifier/screenshotKey 只是 UI 拆分展示，onChange 拼接写回。
+    property bool screenshotEnabled: false
     property string screenshotModifier: "Ctrl + Shift"
     property string screenshotKey: "S"
-    property string screenshotSavePath: "C:\\Users\\…\\shadow-worker\\screenshots"
+    // 截图后是否自动触发 VLM 分析（持久化在 settingsVm.screenshotWithVlm）。
+    property bool screenshotWithVlm: false
 
     // Remove a model from a list and re-select if the active one was removed.
     // Usage: removeModel("asrModels", "deepseek", "asrActiveModel", "asrModelType")
@@ -321,6 +357,7 @@ Item {
         if (!viewModel) return
         if (viewModel.recordMode) recordMode = viewModel.recordMode
         initHotkeyFromSettings()
+        initScreenshotFromSettings()
 
         // ASR providers → chip 列表
         var providers = viewModel.asrProviders || []
@@ -542,6 +579,9 @@ Item {
         if (!viewModel) return
         viewModel.recordMode = recordMode
         viewModel.hotkeyRecord = hotkeyString(hotkeyModifier, hotkeyKey)
+        // 截图烘键 + VLM 开关写回
+        viewModel.hotkeyScreenshot = screenshotEnabled ? hotkeyString(screenshotModifier, screenshotKey) : ""
+        viewModel.screenshotWithVlm = screenshotWithVlm
         viewModel.asrMode = asrModelType
         viewModel.asrActiveProvider = asrActiveModel
         // 保存前：把当前 UI 字段的值 Write-Through 到 viewModel，确保不丢
@@ -1973,42 +2013,86 @@ Item {
             // ================================================================
 
             // ---- Card 1: Desktop Screenshot ----
-            // HTML: modifier (flex 0.6) + key form row, save path field, capture btn.
+            // 区域截图工具：热键 / Capture Now 弹全屏框选覆盖层，框选后裁剪落盘
+            // + 写剪贴板。可选"截图后自动 VLM 分析"开关。
             Card {
                 Layout.fillWidth: true
                 visible: activeTab === "tools"
                 title: qsTr("Desktop Screenshot")
+                description: qsTr("Press the shortcut to drag-select a screen region. The crop is saved and copied to the clipboard.")
 
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 12
 
+                    // 截图热键开关
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Text {
+                            text: qsTr("Enable Screenshot Shortcut")
+                            color: Theme.ink
+                            font.pixelSize: 13
+                            Layout.fillWidth: true
+                        }
+                        Toggle {
+                            checked: screenshotEnabled
+                            onToggled: screenshotEnabled = checked
+                        }
+                    }
+
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 16
+                        enabled: screenshotEnabled
 
                         SelectBox {
                             label: qsTr("Modifier")
                             options: ["Ctrl + Shift", "Ctrl + Alt", "Alt + Shift"]
-                            currentIndex: 0
+                            // 根据 screenshotModifier 反映选中项（避免坑 #5 死绑定）
+                            currentIndex: {
+                                var idx = ["Ctrl + Shift", "Ctrl + Alt", "Alt + Shift"].indexOf(screenshotModifier)
+                                return idx >= 0 ? idx : 0
+                            }
                             onSelected: function(index, value) {
                                 screenshotModifier = value
+                                flushScreenshotHotkey()
                             }
                             Layout.fillWidth: true
                         }
                         TextField {
                             label: qsTr("Key")
                             text: screenshotKey
-                            onTextEdited: screenshotKey = newText
+                            onTextEdited: function(newText) {
+                                screenshotKey = newText
+                                flushScreenshotHotkey()
+                            }
                             Layout.fillWidth: true
                         }
                     }
 
-                    TextField {
+                    // 保存路径只读展示（与后端 VLM 截图目录一致，不可配置）
+                    Text {
                         Layout.fillWidth: true
-                        label: qsTr("Save Location")
-                        text: screenshotSavePath
-                        onTextEdited: screenshotSavePath = newText
+                        text: qsTr("Save Location") + ": %APPDATA%\\shadow-worker\\screenshots"
+                        color: Theme.muted
+                        font.pixelSize: 11
+                        wrapMode: Text.WordWrap
+                    }
+
+                    // 截图后自动 VLM 分析开关（需要后端已配置 VLM provider）
+                    RowLayout {
+                        Layout.fillWidth: true
+                        enabled: screenshotEnabled
+                        Text {
+                            text: qsTr("Auto VLM analysis after capture")
+                            color: Theme.ink
+                            font.pixelSize: 13
+                            Layout.fillWidth: true
+                        }
+                        Toggle {
+                            checked: screenshotWithVlm
+                            onToggled: screenshotWithVlm = checked
+                        }
                     }
 
                     Row {
@@ -2018,7 +2102,7 @@ Item {
                             kind: "primary"
                             onClicked: {
                                 var win = ApplicationWindow.window
-                                if (win && win.toast) win.toast(qsTr("Screenshot captured"))
+                                if (win && win.startScreenshot) win.startScreenshot()
                             }
                         }
                     }

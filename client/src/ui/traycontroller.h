@@ -27,9 +27,15 @@ public:
   Q_INVOKABLE void showMessage(const QString &title, const QString &msg,
                                int timeoutMs = 3000);
 
+  // 重新翻译托盘菜单文字。C++ QAction 没有 QML 的 retranslate 机制，菜单文字
+  // 在构造时一次性设置（此时翻译器可能还未安装）。故在 Translator 安装后、
+  // 或运行时切换语言后，需显式调用本方法重设菜单文字。
+  Q_INVOKABLE void retranslateUi();
+
 signals:
   void showMainRequested();
   void settingsRequested();
+  void screenshotRequested();
   void quitRequested();
 
 private:
@@ -37,5 +43,6 @@ private:
   QMenu *m_menu = nullptr;
   QAction *m_actShow = nullptr;
   QAction *m_actSettings = nullptr;
+  QAction *m_actScreenshot = nullptr;
   QAction *m_actQuit = nullptr;
 };

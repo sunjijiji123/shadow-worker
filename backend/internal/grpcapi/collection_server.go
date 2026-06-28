@@ -212,3 +212,24 @@ func (s *CollectionServer) TriggerVLM(ctx context.Context, req *TriggerVLMReques
 
 	return &VLMSummary{Summary: summary}, nil
 }
+
+// AnalyzeImage 分析用户框选并保存的截图文件（"快捷工具-桌面截图"）。
+// 与 TriggerVLM 的区别：不重新截图，直接分析前端传来的 PNG 路径，
+// 保证"用户看到什么"和"VLM 分析什么"完全一致。
+func (s *CollectionServer) AnalyzeImage(ctx context.Context, req *AnalyzeImageRequest) (*VLMSummary, error) {
+	if s.vlm == nil {
+		return nil, fmt.Errorf("VLM 未启用")
+	}
+	cap := s.vlm.Get()
+	if cap == nil {
+		return nil, fmt.Errorf("VLM 未启用")
+	}
+	if req.Path == "" {
+		return nil, fmt.Errorf("截图路径为空")
+	}
+	summary, err := cap.DescribePath(ctx, req.Path)
+	if err != nil {
+		return nil, fmt.Errorf("VLM 分析失败: %w", err)
+	}
+	return &VLMSummary{Summary: summary, ScreenshotPath: req.Path}, nil
+}

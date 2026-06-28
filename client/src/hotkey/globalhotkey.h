@@ -24,6 +24,9 @@ public:
                                     const QString &name = QString(),
                                     const QString &mode = QString());
   Q_INVOKABLE void unregisterAll();
+  // 仅注销指定 name 的热键（不影响其他 name）。用于多热键共存场景：
+  // 改 record 热键时只 unregisterByName("record")，不误杀 screenshot 等其他热键。
+  Q_INVOKABLE void unregisterByName(const QString &name);
 
   // 兼容旧接口:仅注册一个虚拟键(固定 Ctrl+Shift)
   Q_INVOKABLE bool registerHotkey(int vk);
