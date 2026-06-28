@@ -90,7 +90,7 @@ func (db *DB) ListEvents(start, end time.Time) ([]Event, error) {
 
 // ListEventsByDate 查询某一天的事件。切日按本地时区零点（与 QueryTimeline 一致）。
 func (db *DB) ListEventsByDate(day time.Time) ([]Event, error) {
-	day = startOfLocalDay(day)
+	day = StartOfLocalDay(day)
 	next := day.Add(24 * time.Hour)
 	return db.ListEvents(day, next)
 }

@@ -102,10 +102,10 @@ func (db *DB) GetActivitySegment(id int64) (*ActivitySegment, error) {
 	return scanActivitySegment(row)
 }
 
-// startOfLocalDay 返回 t 所在本地日的 00:00（保留 t 的时区，通常是 time.Local）。
+// StartOfLocalDay 返回 t 所在本地日的 00:00（保留 t 的时区，通常是 time.Local）。
 // 用于按天切日：与 QueryTimeline 的本地时区切日语义一致，避免 UTC 切日导致
 // 跨本地午夜的事件错位归属（UTC+8 下凌晨 0-8 点事件被算进前一天）。
-func startOfLocalDay(t time.Time) time.Time {
+func StartOfLocalDay(t time.Time) time.Time {
 	y, m, d := t.Date()
 	return time.Date(y, m, d, 0, 0, 0, 0, t.Location())
 }
@@ -142,9 +142,110 @@ func (db *DB) ListActivitySegments(start, end time.Time) ([]ActivitySegment, err
 // ListActivitySegmentsByDate 按天列出活动段。
 // 切日按 day 的本地时区零点（与 QueryTimeline 一致），确保 UI"日期"与本地作息对齐。
 func (db *DB) ListActivitySegmentsByDate(day time.Time) ([]ActivitySegment, error) {
-	day = startOfLocalDay(day)
+	day = StartOfLocalDay(day)
 	next := day.Add(24 * time.Hour)
 	return db.ListActivitySegments(day, next)
+}
+
+// AggregateSegments 把连续相同 app 的段合并。
+// 输入需按 start_ts 升序（ListActivitySegments 已保证）。
+// 合并规则：相邻且 AppName 相同 *且时间连续*（无空档）→ 合为一段。
+// start 取最早、end 取较晚者，state/windowTitle/summary 取该组最后一条。
+//
+// 时间连续性判据（!s.StartTS.After(cur.EndTS)）：离开检测引入后，
+// 同 app 两段（如 VSCode 9-12 / VSCode 14-16，中间离开 2 小时）会在结果
+// 列表里相邻且同名。若只看 AppName 会合并抹掉空档，离开就白检测了。
+// 加连续性判据后：12→14 有空档（s.StartTS=14 > cur.EndTS=12）→ 不合并 →
+// 空档在时间轴轨道上显示为空白断档。任何 app 切换或离开空档都形成断点。
+//
+// 注意：cur.EndTS 在采集层是每 tick 滚动更新的"段实际结束"，故此判据能精确
+// 区分"连续工作"与"离开后回来"。历史数据（离开检测上线前的）段间空档多为
+// DB tick 间隔（数百毫秒，EndTS≈下一段 StartTS），仍会被正确合并。
+func AggregateSegments(segs []ActivitySegment) []ActivitySegment {
+	if len(segs) == 0 {
+		return segs
+	}
+	out := make([]ActivitySegment, 0, len(segs))
+	cur := segs[0]
+	for i := 1; i < len(segs); i++ {
+		s := segs[i]
+		if s.AppName == cur.AppName && !s.StartTS.After(cur.EndTS) {
+			// 同 app 且时间连续：合并。end 取较晚者（防御性 max，正常情况 s 在 cur 之后）。
+			if s.EndTS.After(cur.EndTS) {
+				cur.EndTS = s.EndTS
+			}
+			// 状态/标题/摘要取最新一条（s 在 cur 之后，覆盖）。
+			cur.State = s.State
+			cur.WindowTitle = s.WindowTitle
+			if s.Summary != "" {
+				cur.Summary = s.Summary
+			}
+			continue
+		}
+		out = append(out, cur)
+		cur = s
+	}
+	out = append(out, cur)
+	return out
+}
+
+// ClipSegmentsToRange 把段按 [start, end) 边界虚拟裁剪，仅改返回值不落库。
+//
+// 背景：ListActivitySegments 用区间重叠判据（start_ts<dayEnd AND end_ts>dayStart），
+// 一条横跨数天的段（如 id=518：6-22 23:37→6-24 22:19 的 46h 巨怪段）会完整命中
+// 每一天。若直接交给 computeTimelineWindow，其端点会把可视窗口撑到 ~48h（见坑 #49），
+// 当天真实时刻在窗口里只占一小段、刻度被压成 2h 步进，视觉上像"空白无记录"。
+//
+// 本函数对每条段取其与 [start, end) 的交集：
+//   - 完全在范围内：原样保留。
+//   - 跨越范围边界：start/end clamp 到 [start, end)，只保留范围内部分。
+//   - 完全在范围外：丢弃（区间重叠查询理论上不会返回这类，防御性丢弃）。
+//
+// clamp 只动 StartTS/EndTS，AppName/State/WindowTitle/Summary 等沿用原段。
+// 跨天段在每天的查询里各自只看到属于自己的那一天部分，显示与统计都正确。
+func ClipSegmentsToRange(segs []ActivitySegment, start, end time.Time) []ActivitySegment {
+	if len(segs) == 0 {
+		return segs
+	}
+	out := make([]ActivitySegment, 0, len(segs))
+	for _, s := range segs {
+		// 与范围无交集（完全在范围之前或之后）——区间重叠查询不应返回，防御性跳过。
+		if !s.EndTS.After(start) || !s.StartTS.Before(end) {
+			continue
+		}
+		if s.StartTS.Before(start) {
+			s.StartTS = start
+		}
+		if s.EndTS.After(end) {
+			s.EndTS = end
+		}
+		// clamp 后若起止重合（边界恰好相切），不产生零宽段。
+		if !s.StartTS.Before(s.EndTS) {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+// ActiveSegmentsByRange 返回 [start, end) 范围内的活动段（已聚合 + 已裁剪）。
+// 这是概览页和时间轴页共用的唯一段列表生成入口，确保两边数据源一致。
+//
+// 三步流水线：
+//  1. ListActivitySegments（区间重叠查询，命中任何与范围有交集的段）
+//  2. AggregateSegments（合并同 app 连续段，消除采集层每 tick 的碎片段）
+//  3. ClipSegmentsToRange（按 [start, end) 边界裁剪，跨范围段只保留范围内部分）
+//
+// 调用方拿到段列表后，"工作时长"只是对 state==engaged/active 的段求 endTs-startTs 之和，
+// "段数"只是计数——简单加法，不会分叉。详见 RangeActiveMinutes / QueryTimeline。
+func (db *DB) ActiveSegmentsByRange(start, end time.Time) ([]ActivitySegment, error) {
+	segs, err := db.ListActivitySegments(start, end)
+	if err != nil {
+		return nil, err
+	}
+	segs = AggregateSegments(segs)
+	segs = ClipSegmentsToRange(segs, start, end)
+	return segs, nil
 }
 
 // TodayActivityMinutes 统计今日在白名单应用上的工作总分钟数(engaged+active)。
@@ -155,7 +256,7 @@ func (db *DB) ListActivitySegmentsByDate(day time.Time) ([]ActivitySegment, erro
 // 避免一条横跨数天的巨怪段（如 46h 段，见坑 #49）被反复计入每一天、或因旧判据
 // start_ts>=? AND end_ts<=? 漏掉跨天段。与 QueryTimeline 的 clipSegmentsToDay 语义一致。
 func (db *DB) TodayActivityMinutes() (int, int, error) {
-	start := startOfLocalDay(time.Now())
+	start := StartOfLocalDay(time.Now())
 	end := start.Add(24 * time.Hour)
 	dayStartUnix := toUnix(start)
 	dayEndUnix := toUnix(end)

@@ -17,7 +17,7 @@ func segAt(name string, start, end time.Time, state string) storage.ActivitySegm
 	}
 }
 
-// === aggregateSegments：时间连续性判据 ===
+// === AggregateSegments：时间连续性判据 ===
 
 func TestAggregateSegments_ContinuousSameApp_Merges(t *testing.T) {
 	// 同 app、时间连续（EndTS == 下一段 StartTS）→ 应合并为一段。
@@ -26,7 +26,7 @@ func TestAggregateSegments_ContinuousSameApp_Merges(t *testing.T) {
 		segAt("VSCode", base, base.Add(30*time.Minute), "engaged"),
 		segAt("VSCode", base.Add(30*time.Minute), base.Add(60*time.Minute), "idle"), // 连续：同 app
 	}
-	got := aggregateSegments(segs)
+	got := storage.AggregateSegments(segs)
 	if len(got) != 1 {
 		t.Fatalf("连续同 app 应合并为 1 段，实际 %d", len(got))
 	}
@@ -44,7 +44,7 @@ func TestAggregateSegments_GapSameApp_KeepsSeparate(t *testing.T) {
 		segAt("VSCode", base, base.Add(3*time.Hour), "engaged"),                  // 09:00-12:00
 		segAt("VSCode", base.Add(5*time.Hour), base.Add(7*time.Hour), "engaged"), // 14:00-16:00（12→14 离开）
 	}
-	got := aggregateSegments(segs)
+	got := storage.AggregateSegments(segs)
 	if len(got) != 2 {
 		t.Fatalf("中间有空档的同 app 两段不应合并，want 2 got %d", len(got))
 	}
@@ -63,14 +63,14 @@ func TestAggregateSegments_AppSwitch_AlwaysBreaks(t *testing.T) {
 		segAt("VSCode", base, base.Add(60*time.Minute), "engaged"),
 		segAt("Chrome", base.Add(60*time.Minute), base.Add(90*time.Minute), "engaged"),
 	}
-	got := aggregateSegments(segs)
+	got := storage.AggregateSegments(segs)
 	if len(got) != 2 {
 		t.Fatalf("切 app 应形成断点，want 2 got %d", len(got))
 	}
 }
 
 func TestAggregateSegments_Empty(t *testing.T) {
-	if got := aggregateSegments(nil); len(got) != 0 {
+	if got := storage.AggregateSegments(nil); len(got) != 0 {
 		t.Fatalf("空输入应返回空，got %d", len(got))
 	}
 }
@@ -181,12 +181,12 @@ func TestComputeTimelineWindow_HistoricalDayEndAtLastEvent(t *testing.T) {
 	}
 }
 
-// === clipSegmentsToDay：按本地午夜虚拟切分跨天段（修复巨怪段撑爆窗口，坑 #49）===
+// === ClipSegmentsToRange：按本地午夜虚拟切分跨天段（修复巨怪段撑爆窗口，坑 #49）===
 
 func TestClipSegmentsToDay_Empty(t *testing.T) {
 	day := time.Date(2026, 6, 23, 0, 0, 0, 0, time.UTC)
 	next := day.Add(24 * time.Hour)
-	if got := clipSegmentsToDay(nil, day, next); len(got) != 0 {
+	if got := storage.ClipSegmentsToRange(nil, day, next); len(got) != 0 {
 		t.Fatalf("空输入应返回空，got %d", len(got))
 	}
 }
@@ -196,7 +196,7 @@ func TestClipSegmentsToDay_WithinDay_Unchanged(t *testing.T) {
 	day := time.Date(2026, 6, 23, 0, 0, 0, 0, time.UTC)
 	next := day.Add(24 * time.Hour)
 	orig := segAt("VSCode", day.Add(9*time.Hour), day.Add(11*time.Hour), "engaged")
-	got := clipSegmentsToDay([]storage.ActivitySegment{orig}, day, next)
+	got := storage.ClipSegmentsToRange([]storage.ActivitySegment{orig}, day, next)
 	if len(got) != 1 {
 		t.Fatalf("当天内段应原样保留 1 条，got %d", len(got))
 	}
@@ -217,7 +217,7 @@ func TestClipSegmentsToDay_CrossDay_ClampsToEndpoints(t *testing.T) {
 		time.Date(2026, 6, 22, 23, 37, 0, 0, time.UTC),
 		time.Date(2026, 6, 24, 22, 19, 0, 0, time.UTC),
 		"engaged")
-	got := clipSegmentsToDay([]storage.ActivitySegment{monster}, day, next)
+	got := storage.ClipSegmentsToRange([]storage.ActivitySegment{monster}, day, next)
 	if len(got) != 1 {
 		t.Fatalf("跨天段应裁剪为 1 条当天段，got %d", len(got))
 	}
@@ -243,7 +243,7 @@ func TestClipSegmentsToDay_OutsideDay_Dropped(t *testing.T) {
 			time.Date(2026, 6, 24, 9, 0, 0, 0, time.UTC),
 			time.Date(2026, 6, 24, 18, 0, 0, 0, time.UTC), "engaged"),
 	}
-	if got := clipSegmentsToDay(outside, day, next); len(got) != 0 {
+	if got := storage.ClipSegmentsToRange(outside, day, next); len(got) != 0 {
 		t.Fatalf("完全在当天外的段应被丢弃，got %d", len(got))
 	}
 }
@@ -256,7 +256,7 @@ func TestClipSegmentsToDay_BoundaryTangent_DropsZeroWidth(t *testing.T) {
 		time.Date(2026, 6, 22, 9, 0, 0, 0, time.UTC),
 		day, // end 恰在 6-23 00:00
 		"engaged")
-	if got := clipSegmentsToDay([]storage.ActivitySegment{tangent}, day, next); len(got) != 0 {
+	if got := storage.ClipSegmentsToRange([]storage.ActivitySegment{tangent}, day, next); len(got) != 0 {
 		t.Fatalf("end 恰等于 dayStart 的段应丢弃（零宽），got %d", len(got))
 	}
 }
@@ -277,7 +277,7 @@ func TestClipSegmentsToDay_MultipleSegments(t *testing.T) {
 			time.Date(2026, 6, 23, 23, 0, 0, 0, time.UTC),
 			time.Date(2026, 6, 24, 3, 0, 0, 0, time.UTC), "active"),
 	}
-	got := clipSegmentsToDay(segs, day, next)
+	got := storage.ClipSegmentsToRange(segs, day, next)
 	if len(got) != 3 {
 		t.Fatalf("应保留 3 条（跨天/当天/跨天各 clamp 后非零宽），got %d", len(got))
 	}
@@ -293,14 +293,14 @@ func TestClipSegmentsToDay_MultipleSegments(t *testing.T) {
 // === 本地时区切日（修复跨午夜不切日的 bug）===
 
 func TestStartOfLocalDay_PreservesTimezone(t *testing.T) {
-	// startOfLocalDay 必须保留输入时区，且截断到当天 00:00。
+	// StartOfLocalDay 必须保留输入时区，且截断到当天 00:00。
 	// 用固定 +08:00 时区测试（不依赖机器时区），验证逻辑正确。
 	loc := time.FixedZone("CST", 8*3600)
 	t0 := time.Date(2026, 6, 21, 23, 59, 30, 0, loc) // 本地 6/21 23:59
-	got := startOfLocalDay(t0)
+	got := storage.StartOfLocalDay(t0)
 	want := time.Date(2026, 6, 21, 0, 0, 0, 0, loc) // 本地 6/21 00:00
 	if !got.Equal(want) {
-		t.Errorf("startOfLocalDay 应截断到本地当天 00:00，got %v want %v", got, want)
+		t.Errorf("StartOfLocalDay 应截断到本地当天 00:00，got %v want %v", got, want)
 	}
 	if got.Location() != loc {
 		t.Errorf("应保留时区，got %v", got.Location())

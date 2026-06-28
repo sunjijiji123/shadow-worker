@@ -2,6 +2,7 @@ package storage
 
 import (
 	"fmt"
+	"sort"
 	"time"
 )
 
@@ -17,11 +18,14 @@ import (
 // RangeBounds 把 (date, range) 解析成 [start, end) 的查询边界。
 // date 为零值时取今天;range 取 day/week/month,默认 day。
 // 周以周一为起点(ISO 周),月以 1 号为起点。
+//
+// 切日按本地时区零点（与 QueryTimeline / TodayActivityMinutes 一致），
+// 避免 UTC 切日导致 UTC+8 下凌晨 0-8 点的工作被算进前一天（坑 #44）。
 func RangeBounds(day time.Time, rng string) (time.Time, time.Time) {
 	if day.IsZero() {
-		day = time.Now().UTC()
+		day = time.Now()
 	}
-	day = day.UTC().Truncate(24 * time.Hour)
+	day = StartOfLocalDay(day)
 
 	switch rng {
 	case "week":
@@ -54,66 +58,70 @@ func PreviousRangeBounds(day time.Time, rng string) (time.Time, time.Time) {
 	}
 }
 
-// RangeActiveMinutes 统计时间范围内白名单应用的工作总分钟数(engaged+active)。
+// RangeActiveMinutes 统计时间范围内的工作总分钟数(engaged+active)。
+// 与时间轴 QueryTimeline 共用 ActiveSegmentsByRange 段列表生成逻辑，
+// 确保两边数字一致：区间重叠查询 + 聚合合并 + 按范围裁剪，再对 engaged/active 段求和。
 func (db *DB) RangeActiveMinutes(start, end time.Time) (int, error) {
-	var totalSec int64
-	err := db.QueryRow(
-		`SELECT COALESCE(SUM(end_ts - start_ts), 0)
-		 FROM activity_segments
-		 WHERE state IN ('engaged','active') AND start_ts >= ? AND end_ts <= ?`,
-		toUnix(start), toUnix(end),
-	).Scan(&totalSec)
+	segs, err := db.ActiveSegmentsByRange(start, end)
 	if err != nil {
-		return 0, fmt.Errorf("统计活跃时长失败: %w", err)
+		return 0, err
+	}
+	var totalSec int64
+	for _, s := range segs {
+		if s.State == "engaged" || s.State == "active" {
+			totalSec += int64(s.EndTS.Sub(s.StartTS) / time.Second)
+		}
 	}
 	return int(totalSec / 60), nil
 }
 
 // RangeActiveSegments 统计时间范围内的工作段数(engaged+active)。
+// 与 RangeActiveMinutes 共用 ActiveSegmentsByRange，段数即聚合裁剪后的 engaged/active 段计数。
 func (db *DB) RangeActiveSegments(start, end time.Time) (int, error) {
-	var n int64
-	err := db.QueryRow(
-		`SELECT COUNT(*) FROM activity_segments
-		 WHERE state IN ('engaged','active') AND start_ts >= ? AND end_ts <= ?`,
-		toUnix(start), toUnix(end),
-	).Scan(&n)
+	segs, err := db.ActiveSegmentsByRange(start, end)
 	if err != nil {
-		return 0, fmt.Errorf("统计活动段数失败: %w", err)
+		return 0, err
 	}
-	return int(n), nil
+	count := 0
+	for _, s := range segs {
+		if s.State == "engaged" || s.State == "active" {
+			count++
+		}
+	}
+	return count, nil
 }
 
 // InterruptCount 统计时间范围内的打断次数。
-// 定义:state 从 idle 恢复到非 idle(engaged 或 active)的次数。
-// engaged↔active 之间的切换不算打断(同属"在工作")。
-// 实现:取范围内按 start_ts 升序的相邻段,数 prev='idle' && curr∈{engaged,active} 的次数。
-// 注意:跨范围边界时,边界前一段不参与(只看范围内),简单实现。
-func (db *DB) InterruptCount(start, end time.Time) (int, error) {
-	rows, err := db.Query(
-		`SELECT state FROM activity_segments
-		 WHERE start_ts >= ? AND start_ts < ?
-		 ORDER BY start_ts`,
-		toUnix(start), toUnix(end),
-	)
+// 定义：段间空档 >= awayThresholdS = 一次中断（离开再回来工作）。
+//
+// 背景：旧实现数 prev.state=='idle' && curr.state∈{engaged,active} 的次数，
+// 但采集层的离开检测已改用真实键鼠空闲（inputIdleMs >= awayThresholdS）断段，
+// 段以 state=engaged 收尾留 DB 空档而非 idle 段（坑 #45）。帧差污染也让 state
+// 永远到不了 idle。故旧实现几乎恒返回 0——查询层与采集层语义脱节。
+//
+// 新实现与采集层对齐：用 ActiveSegmentsByRange 取聚合+裁剪后的段列表，
+// 遍历相邻 engaged/active 段，若空档（curr.start - prev.end）>= awayThresholdS
+// 则计一次中断。awayThresholdS 由调用方从 Collector.AwayThresholdS() 传入，
+// 与采集层断段阈值同源。
+func (db *DB) InterruptCount(start, end time.Time, awayThresholdS int) (int, error) {
+	segs, err := db.ActiveSegmentsByRange(start, end)
 	if err != nil {
-		return 0, fmt.Errorf("查询打断次数失败: %w", err)
+		return 0, err
 	}
-	defer rows.Close()
-
+	threshold := time.Duration(awayThresholdS) * time.Second
 	count := 0
-	prevState := ""
-	for rows.Next() {
-		var state string
-		if err := rows.Scan(&state); err != nil {
-			return 0, fmt.Errorf("扫描打断状态失败: %w", err)
+	var prevEnd time.Time
+	for _, s := range segs {
+		if s.State != "engaged" && s.State != "active" {
+			continue
 		}
-		if prevState == "idle" && (state == "active" || state == "engaged") {
-			count++
+		if !prevEnd.IsZero() {
+			gap := s.StartTS.Sub(prevEnd)
+			if gap >= threshold {
+				count++
+			}
 		}
-		prevState = state
-	}
-	if err := rows.Err(); nil != err {
-		return 0, fmt.Errorf("遍历打断状态失败: %w", err)
+		prevEnd = s.EndTS
 	}
 	return count, nil
 }
@@ -127,32 +135,25 @@ type AppMinutes struct {
 }
 
 func (db *DB) AppMinutesByRange(start, end time.Time) ([]AppMinutes, error) {
-	rows, err := db.Query(
-		`SELECT app_name, category, COALESCE(SUM(end_ts - start_ts), 0) AS sec
-		 FROM activity_segments
-		 WHERE state IN ('engaged','active') AND start_ts >= ? AND end_ts <= ?
-		 GROUP BY app_name, category
-		 ORDER BY sec DESC`,
-		toUnix(start), toUnix(end),
-	)
+	segs, err := db.ActiveSegmentsByRange(start, end)
 	if err != nil {
-		return nil, fmt.Errorf("按应用聚合时长失败: %w", err)
+		return nil, err
 	}
-	defer rows.Close()
-
-	var out []AppMinutes
-	for rows.Next() {
-		var am AppMinutes
-		var sec int64
-		if err := rows.Scan(&am.Name, &am.Category, &sec); err != nil {
-			return nil, fmt.Errorf("扫描应用时长失败: %w", err)
+	// 按 appName+category 分组求和（与 RangeActiveMinutes 共用段列表，确保数字一致）。
+	type key struct{ name, category string }
+	secByKey := make(map[key]int64)
+	for _, s := range segs {
+		if s.State == "engaged" || s.State == "active" {
+			k := key{s.AppName, s.Category}
+			secByKey[k] += int64(s.EndTS.Sub(s.StartTS) / time.Second)
 		}
-		am.Minutes = int(sec / 60)
-		out = append(out, am)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("遍历应用时长失败: %w", err)
+	out := make([]AppMinutes, 0, len(secByKey))
+	for k, sec := range secByKey {
+		out = append(out, AppMinutes{Name: k.name, Category: k.category, Minutes: int(sec / 60)})
 	}
+	// 按分钟降序。
+	sort.Slice(out, func(i, j int) bool { return out[i].Minutes > out[j].Minutes })
 	return out, nil
 }
 
@@ -162,37 +163,53 @@ func (db *DB) AppMinutesByRange(start, end time.Time) ([]AppMinutes, error) {
 // 用于首页"采集应用"卡片——需与设置页白名单列表数量一致。
 // 按分钟降序（有活动的在前，0 分钟的在后）。
 func (db *DB) WhitelistAppsWithMinutes(start, end time.Time) ([]AppMinutes, error) {
-	rows, err := db.Query(
-		`SELECT ac.name, ac.category, ac.path,
-		        COALESCE(SUM(seg.end_ts - seg.start_ts), 0) AS sec
-		 FROM app_categories ac
-		 LEFT JOIN activity_segments seg
-		   ON seg.app_path = ac.path
-		  AND seg.state IN ('engaged','active')
-		  AND seg.start_ts >= ? AND seg.end_ts <= ?
-		 GROUP BY ac.path, ac.name, ac.category
-		 ORDER BY sec DESC, ac.added_at`,
-		toUnix(start), toUnix(end),
+	// 1. 查白名单全部应用（保证返回数量与设置页白名单一致）。
+	wlRows, err := db.Query(
+		`SELECT name, category, path FROM app_categories ORDER BY added_at`,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("查询白名单应用时长失败: %w", err)
+		return nil, fmt.Errorf("查询白名单应用失败: %w", err)
 	}
-	defer rows.Close()
-
-	var out []AppMinutes
-	for rows.Next() {
-		var am AppMinutes
-		var path string
-		var sec int64
-		if err := rows.Scan(&am.Name, &am.Category, &path, &sec); err != nil {
-			return nil, fmt.Errorf("扫描白名单应用时长失败: %w", err)
+	type wlApp struct {
+		name, category, path string
+		addedOrder           int
+	}
+	var wlApps []wlApp
+	for i := 0; wlRows.Next(); i++ {
+		var a wlApp
+		if err := wlRows.Scan(&a.name, &a.category, &a.path); err != nil {
+			wlRows.Close()
+			return nil, fmt.Errorf("扫描白名单应用失败: %w", err)
 		}
-		am.Minutes = int(sec / 60)
-		out = append(out, am)
+		a.addedOrder = i
+		wlApps = append(wlApps, a)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("遍历白名单应用时长失败: %w", err)
+	wlRows.Close()
+
+	// 2. 取公共段列表（与 RangeActiveMinutes 共用，确保数字一致）。
+	segs, err := db.ActiveSegmentsByRange(start, end)
+	if err != nil {
+		return nil, err
 	}
+	// 按 appPath 分组求和（只算 engaged/active）。
+	secByPath := make(map[string]int64)
+	for _, s := range segs {
+		if s.State == "engaged" || s.State == "active" {
+			secByPath[s.AppPath] += int64(s.EndTS.Sub(s.StartTS) / time.Second)
+		}
+	}
+
+	// 3. 合并：白名单应用 + 对应时长（0 分钟的也保留）。
+	out := make([]AppMinutes, 0, len(wlApps))
+	for _, a := range wlApps {
+		out = append(out, AppMinutes{
+			Name:     a.name,
+			Category: a.category,
+			Minutes:  int(secByPath[a.path] / 60),
+		})
+	}
+	// 按分钟降序（有活动的在前，0 分钟的在后），同分钟按添加顺序。
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Minutes > out[j].Minutes })
 	return out, nil
 }
 
@@ -204,68 +221,73 @@ type CategoryMinutes struct {
 }
 
 func (db *DB) CategoryAggregate(start, end time.Time) ([]CategoryMinutes, error) {
-	rows, err := db.Query(
-		`SELECT category, COALESCE(SUM(end_ts - start_ts), 0) AS sec
-		 FROM activity_segments
-		 WHERE state IN ('engaged','active') AND start_ts >= ? AND end_ts <= ?
-		 GROUP BY category
-		 ORDER BY sec DESC`,
-		toUnix(start), toUnix(end),
-	)
+	segs, err := db.ActiveSegmentsByRange(start, end)
 	if err != nil {
-		return nil, fmt.Errorf("按类别聚合时长失败: %w", err)
+		return nil, err
 	}
-	defer rows.Close()
-
-	var out []CategoryMinutes
-	for rows.Next() {
-		var cm CategoryMinutes
-		var sec int64
-		if err := rows.Scan(&cm.Category, &sec); err != nil {
-			return nil, fmt.Errorf("扫描类别时长失败: %w", err)
+	// 按 category 分组求和（与 RangeActiveMinutes 共用段列表，确保数字一致）。
+	secByCat := make(map[string]int64)
+	for _, s := range segs {
+		if s.State == "engaged" || s.State == "active" {
+			secByCat[s.Category] += int64(s.EndTS.Sub(s.StartTS) / time.Second)
 		}
-		cm.Minutes = int(sec / 60)
-		out = append(out, cm)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("遍历类别时长失败: %w", err)
+	out := make([]CategoryMinutes, 0, len(secByCat))
+	for cat, sec := range secByCat {
+		out = append(out, CategoryMinutes{Category: cat, Minutes: int(sec / 60)})
 	}
+	// 按分钟降序。
+	sort.Slice(out, func(i, j int) bool { return out[i].Minutes > out[j].Minutes })
 	return out, nil
 }
 
 // DailyMinutes 返回 [start, end) 范围内每天的活跃分钟(热力图用)。
-// date 为 "YYYY-MM-DD"(UTC),minutes 为当日 active 总分钟。
+// date 为 "YYYY-MM-DD"(本地时区),minutes 为当日 active 总分钟。
+// 与 RangeActiveMinutes 共用段列表生成逻辑（AggregateSegments），
+// 再按本地午夜逐天裁剪求和，确保跨天段不重复计也不漏计。
 type DailyMinutesRow struct {
 	Date    string
 	Minutes int
 }
 
 func (db *DB) DailyMinutes(start, end time.Time) ([]DailyMinutesRow, error) {
-	rows, err := db.Query(
-		`SELECT date(start_ts, 'unixepoch') AS day, COALESCE(SUM(end_ts - start_ts), 0) AS sec
-		 FROM activity_segments
-		 WHERE state IN ('engaged','active') AND start_ts >= ? AND end_ts <= ?
-		 GROUP BY day
-		 ORDER BY day`,
-		toUnix(start), toUnix(end),
-	)
+	segs, err := db.ListActivitySegments(start, end)
 	if err != nil {
-		return nil, fmt.Errorf("按日聚合时长失败: %w", err)
+		return nil, err
 	}
-	defer rows.Close()
+	segs = AggregateSegments(segs)
 
-	var out []DailyMinutesRow
-	for rows.Next() {
-		var r DailyMinutesRow
-		var sec int64
-		if err := rows.Scan(&r.Date, &sec); err != nil {
-			return nil, fmt.Errorf("扫描每日时长失败: %w", err)
+	// 按本地天累加：每条段可能跨多天，逐天 clamp 求和。
+	daySeconds := make(map[string]int64)
+	for _, s := range segs {
+		if s.State != "engaged" && s.State != "active" {
+			continue
 		}
-		r.Minutes = int(sec / 60)
-		out = append(out, r)
+		dayStart := StartOfLocalDay(s.StartTS)
+		for dayStart.Before(s.EndTS) && dayStart.Before(end) {
+			dayEnd := dayStart.Add(24 * time.Hour)
+			// clamp 到 [dayStart, dayEnd) 与 [start, end) 的交集。
+			cs := s.StartTS
+			if cs.Before(dayStart) {
+				cs = dayStart
+			}
+			ce := s.EndTS
+			if ce.After(dayEnd) {
+				ce = dayEnd
+			}
+			if ce.After(cs) {
+				dayKey := dayStart.Format("2006-01-02")
+				daySeconds[dayKey] += int64(ce.Sub(cs) / time.Second)
+			}
+			dayStart = dayEnd
+		}
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("遍历每日时长失败: %w", err)
+
+	// 转为按日期升序的切片。
+	out := make([]DailyMinutesRow, 0, len(daySeconds))
+	for d := StartOfLocalDay(start); d.Before(end); d = d.Add(24 * time.Hour) {
+		key := d.Format("2006-01-02")
+		out = append(out, DailyMinutesRow{Date: key, Minutes: int(daySeconds[key] / 60)})
 	}
 	return out, nil
 }

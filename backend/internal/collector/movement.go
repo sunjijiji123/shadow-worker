@@ -182,6 +182,14 @@ func (c *Collector) IsRunning() bool {
 	return c.running
 }
 
+// AwayThresholdS 返回离开判定阈值（秒）。
+// 供概览页 InterruptCount 使用：段间空档 >= 该阈值 = 一次中断（离开再回来）。
+// 采集层的离开检测用此值断段（见 loop 的 inputIdleMs >= awayThresholdMs 判据），
+// 查询层用同值判定"中断"，确保两边语义一致。
+func (c *Collector) AwayThresholdS() int {
+	return c.cfg.AwayThresholdS
+}
+
 // CurrentApp 返回 collector 当前正在记录的白名单应用(名 + 类别 + 是否活跃)。
 // 注意：curApp 由 loop goroutine 写、本方法读，用 c.mu 保护。
 //

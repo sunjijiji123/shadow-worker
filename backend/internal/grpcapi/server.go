@@ -48,7 +48,11 @@ func (s *OverviewServer) GetOverview(ctx context.Context, req *GetOverviewReques
 	if err != nil {
 		return nil, err
 	}
-	interrupts, err := s.db.InterruptCount(start, end)
+	awayThreshold := 600 // 默认 10 分钟
+	if s.coll != nil {
+		awayThreshold = s.coll.AwayThresholdS()
+	}
+	interrupts, err := s.db.InterruptCount(start, end, awayThreshold)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +74,7 @@ func (s *OverviewServer) GetOverview(ctx context.Context, req *GetOverviewReques
 
 	// 上一周期数据(delta)
 	prevMinutes, _ := s.db.RangeActiveMinutes(prevStart, prevEnd)
-	prevInterrupts, _ := s.db.InterruptCount(prevStart, prevEnd)
+	prevInterrupts, _ := s.db.InterruptCount(prevStart, prevEnd, awayThreshold)
 
 	// 当前前台应用
 	activeApp, activeCategory := s.currentActiveApp()
@@ -101,11 +105,12 @@ func (s *OverviewServer) GetHeatmap(ctx context.Context, req *HeatmapRequest) (*
 		monthsBack = 3
 	}
 
-	// 从 N 个月前的 1 号开始,到今天结束
-	now := time.Now().UTC()
-	end := now.AddDate(0, 0, 1).Truncate(24 * time.Hour) // 明天 0 点(含今天)
+	// 从 N 个月前的 1 号开始,到今天结束（本地时区，与 RangeBounds 一致）
+	now := time.Now()
+	end := storage.StartOfLocalDay(now.AddDate(0, 0, 1)) // 明天本地 0 点（含今天）
 	start := now.AddDate(0, -monthsBack, 0)
-	start = start.AddDate(0, 0, -(int(start.Day()) - 1)).Truncate(24 * time.Hour) // 回到 1 号
+	start = start.AddDate(0, 0, -(int(start.Day()) - 1)) // 回到 1 号
+	start = storage.StartOfLocalDay(start)
 
 	daily, err := s.db.DailyMinutes(start, end)
 	if err != nil {
