@@ -18,7 +18,11 @@ import ShadowWorker
     maximumWidth: 1200
     minimumHeight: 720
     maximumHeight: 720
-    title: qsTr("Shadow Worker")
+    // Frameless: we draw our own TitleBar (menu + min + close).
+    // title stays "Shadow Worker" (NOT qsTr) so singleinstance.cpp's
+    // FindWindowW(nullptr, L"Shadow Worker") keeps working after i18n.
+    flags: Qt.Window | Qt.FramelessWindowHint
+    title: "Shadow Worker"
 
     // Close button (X) -> hide to tray, NOT quit. The app stays alive with the
     // tray icon present (QApplication::setQuitOnLastWindowClosed(false)).
@@ -74,8 +78,19 @@ import ShadowWorker
 
     property string currentView: "overview"
 
-    RowLayout {
+    // ColumnLayout: TitleBar on top (fixed 36px) + RowLayout fills the rest.
+    ColumnLayout {
         anchors.fill: parent
+        spacing: 0
+
+        TitleBar {
+            window: mainWindow
+            Layout.fillWidth: true
+        }
+
+    RowLayout {
+        Layout.fillWidth: true
+        Layout.fillHeight: true
         spacing: 0
 
         // ==================== Sidebar ====================
@@ -202,6 +217,7 @@ import ShadowWorker
             }
         }
     }
+    }  // ColumnLayout
 
     // global toast helper for child pages
     // type: optional, "success" (default) | "error" | "warning"
