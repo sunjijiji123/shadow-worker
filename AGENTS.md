@@ -4,6 +4,21 @@ Shadow Worker 是一个本地行为跟踪桌面应用：Go 后端（gRPC + SQLit
 
 ## 构建命令
 
+### 统一构建脚本（推荐入口）
+
+```cmd
+scripts\build.bat backend [clean]   :: Go 后端（whisper CGO）
+scripts\build.bat client [clean]    :: Qt 客户端（Debug）
+scripts\build.bat all [clean]       :: 后端 + 客户端
+scripts\build.bat run [clean]       :: 构建全部 + 启动后端 + 客户端
+scripts\build.bat package           :: Release 构建 + windeployqt + Inno Setup 安装包
+scripts\build.bat clean             :: 清理所有构建产物
+```
+
+`build.bat` 内部已处理 vcvars64 + Qt + Go 环境初始化、版本号自动生成（`VERSION` 文件）、whisper CGO patch、windeployqt（含 `--qmldir`）。**所有构建/编译/打包任务都应通过此脚本执行**，不要手动拼 vcvars64 + cmake 命令（易踩坑 #41 的 cmd 吞输出 / PowerShell AMSI 崩溃问题）。
+
+注意：`build.bat` 是 `.bat` 文件，在 PowerShell 终端里直接 `.\scripts\build.bat client` 即可运行（PowerShell 能正确执行 .bat）。
+
 ### Go 后端（含 whisper.cpp CGO）
 
 ```cmd
