@@ -20,6 +20,7 @@
 #include "utils/autostart.h"
 #include "utils/backendlauncher.h"
 #include "utils/singleinstance.h"
+#include "i18n/translator.h"
 #include "viewmodels/overview_vm.h"
 #include "viewmodels/settings_vm.h"
 #include "viewmodels/timeline_vm.h"
@@ -117,9 +118,16 @@ int main(int argc, char *argv[]) {
     VoiceClient voiceClient;
     voiceClient.setChannel(channel);
     TrayController trayController;
+    Translator translator;
 
     logMsg("[main] creating engine");
     QQmlApplicationEngine engine;
+
+    // Bind the QML engine to the translator so live language switches can
+    // trigger retranslate(). Must be called BEFORE engine.load() so that
+    // the initial language (read from QSettings in Translator's ctor) is
+    // already applied when QML is first evaluated.
+    translator.setEngine(&engine);
 
     // Read version from VERSION file (exe's directory).
     // Falls back to "unknown" if missing.
@@ -150,6 +158,7 @@ int main(int argc, char *argv[]) {
     engine.rootContext()->setContextProperty("asrClient", &asrClient);
     engine.rootContext()->setContextProperty("voiceClient", &voiceClient);
     engine.rootContext()->setContextProperty("trayController", &trayController);
+    engine.rootContext()->setContextProperty("translator", &translator);
 
     // Resolve the backend executable path for the MCP config snippet.
     // Expose both the chosen path and a "ready" flag so the System page can

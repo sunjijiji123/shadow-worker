@@ -51,6 +51,7 @@ find_package(Qt6 REQUIRED COMPONENTS
     Grpc             # gRPC 客户端
     Protobuf         # protobuf 消息
     ProtobufTools    # qt_add_protobuf 函数
+    LinguistTools    # qt_add_translations / lupdate / lrelease
 )
 
 qt_standard_project_setup(REQUIRES 6.5)
@@ -168,6 +169,8 @@ qt_add_executable(shadow-worker-client
     src/utils/singleinstance.cpp
     src/utils/backendlauncher.h
     src/utils/backendlauncher.cpp
+    src/i18n/translator.h
+    src/i18n/translator.cpp
     src/app.rc
 )
 
@@ -206,6 +209,7 @@ target_include_directories(shadow-worker-client PRIVATE
     ${CMAKE_SOURCE_DIR}/src/ui
     ${CMAKE_SOURCE_DIR}/src/asr
     ${CMAKE_SOURCE_DIR}/src/utils
+    ${CMAKE_SOURCE_DIR}/src/i18n
 )
 
 # Declare Theme.qml as a singleton type (Qt6 way; no `pragma singleton` in the file).
@@ -245,6 +249,7 @@ qt_add_qml_module(shadow-worker-client
         qml/components/PromptItem.qml
         qml/components/KeyCap.qml
         qml/components/Badge.qml
+        qml/components/TitleBar.qml
         qml/components/RecordingBubble.qml
         qml/components/ResultBubble.qml
         qml/RecordingWindow.qml
@@ -270,6 +275,64 @@ qt_add_qml_module(shadow-worker-client
         qml/icons/polish_active.svg
     RESOURCES
         assets/app.ico
+)
+
+# ============================================================
+# i18n: translations (.ts source -> .qm compiled, embedded in qrc)
+# ============================================================
+# Step 1: qt_add_translations runs lupdate (scan qsTr) + lrelease (.ts->.qm).
+#         QM_FILES_OUTPUT_VARIABLE gives us the list of generated .qm paths.
+# Step 2: qt_add_resources embeds the .qm into the binary's qrc.
+#         BASE is set to the binary dir so absolute .qm paths are resolved
+#         to relative paths (qt_add_resources requires relative paths).
+# Source strings are English; "en" needs no .qm (source shows through).
+# Translator.cpp loads :/i18n/shadowworker_zh_CN.qm at runtime.
+qt_add_translations(shadow-worker-client
+    TS_FILES
+        ${CMAKE_SOURCE_DIR}/i18n/shadowworker_zh_CN.ts
+    SOURCES
+        ${CMAKE_SOURCE_DIR}/qml/main.qml
+        ${CMAKE_SOURCE_DIR}/qml/RecordingWindow.qml
+        ${CMAKE_SOURCE_DIR}/qml/theme/Theme.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/Card.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/Toggle.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/Radio.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/Chip.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/Button.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/StatCard.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/Toast.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/SaveBar.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/PlaceholderLabel.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/HeatmapGrid.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/RankBar.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/QuickSwitchRow.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/DatePicker.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/TimelineTrack.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/TextField.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/SelectBox.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/ModelChipGroup.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/VolumeBar.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/MicTestButton.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/AddModelDialog.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/AddAppDialog.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/ConfirmDialog.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/TextArea.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/PromptItem.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/KeyCap.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/Badge.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/TitleBar.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/RecordingBubble.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/ResultBubble.qml
+        ${CMAKE_SOURCE_DIR}/qml/pages/OverviewPage.qml
+        ${CMAKE_SOURCE_DIR}/qml/pages/TimelinePage.qml
+        ${CMAKE_SOURCE_DIR}/qml/pages/SettingsPage.qml
+        ${CMAKE_SOURCE_DIR}/qml/pages/SystemPage.qml
+    QM_FILES_OUTPUT_VARIABLE QM_FILES
+)
+qt_add_resources(shadow-worker-client "i18n"
+    PREFIX "/i18n"
+    BASE "${CMAKE_CURRENT_BINARY_DIR}"
+    FILES ${QM_FILES}
 )
 
 # Windows GUI subsystem: hide console in Release, keep it in Debug.
