@@ -197,22 +197,24 @@ Dialog {
         }
     }
 
-    // reset fields before showing. onAboutToShow 在显示前触发，
-    // 但部分子控件此刻可能尚未完全就绪（AGENTS.md 坑 #4：Component.onCompleted
-    // 里同步改子组件会触发 ASSERT）。用 Qt.callLater 延迟到下一事件循环，
-    // 确保清空操作在弹窗与子控件都 ready 后执行，彻底清掉上次残留。
-    onAboutToShow: {
-        // 先同步清掉本地暂存（这些是普通 property，无副作用，立即生效）
+    // reset fields when fully opened (not AboutToShow). onOpened 在弹窗完全显示
+    // 后触发，此时所有子控件已就绪，可同步清空，不需要 Qt.callLater。
+    //
+    // 【坑 #2 变体】TextField 的 text 属性有 `text: root.text` 绑定，onTextEdited
+    // 不回写 root.text。若在 AboutToShow + callLater 清空，存在时序竞态：
+    // providerSelect 默认 index=0 会在某些路径触发预设填充，把厂商名写进
+    // nameField，而 callLater 清空可能早于或晚于该填充，导致残留。
+    // 改用 onOpened 同步清空所有字段 + 重置 providerSelect，确保每次都是全新状态。
+    onOpened: {
+        // 清空本地暂存
         root.modelName = ""
         root.customName = ""
         root.providerIndex = 0
         root.deployIndex = 0
-        // 子控件文本/index 的清空延迟到下一帧，避免在组件未就绪阶段赋值被吞
-        Qt.callLater(function() {
-            if (nameField) nameField.text = ""
-            if (customField) customField.text = ""
-            if (providerSelect) providerSelect.currentIndex = 0
-            if (deploySelect) deploySelect.currentIndex = 0
-        })
+        // 同步清空子控件（onOpened 时子控件已就绪）
+        nameField.text = ""
+        customField.text = ""
+        providerSelect.currentIndex = 0
+        deploySelect.currentIndex = 0
     }
 }
