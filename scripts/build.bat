@@ -45,32 +45,45 @@ REM ============================================================
 REM Auto-generate version: YYYY.MM.DD.NN (NN = daily sequence)
 REM Reads existing VERSION, bumps sequence if same day, else resets to 01.
 REM
-REM 已知局限：VERSION 文件既进 git 又是构建产物。git checkout/commit/pull
-REM 会把工作区 VERSION 覆盖回 git 里的旧值，导致"跨 git 操作后序号重置"。
-REM 同一天连续打包（中间无 git 操作）可稳定自增。这是保留 git 跟踪的固有取舍。
+REM Known limitation: VERSION is both a build artifact and git-tracked.
+REM git checkout/commit/pull overwrites the working-copy VERSION with the
+REM git value, so the sequence "resets" after a git op. Consecutive builds
+REM on the same day (without git ops in between) increment reliably.
 REM
-REM CRLF 健壮性修复：echo 写 CRLF，set /p 读入的 OLD_VER 末尾带一个 \r。
-REM 旧代码用 %OLD_VER:~0,10% 取日期碰巧 OK，但序号切片 %OLD_VER:~11,2% 在
-REM 某些长度异常时会吃到 \r。这里改为用确定性方法跳过 \r：
-REM   VERSION 格式固定 "YYYY.MM.DD.NN" = 13 个可见字符，\r 在第 14 字节。
-REM   故 OLD_DATE=OLD_VER:~0,10、OLD_SEQ=OLD_VER:~11,2 严格落在可见字符区，
-REM   \r 永远不会被切进来。无需任何 CR 剥离 trick。
+REM CRLF robustness: echo writes CRLF, so set /p reads OLD_VER with a
+REM trailing \r. VERSION is always "YYYY.MM.DD.NN" = 13 visible chars, and
+REM \r sits at byte 14, so slicing OLD_DATE=OLD_VER:~0,10 and
+REM OLD_SEQ=OLD_VER:~11,2 never touches \r.
+REM
+REM Date source (pitfall): an earlier version used `wmic os get localdatetime`,
+REM but (1) wmic is deprecated on Win11 24H2+, and (2) non-interactive
+REM terminals invoked via PowerShell swallow wmic output, leaving LDT empty.
+REM %LDT:~0,4% on an empty var evaluates to the literal "~0,4", producing a
+REM garbage version like "~0,4.~4,2.~6,2.01" (once shipped as
+REM ShadowWorker-~0,4.~4,2.~6,2.01-setup.exe). Switched to PowerShell
+REM Get-Date -Format (locale-independent, stable, not swallowed). Costs ~200ms.
+REM Fallback to %DATE% (locale-dependent) when PowerShell is unavailable.
+REM NOTE: keep all comments ASCII-only. This file is UTF-8 on disk but cmd.exe
+REM parses it as the system ANSI codepage (GBK on zh-CN); non-ASCII bytes can
+REM decode to characters containing ")" that break if-block paren balancing.
 REM ============================================================
 :gen_version
 set "VERSION_FILE=%ROOT%\VERSION"
-REM Get today's date parts via wmic (locale-independent)
-for /f "tokens=2 delims==" %%a in ('wmic os get localdatetime /value 2^>nul ^| find "="') do set "LDT=%%a"
-set "TODAY_Y=%LDT:~0,4%"
-set "TODAY_M=%LDT:~4,2%"
-set "TODAY_D=%LDT:~6,2%"
-set "TODAY=%TODAY_Y%.%TODAY_M%.%TODAY_D%"
 
-REM Read existing version（set /p 读首行；echo 写的 CRLF 使末尾带 \r）
+REM Get today via PowerShell (locale-independent). Fallback to %DATE%.
+set "TODAY="
+for /f "delims=" %%d in ('powershell -NoProfile -Command "Get-Date -Format yyyy.MM.dd" 2^>nul') do set "TODAY=%%d"
+if "%TODAY%"=="" (
+    REM Fallback: %DATE% is locale-dependent; only a last resort.
+    set "TODAY=%DATE:/=.%"
+)
+
+REM Read existing version (set /p reads one line; trailing \r from CRLF).
 set "OLD_VER="
 if exist "%VERSION_FILE%" set /p OLD_VER=<"%VERSION_FILE%"
 
-REM Parse old date (前 10 字符 YYYY.MM.DD) 与 sequence (第 12-13 字符 NN)。
-REM 严格切片，\r 在第 14 字节不参与。
+REM Parse old date (first 10 chars YYYY.MM.DD) and sequence (chars 12-13 NN).
+REM Strict slicing; \r at byte 14 is never included.
 set "OLD_DATE="
 set "OLD_SEQ=00"
 if not "%OLD_VER%"=="" (
@@ -78,19 +91,25 @@ if not "%OLD_VER%"=="" (
     set "OLD_SEQ=%OLD_VER:~11,2%"
 )
 
-REM Determine new sequence and write VERSION
-REM Need enabledelayedexpansion for the arithmetic + zero-pad
+REM Determine new sequence and write VERSION.
+REM Need enabledelayedexpansion for arithmetic + zero-pad.
 setlocal enabledelayedexpansion
+REM Abort if TODAY is still empty (PowerShell and %DATE% both failed) to
+REM avoid writing a garbage version.
+if "!TODAY!"=="" (
+    echo [ERROR] Cannot determine current date ^(PowerShell and %%DATE%% both failed^), aborting.
+    endlocal
+    exit /b 1
+)
 set "NEW_SEQ=01"
-if "!OLD_DATE!"=="%TODAY%" (
+if "!OLD_DATE!"=="!TODAY!" (
     set /a "NEW_SEQ=!OLD_SEQ!+1"
     if !NEW_SEQ! LSS 10 set "NEW_SEQ=0!NEW_SEQ!"
 )
-set "NEW_VER=%TODAY%.!NEW_SEQ!"
-REM echo 写 CRLF（VERSION 末尾带 \r\n）。读取端已做 \r 兼容（见上方切片注释）。
-REM 若需 git 存 LF 不报 CRLF 差异，配 .gitattributes 对 VERSION 强制 eol=lf。
+set "NEW_VER=!TODAY!.!NEW_SEQ!"
+REM echo writes CRLF (trailing \r\n in VERSION). Reader side handles \r.
 echo !NEW_VER!> "%VERSION_FILE%"
-REM Export values past endlocal
+REM Export values past endlocal.
 for /f "tokens=*" %%v in ("!NEW_VER!") do (
     endlocal & set "APP_VERSION=%%v"
 )
