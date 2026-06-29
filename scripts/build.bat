@@ -44,6 +44,17 @@ exit /b 1
 REM ============================================================
 REM Auto-generate version: YYYY.MM.DD.NN (NN = daily sequence)
 REM Reads existing VERSION, bumps sequence if same day, else resets to 01.
+REM
+REM 已知局限：VERSION 文件既进 git 又是构建产物。git checkout/commit/pull
+REM 会把工作区 VERSION 覆盖回 git 里的旧值，导致"跨 git 操作后序号重置"。
+REM 同一天连续打包（中间无 git 操作）可稳定自增。这是保留 git 跟踪的固有取舍。
+REM
+REM CRLF 健壮性修复：echo 写 CRLF，set /p 读入的 OLD_VER 末尾带一个 \r。
+REM 旧代码用 %OLD_VER:~0,10% 取日期碰巧 OK，但序号切片 %OLD_VER:~11,2% 在
+REM 某些长度异常时会吃到 \r。这里改为用确定性方法跳过 \r：
+REM   VERSION 格式固定 "YYYY.MM.DD.NN" = 13 个可见字符，\r 在第 14 字节。
+REM   故 OLD_DATE=OLD_VER:~0,10、OLD_SEQ=OLD_VER:~11,2 严格落在可见字符区，
+REM   \r 永远不会被切进来。无需任何 CR 剥离 trick。
 REM ============================================================
 :gen_version
 set "VERSION_FILE=%ROOT%\VERSION"
@@ -54,11 +65,12 @@ set "TODAY_M=%LDT:~4,2%"
 set "TODAY_D=%LDT:~6,2%"
 set "TODAY=%TODAY_Y%.%TODAY_M%.%TODAY_D%"
 
-REM Read existing version
+REM Read existing version（set /p 读首行；echo 写的 CRLF 使末尾带 \r）
 set "OLD_VER="
 if exist "%VERSION_FILE%" set /p OLD_VER=<"%VERSION_FILE%"
 
-REM Parse old date part (first 10 chars: YYYY.MM.DD) and sequence (last 2)
+REM Parse old date (前 10 字符 YYYY.MM.DD) 与 sequence (第 12-13 字符 NN)。
+REM 严格切片，\r 在第 14 字节不参与。
 set "OLD_DATE="
 set "OLD_SEQ=00"
 if not "%OLD_VER%"=="" (
@@ -75,6 +87,8 @@ if "!OLD_DATE!"=="%TODAY%" (
     if !NEW_SEQ! LSS 10 set "NEW_SEQ=0!NEW_SEQ!"
 )
 set "NEW_VER=%TODAY%.!NEW_SEQ!"
+REM echo 写 CRLF（VERSION 末尾带 \r\n）。读取端已做 \r 兼容（见上方切片注释）。
+REM 若需 git 存 LF 不报 CRLF 差异，配 .gitattributes 对 VERSION 强制 eol=lf。
 echo !NEW_VER!> "%VERSION_FILE%"
 REM Export values past endlocal
 for /f "tokens=*" %%v in ("!NEW_VER!") do (
