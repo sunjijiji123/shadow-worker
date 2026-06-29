@@ -18,7 +18,8 @@ import ShadowWorker
     maximumWidth: 1200
     minimumHeight: 720
     maximumHeight: 720
-    // Frameless: we draw our own TitleBar (menu + min + close).
+    // Frameless: we draw our own TitleBar (min + close).
+    // Language switching now lives in SystemPage → Interface Language card.
     // title stays "Shadow Worker" (NOT qsTr) so singleinstance.cpp's
     // FindWindowW(nullptr, L"Shadow Worker") keeps working after i18n.
     flags: Qt.Window | Qt.FramelessWindowHint

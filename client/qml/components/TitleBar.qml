@@ -1,16 +1,15 @@
 // TitleBar.qml - custom frameless title bar for the main window.
 //
-// Layout:   Shadow Worker                              [≡] [—] [×]
+// Layout:   Shadow Worker                              [—] [×]
 //
 // - Center: app brand name (NOT translated — brand identity + keeps
 //           FindWindowW("Shadow Worker") in singleinstance.cpp working).
-// - Right:  menu (≡) / minimize (—) / close (×) buttons.
+// - Right:  minimize (—) / close (×) buttons.
 // - The whole bar is draggable: pressing empty space calls
 //   mainWindow.startSystemMove() for native frameless drag.
 //
-// Language names are ALWAYS shown in their own script:
-//   "简体中文" never becomes "Simplified Chinese"
-//   "English"  never becomes "英语"
+// NOTE: 语言切换原在此处的 ≡ 菜单里，现已迁至 系统设置页 → 界面语言 卡片
+//   （SystemPage.qml）。该菜单连同 ≡ 按钮一并移除，标题栏回归极简。
 
 import QtQuick
 import QtQuick.Controls
@@ -59,53 +58,13 @@ Rectangle {
         font.weight: Font.Medium
     }
 
-    // ==================== Right: menu / min / close ====================
+    // ==================== Right: min / close ====================
     Row {
         id: rightCluster
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         spacing: 0
-
-        // ---- menu button (≡) ----
-        Rectangle {
-            id: menuBtn
-            height: titleBar.barHeight
-            width: 46
-            color: menuBtnMa.containsMouse ? "#3D3D3D" : "transparent"
-            Behavior on color { ColorAnimation { duration: 80 } }
-
-            Canvas {
-                anchors.centerIn: parent
-                width: 16; height: 16
-                onPaint: {
-                    var ctx = getContext("2d")
-                    ctx.reset()
-                    ctx.strokeStyle = menuBtnMa.containsMouse ? Theme.ink : Theme.muted
-                    ctx.lineWidth = 1.5
-                    ctx.lineCap = "round"
-                    for (var i = 0; i < 3; i++) {
-                        var y = 4 + i * 5
-                        ctx.beginPath()
-                        ctx.moveTo(2, y)
-                        ctx.lineTo(14, y)
-                        ctx.stroke()
-                    }
-                }
-            }
-            MouseArea {
-                id: menuBtnMa
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                hoverEnabled: true
-                onClicked: {
-                    // menuBtn.x is relative to its Row parent; map to titleBar
-                    // so popup() positions correctly (Menu's parent is titleBar).
-                    var p = menuBtn.mapToItem(titleBar, 0, menuBtn.height)
-                    rootMenu.popup(p.x, p.y)
-                }
-            }
-        }
 
         // ---- minimize button (—) ----
         Rectangle {
@@ -172,37 +131,6 @@ Rectangle {
                 cursorShape: Qt.PointingHandCursor
                 hoverEnabled: true
                 onClicked: if (window) window.hide()
-            }
-        }
-    }
-
-    // ==================== Language Menu (VS Code style) ====================
-    // Uses palette for dark theming. This is the approach that worked
-    // in the first iteration — keep Menu inside TitleBar, use popup()
-    // with coords relative to titleBar.
-    Menu {
-        id: rootMenu
-        palette.window: "#252526"
-        palette.windowText: "#CCCCCC"
-        palette.mid: "#252526"
-        palette.text: "#CCCCCC"
-        palette.highlightedText: "#FFFFFF"
-        palette.highlight: "#094771"
-
-        Menu {
-            title: qsTr("Language")
-
-            MenuItem {
-                text: "简体中文"
-                checkable: true
-                checked: translator ? translator.currentLanguage === "zh_CN" : false
-                onTriggered: if (translator) translator.setLanguage("zh_CN")
-            }
-            MenuItem {
-                text: "English"
-                checkable: true
-                checked: translator ? translator.currentLanguage === "en" : false
-                onTriggered: if (translator) translator.setLanguage("en")
             }
         }
     }
