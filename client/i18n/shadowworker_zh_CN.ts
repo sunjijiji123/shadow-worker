@@ -1131,22 +1131,27 @@
 <context>
     <name>SystemPage</name>
     <message>
-        <location filename="../qml/pages/SystemPage.qml" line="22" />
-        <source>Get the worklog (segments + events) for a given date, for daily/weekly reports</source>
-        <translation>获取指定日期的工作日志（段 + 事件），用于日报/周报</translation>
+        <location filename="../qml/pages/SystemPage.qml" line="26" />
+        <source>One-day worklog summary by morning/afternoon/evening. Small payload (~1KB), best for an overview before drilling down</source>
+        <translation>按上午/下午/晚上聚合的单日工作日志摘要。体量小（约 1KB），适合在深入查看前先了解全局</translation>
     </message>
     <message>
-        <location filename="../qml/pages/SystemPage.qml" line="23" />
+        <location filename="../qml/pages/SystemPage.qml" line="27" />
+        <source>Detailed worklog (segments + events) for a date. Segments are paginated (default 50); events return voice only unless event_types is set</source>
+        <translation>指定日期的详细工作日志（段 + 事件）。段分页返回（默认 50 条）；事件默认只返回语音，可用 event_types 指定其它类型</translation>
+    </message>
+    <message>
+        <location filename="../qml/pages/SystemPage.qml" line="28" />
         <source>Aggregate active minutes by category or app for a given day</source>
         <translation>按类别或应用聚合指定日期的活动时长</translation>
     </message>
     <message>
-        <location filename="../qml/pages/SystemPage.qml" line="24" />
+        <location filename="../qml/pages/SystemPage.qml" line="29" />
         <source>Search voice / VLM / screenshot events by keyword</source>
         <translation>按关键词搜索语音 / VLM / 截图事件</translation>
     </message>
     <message>
-        <location filename="../qml/pages/SystemPage.qml" line="25" />
+        <location filename="../qml/pages/SystemPage.qml" line="30" />
         <source>List whitelisted apps and today's active minutes</source>
         <translation>列出白名单应用及今日活动时长</translation>
     </message>
@@ -1164,6 +1169,21 @@
         <location filename="../qml/pages/SystemPage.qml" line="95" />
         <source>About</source>
         <translation>关于</translation>
+    </message>
+    <message>
+        <location filename="../qml/pages/SystemPage.qml" line="105" />
+        <source>Interface Language</source>
+        <translation>界面语言</translation>
+    </message>
+    <message>
+        <location filename="../qml/pages/SystemPage.qml" line="106" />
+        <source>Switch the interface display language. Takes effect immediately.</source>
+        <translation>切换界面显示语言。更改后立即生效。</translation>
+    </message>
+    <message>
+        <location filename="../qml/pages/SystemPage.qml" line="125" />
+        <source>Tray menu, recording overlays, and other UI also switch accordingly.</source>
+        <translation>系统托盘菜单、录音浮窗等界面也会随之切换。</translation>
     </message>
     <message>
         <location filename="../qml/pages/SystemPage.qml" line="117" />

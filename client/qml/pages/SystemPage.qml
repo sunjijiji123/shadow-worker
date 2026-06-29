@@ -18,11 +18,15 @@ Item {
     property string activeMcpTab: "claude"   // claude | cursor | raw
 
     // ---- MCP tools list ----
+    // 与后端 server.go 注册的工具保持同步（名称 + 描述精简版）。
+    // 注意：这是展示用的静态列表，实际工具定义由后端 --mcp 进程通过
+    // tools/list 协议动态暴露。新增/修改后端工具时记得同步这里。
     property var mcpTools: [
-        { name: "get_worklog",    desc: qsTr("Get the worklog (segments + events) for a given date, for daily/weekly reports") },
-        { name: "get_summary",    desc: qsTr("Aggregate active minutes by category or app for a given day") },
-        { name: "search_events",  desc: qsTr("Search voice / VLM / screenshot events by keyword") },
-        { name: "list_apps",      desc: qsTr("List whitelisted apps and today's active minutes") }
+        { name: "get_worklog_summary", desc: qsTr("One-day worklog summary by morning/afternoon/evening. Small payload (~1KB), best for an overview before drilling down") },
+        { name: "get_worklog",          desc: qsTr("Detailed worklog (segments + events) for a date. Segments are paginated (default 50); events return voice only unless event_types is set") },
+        { name: "get_summary",          desc: qsTr("Aggregate active minutes by category or app for a given day") },
+        { name: "search_events",        desc: qsTr("Search voice / VLM / screenshot events by keyword") },
+        { name: "list_apps",            desc: qsTr("List whitelisted apps and today's active minutes") }
     ]
 
     // ---- MCP config snippets (per tab) ----
@@ -30,16 +34,33 @@ Item {
     // actual backend exe location). Empty string means "not found".
     readonly property string mcpResolvedExePath: mcpExePath !== undefined ? mcpExePath : ""
     readonly property bool mcpResolvedReady: mcpReady !== undefined ? mcpReady : false
+
+    // mcpCommandValue 把 exe 路径转义成 JSON "command" 字段的字符串值。
+    // 三个转换：① 正斜杠统一成反斜杠（Qt 的 QDir::absolutePath 在 Windows 返回
+    // 正斜杠，但 Windows 工具/客户端对反斜杠兼容性更好）；② 反斜杠转义成 JSON
+    // 的 \\；③ 路径含空格时把整个值用转义引号 \"...\" 包起来。③ 是兼容性补丁：
+    // 部分 MCP 客户端（TRAE 等）把 command 字段当 shell 命令执行而非 spawn(argv)，
+    // 对含空格的 Windows 路径（如 "C:\Program Files (x86)\..."）不加引号会在
+    // 首个空格截断，报 "'C:\Program' 不是内部或外部命令"。加引号后两种实现都能
+    // 正确解析。无空格路径不加引号，保持原样（不影响已有无空格路径的用户/开发版）。
+    function mcpCommandValue() {
+        var native = root.mcpResolvedExePath.replace(/\//g, "\\")
+        var p = native.replace(/\\/g, "\\\\")
+        if (native.indexOf(" ") >= 0) {
+            return '\\"' + p + '\\"'
+        }
+        return p
+    }
     readonly property string mcpClaudeConfig: {
-        var p = root.mcpResolvedExePath.replace(/\\/g, "\\\\")
+        var p = mcpCommandValue()
         return '{\n  "mcpServers": {\n    "shadow-worker": {\n      "command": "' + p + '",\n      "args": ["--mcp"]\n    }\n  }\n}'
     }
     readonly property string mcpCursorConfig: {
-        var p = root.mcpResolvedExePath.replace(/\\/g, "\\\\")
+        var p = mcpCommandValue()
         return '{\n  "mcp.servers": {\n    "shadow-worker": {\n      "command": "' + p + '",\n      "args": ["--mcp"]\n    }\n  }\n}'
     }
     readonly property string mcpRawConfig: {
-        var p = root.mcpResolvedExePath.replace(/\\/g, "\\\\")
+        var p = mcpCommandValue()
         return '{\n  "command": "' + p + '",\n  "args": ["--mcp"]\n}'
     }
     function currentMcpConfig() {
@@ -110,7 +131,48 @@ Item {
             }
 
             // ============================================================
-            // Card 2: Launch at Startup
+            // Card 2: Interface Language
+            // （从 TitleBar 的 ≡ 菜单迁入。语言名按本族文字呈现，不做翻译——
+            //   “简体中文”永远是“简体中文”，“English”永远是“English”，
+            //   与 TitleBar.qml 旧实现约定一致。切换后 translator.retranslate()
+            //   实时刷新所有 qsTr()，无需重启。）
+            // ============================================================
+            Card {
+                Layout.fillWidth: true
+                title: qsTr("Interface Language")
+                description: qsTr("Switch the interface display language. Takes effect immediately.")
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    // NOTE: text 不走 qsTr —— 语言名恒为本族文字。
+                    Radio {
+                        text: "简体中文"
+                        // translator.currentLanguage 变化时 checked 自动刷新
+                        // （currentLanguageChanged NOTIFY 已绑定，坑 #42 范式）。
+                        checked: translator ? translator.currentLanguage === "zh_CN" : false
+                        onClicked: if (translator) translator.setLanguage("zh_CN")
+                    }
+                    Radio {
+                        text: "English"
+                        checked: translator ? translator.currentLanguage === "en" : false
+                        onClicked: if (translator) translator.setLanguage("en")
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.topMargin: 4
+                        text: qsTr("Tray menu, recording overlays, and other UI also switch accordingly.")
+                        color: Theme.accent
+                        font.pixelSize: Theme.fontSmall
+                        wrapMode: Text.WordWrap
+                    }
+                }
+            }
+
+            // ============================================================
+            // Card 3: Launch at Startup
             // ============================================================
             Card {
                 Layout.fillWidth: true
