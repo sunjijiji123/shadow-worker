@@ -86,3 +86,6 @@ scripts/_be_*.log
 
 # 本地测试素材（后端 embed 的副本在 backend/internal/vlm/test_probe.png）
 testconnect.png
+
+# AI agent 工作笔记（本地维护，不入库；含踩坑记录、构建细节等本地知识）
+AGENTS.md
