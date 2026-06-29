@@ -256,7 +256,16 @@ func (c *Collector) loop() {
 
 		app, err := ForegroundApp()
 		if err != nil {
-			c.logger.Debug("获取前台应用失败", "err", err)
+			// 前台窗口丢失（显示器断电/锁屏/Session 切换/RDP 断开）：视为离开。
+			// 历史 bug（坑 #54）：直接 continue 会绕过离开检测，导致 curSegID/away
+			// 不更新，前台恢复后 updateSegment 因"同一应用"段合并语义把整个断电期
+			// 粘进旧段（曾产生 9h44m 的 ZCode 巨怪段：00:38 锁屏→10:22 恢复全算
+			// engaged）。断电无法用 inputIdleMs 反推最后输入时刻，段在"发现无前台
+			// 的当前时刻"收尾，恢复后开新段。
+			if !c.away {
+				c.enterAway("no_foreground", time.Now().UTC())
+				c.logger.Info("前台窗口丢失，进入离开", "err", err)
+			}
 			continue
 		}
 
@@ -383,19 +392,14 @@ func (c *Collector) loop() {
 				// 段在最后一次真实键鼠输入处干净结束。inputIdleMs 是"距上次输入的毫秒数"，
 				// 反推最后一次输入时刻 = now - inputIdleMs。该时刻必然是 engaged（人在动）。
 				lastRealInput := time.Now().UTC().Add(-time.Duration(inputIdleMs) * time.Millisecond)
-				if err := c.db.UpdateActivitySegmentEndTSAndState(c.curSegID, lastRealInput, StateEngaged); err != nil {
-					c.logger.Warn("离开断段失败", "err", err)
-				}
-				// 关键事件：记录段被"离开"打断。含 input_idle_ms 便于回归验证
-				// 离开判据确实由真实键鼠空闲触发（而非帧差/state）。
-				c.logger.Info("离开断段",
-					"seg_id", c.curSegID, "end", lastRealInput.Format("15:04:05"),
+				// 诊断：保留 input_idle_ms / away_thresh_ms，便于回归验证离开判据确实
+				// 由真实键鼠空闲触发（而非帧差/state）。
+				c.logger.Debug("键鼠超时，断段",
 					"input_idle_ms", inputIdleMs, "away_thresh_ms", awayThresholdMs)
-				c.curSegID = 0
-				c.curState = ""
-				c.curApp = App{}
+				c.enterAway("input_timeout", lastRealInput)
+			} else {
+				c.away = true
 			}
-			c.away = true
 			continue
 		}
 		if strong {
@@ -481,6 +485,36 @@ func (c *Collector) updateSegment(app App, state string) {
 	if err := c.db.UpdateActivitySegmentEndTSAndState(c.curSegID, now, state); err != nil {
 		c.logger.Warn("更新活动段失败", "err", err)
 	}
+}
+
+// enterAway 关闭当前段（若有）并进入 away 状态。
+//
+// 两条离开路径复用：
+//   - input_timeout：真实键鼠空闲超 AwayThresholdS（line 末尾）。end 反推为最后一次
+//     键鼠输入时刻，段在"最后一次真实交互"处干净结束。
+//   - no_foreground：GetForegroundWindow 返回 NULL（显示器断电/锁屏/Session 切换/
+//     RDP 断开）。无法用 inputIdleMs 反推最后输入时刻（断电行为特殊），段在"发现
+//     无前台的当前时刻"收尾。
+//
+// 两路径都把段 state 回写为 engaged（段本就以活跃开始/延续，离开点视为这一段
+// 的自然终点），清零 curSegID/curApp/curState，置 c.away=true。away 期间每 tick
+// 在外层直接 continue 跳过写段，DB 留下真正的空档；下次强信号解除 away 后
+// updateSegment 因 curSegID==0 自然开新段。
+//
+// reason 记入"离开断段"日志，便于排查是哪条路径触发的断段。
+func (c *Collector) enterAway(reason string, end time.Time) {
+	if c.curSegID != 0 && !c.away {
+		if err := c.db.UpdateActivitySegmentEndTSAndState(c.curSegID, end, StateEngaged); err != nil {
+			c.logger.Warn("离开断段失败", "reason", reason, "err", err)
+		}
+		c.logger.Info("离开断段",
+			"reason", reason, "seg_id", c.curSegID,
+			"end", end.Format("15:04:05"))
+		c.curSegID = 0
+		c.curState = ""
+		c.curApp = App{}
+	}
+	c.away = true
 }
 
 // notifyVLMActivity 是 on_demand VLM 触发的钩子入口（非阻塞）。
