@@ -1489,12 +1489,28 @@
           <!-- 快捷工具 -->
           <div class="section" data-tab="tools">
             <div class="card">
-              <div class="card-title" style="margin-bottom:16px;">桌面截图</div>
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
+                <div>
+                  <div class="card-title">桌面截图</div>
+                  <div class="card-desc">按热键拖拽框选屏幕区域，截图保存并复制到剪贴板。</div>
+                </div>
+                <div class="toggle on" data-toggle></div>
+              </div>
               <div class="form-row">
                 <div class="field" style="flex:0.6"><div class="label">修饰键</div><div class="select-wrap" data-options="Ctrl + Shift,Ctrl + Alt,Alt + Shift"><div class="select">Ctrl + Shift</div></div></div>
                 <div class="field"><div class="label">按键</div><input class="input" value="S"></div>
               </div>
-              <div class="field" style="margin-top:12px;"><div class="label">保存位置</div><input class="input" value="C:\Users\…\shadow-worker\screenshots"></div>
+              <div class="field" style="margin-top:12px;">
+                <div class="label">保存位置</div>
+                <input class="input" value="%APPDATA%\shadow-worker\screenshots" readonly>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:14px;border-top:1px solid var(--rule);">
+                <div>
+                  <div style="font-size:14px;">截图后自动 VLM 分析</div>
+                  <div class="card-desc" style="margin:2px 0 0;">截图后自动调用已配置的 VLM 理解画面内容（需先在「图像识别」配置 VLM 模型）。</div>
+                </div>
+                <div class="toggle" data-toggle></div>
+              </div>
               <div style="margin-top:16px;"><span class="btn btn-primary">立即截图</span></div>
             </div>
             <div class="card">
@@ -1514,6 +1530,15 @@
             <div class="card-title">关于</div>
             <div style="font-size:14px;color:var(--muted);margin-top:8px;">Shadow Worker v0.2.0</div>
             <div style="font-size:12px;color:var(--muted);margin-top:4px;">git@github.com:sunjijiji123/shadow-worker.git</div>
+          </div>
+          <div class="card">
+            <div class="card-title">界面语言</div>
+            <div class="card-desc">切换界面显示语言。语言名以本族文字呈现，更改后立即生效。</div>
+            <div class="radio-group lang-radio-group" style="margin-top:12px;">
+              <label class="radio selected" data-lang="zh_CN"><span class="radio-dot"></span> 简体中文</label>
+              <label class="radio" data-lang="en"><span class="radio-dot"></span> English</label>
+            </div>
+            <div class="card-desc" style="margin-top:10px;color:var(--accent);">提示：系统托盘菜单、录音浮窗等也会随之切换。</div>
           </div>
           <div class="card">
             <div style="display:flex;justify-content:space-between;align-items:center;">
