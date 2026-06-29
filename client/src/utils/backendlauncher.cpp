@@ -6,6 +6,10 @@
 #include <QProcess>
 #include <QThread>
 
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+
 BackendLauncher::BackendLauncher(QObject *parent) : QObject(parent) {}
 
 QString BackendLauncher::resolveExePath() {
@@ -22,6 +26,27 @@ QString BackendLauncher::resolveExePath() {
     if (QFileInfo::exists(abs)) return abs;
   }
   return {};
+}
+
+QString BackendLauncher::resolveShortPath() {
+  const QString exe = resolveExePath();
+  if (exe.isEmpty()) return {};
+
+#ifdef Q_OS_WIN
+  // GetShortPathNameW 需要反斜杠原生路径。先转一下。
+  const QString native = QDir::toNativeSeparators(exe);
+  // 第一次调用拿所需缓冲区长度，第二次写入短路径。
+  const std::wstring w = native.toStdWString();
+  DWORD len = GetShortPathNameW(w.c_str(), nullptr, 0);
+  if (len == 0) return {};  // API 失败（文件不存在 / 卷禁用 8.3）
+  std::wstring buf(len, L'\0');
+  DWORD written = GetShortPathNameW(w.c_str(), &buf[0], len);
+  if (written == 0 || written >= len) return {};  // 失败或截断
+  buf.resize(written);
+  return QString::fromStdWString(buf);
+#else
+  return exe;  // 非 Windows 无短路径概念，原样返回
+#endif
 }
 
 bool BackendLauncher::start() {

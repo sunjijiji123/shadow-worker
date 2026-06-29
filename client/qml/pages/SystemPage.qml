@@ -15,7 +15,7 @@ Item {
     property bool launchAtStartup: true
     property bool checkUpdateOnStartup: true
     property bool checkUpdateDaily: true
-    property string activeMcpTab: "claude"   // claude | cursor | raw
+    property string activeMcpTab: "claude"   // claude | cursor | workbuddy | raw
 
     // ---- MCP tools list ----
     // 与后端 server.go 注册的工具保持同步（名称 + 描述精简版）。
@@ -51,6 +51,47 @@ Item {
         }
         return p
     }
+
+    // mcpShortPathResolved：后端 C++ 通过 GetShortPathNameW 获取的权威 8.3 短路径
+    // （仅 Windows）。失败/非 Windows 时为空串，触发 workbuddy tab 回退处理。
+    readonly property string mcpShortPathResolved: mcpShortPath !== undefined ? mcpShortPath : ""
+
+    // mcpShortPath 返回 exe 的 8.3 短路径（如 C:\PROGRA~2\SHADOW~1\shadow-worker.exe）。
+    // 用途：work buddy/TRAE 这类客户端只接受【裸路径 command，不能带引号】，但含空格的
+    // 路径（"C:\Program Files (x86)\..."）会被当 shell 命令在首个空格截断。短路径不含
+    // 空格，裸路径即可用。
+    //
+    // 数据来源优先级：① 后端 mcpShortPathResolved（GetShortPathNameW 权威值，序号 ~N
+    // 由 Windows 实际目录排序决定，启发式无法可靠推断）；② 启发式 fallback（后端不可
+    // 用时的兜底，按 8.3 命名规则对含空格段取前 6 字符 + ~N，但 N 可能不准）。
+    function mcpShortPath() {
+        if (root.mcpShortPathResolved.length > 0) {
+            return root.mcpShortPathResolved.replace(/\//g, "\\")
+        }
+        // 启发式 fallback（不可靠，仅兜底）。按 \ 拆分，含空格段转 8.3 形式。
+        // 注意：~N 序号无法在 QML 侧确定，~1/~2 是猜测，可能与真实不符。
+        var native = root.mcpResolvedExePath.replace(/\//g, "\\")
+        var parts = native.split("\\")
+        for (var i = 0; i < parts.length; i++) {
+            if (parts[i].indexOf(" ") >= 0) {
+                var noSpace = parts[i].replace(/ /g, "").replace(/\(/g, "").replace(/\)/g, "")
+                var suffix = parts[i].indexOf("(x86)") >= 0 ? "~2" : "~1"
+                parts[i] = noSpace.substring(0, 6).toUpperCase() + suffix
+            }
+        }
+        return parts.join("\\")
+    }
+
+    // mcpBareCommandValue 把短路径转义成 JSON "command" 的裸路径字符串值。
+    // 与 mcpCommandValue 区别：① 用短路径（无空格）；② 绝不加引号（work buddy 不接受引号）。
+    function mcpBareCommandValue() {
+        return mcpShortPath().replace(/\\/g, "\\\\")
+    }
+
+    // workbuddy 模式是否可用（短路径获取成功 = 后端 API 正常且路径无空格）。
+    // 不可用时 workbuddy tab 应提示用户（短路径获取失败，可能因 8.3 被禁用）。
+    readonly property bool workbuddyReady: mcpShortPathResolved.length > 0
+
     readonly property string mcpClaudeConfig: {
         var p = mcpCommandValue()
         return '{\n  "mcpServers": {\n    "shadow-worker": {\n      "command": "' + p + '",\n      "args": ["--mcp"]\n    }\n  }\n}'
@@ -59,12 +100,19 @@ Item {
         var p = mcpCommandValue()
         return '{\n  "mcp.servers": {\n    "shadow-worker": {\n      "command": "' + p + '",\n      "args": ["--mcp"]\n    }\n  }\n}'
     }
+    // Workbuddy/TRAE 配置：裸路径（无引号），用 8.3 短路径避开空格截断。
+    // 结构与 Claude 一致（mcpServers），但 command 是不含空格的短路径。
+    readonly property string mcpWorkbuddyConfig: {
+        var p = mcpBareCommandValue()
+        return '{\n  "mcpServers": {\n    "shadow-worker": {\n      "command": "' + p + '",\n      "args": ["--mcp"]\n    }\n  }\n}'
+    }
     readonly property string mcpRawConfig: {
         var p = mcpCommandValue()
         return '{\n  "command": "' + p + '",\n  "args": ["--mcp"]\n}'
     }
     function currentMcpConfig() {
         if (activeMcpTab === "cursor") return mcpCursorConfig
+        if (activeMcpTab === "workbuddy") return mcpWorkbuddyConfig
         if (activeMcpTab === "raw") return mcpRawConfig
         return mcpClaudeConfig
     }
@@ -311,9 +359,10 @@ Item {
 
                         Repeater {
                             model: [
-                                { key: "claude", label: "Claude Desktop" },
-                                { key: "cursor", label: "Cursor" },
-                                { key: "raw",    label: qsTr("Raw JSON") }
+                                { key: "claude",   label: "Claude Desktop" },
+                                { key: "cursor",   label: "Cursor" },
+                                { key: "workbuddy", label: "Workbuddy/TRAE" },
+                                { key: "raw",      label: qsTr("Raw JSON") }
                             ]
                             delegate: Rectangle {
                                 required property var modelData

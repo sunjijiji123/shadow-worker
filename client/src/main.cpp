@@ -180,8 +180,13 @@ int main(int argc, char *argv[]) {
     // Resolve the backend executable path for the MCP config snippet.
     // Expose both the chosen path and a "ready" flag so the System page can
     // show an accurate status light (MCP is usable iff the exe exists).
+    // mcpShortPath：exe 的 8.3 短路径（仅 Windows，如 C:\PROGRA~2\...\shadow-worker.exe）。
+    // 用于 work buddy/TRAE 配置（裸路径 command，不能带引号，短路径避开空格截断）。
+    // 转换失败（API 报错 / 非 Windows）为空串，前端 workbuddy tab 回退到长路径+提示。
     QString mcpExePath = BackendLauncher::resolveExePath();
+    QString mcpShortPath = BackendLauncher::resolveShortPath();
     engine.rootContext()->setContextProperty("mcpExePath", mcpExePath);
+    engine.rootContext()->setContextProperty("mcpShortPath", mcpShortPath);
     engine.rootContext()->setContextProperty("mcpReady", !mcpExePath.isEmpty());
 
     // Tray "Quit" -> actually quit the app (C++-level guarantee).
