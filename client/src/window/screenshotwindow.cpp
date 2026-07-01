@@ -287,9 +287,10 @@ void ScreenShotWindow::mousePressEvent(QMouseEvent *event) {
 
       crop.save(filePath, "PNG");
 
+      // 只写图像（贴近微信行为）。Windows 剪贴板是单一槽位，
+      // 若再 setText(filePath) 会把刚写入的 pixmap 清掉变成纯文本路径。
       QClipboard *cb = QApplication::clipboard();
       cb->setPixmap(crop);
-      cb->setText(filePath);
 
       emit finished(filePath);
       close();
