@@ -17,10 +17,11 @@ import (
 // ollamaEngine 实现 Ollama /api/generate 本地视觉接口。
 type ollamaEngine struct {
 	cfg        config.VLMProvider
+	prompt     string
 	httpClient *http.Client
 }
 
-func newOllamaEngine(cfg config.VLMProvider) (Engine, error) {
+func newOllamaEngine(cfg config.VLMProvider, prompt string) (Engine, error) {
 	if cfg.BaseURL == "" {
 		return nil, fmt.Errorf("ollama VLM: base_url 不能为空")
 	}
@@ -29,6 +30,7 @@ func newOllamaEngine(cfg config.VLMProvider) (Engine, error) {
 	}
 	return &ollamaEngine{
 		cfg:        cfg,
+		prompt:     prompt,
 		httpClient: &http.Client{Timeout: 120 * time.Second},
 	}, nil
 }
@@ -41,10 +43,13 @@ func (e *ollamaEngine) Describe(ctx context.Context, imagePNG []byte) (string, e
 	if len(imagePNG) == 0 {
 		return "", fmt.Errorf("空图片")
 	}
+	if strings.TrimSpace(e.prompt) == "" {
+		return "", fmt.Errorf("VLM 提示词为空，请在设置中配置")
+	}
 
 	body := map[string]any{
 		"model":  e.cfg.Model,
-		"prompt": vlmPrompt,
+		"prompt": e.prompt,
 		"images": []string{base64.StdEncoding.EncodeToString(imagePNG)},
 		"stream": false,
 	}

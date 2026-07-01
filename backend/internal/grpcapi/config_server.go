@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"shadow-worker/backend/internal/asr"
 	"shadow-worker/backend/internal/collector"
@@ -155,6 +156,7 @@ func configToProto(cfg *config.Config) *ConfigData {
 		VlmCaptureRange:          cfg.VLM.CaptureRange,
 		VlmOnDemandSwitchGapS:    int32(cfg.VLM.OnDemandSwitchGapS),
 		VlmOnDemandMotionGapS:    int32(cfg.VLM.OnDemandMotionGapS),
+		VlmPrompt:                cfg.VLM.Prompt,
 		McpEnabled:               true,
 		HotkeyRecord:             cfg.Hotkeys.Record,
 		HotkeyScreenshot:         cfg.Hotkeys.Screenshot,
@@ -224,6 +226,11 @@ func protoToConfig(data *ConfigData) *config.Config {
 	// 不用 config.Default() 的零值，因为 proto int32 零值 = 未设置。
 	cfg.VLM.OnDemandSwitchGapS = normalizeGap(data.VlmOnDemandSwitchGapS, 20)
 	cfg.VLM.OnDemandMotionGapS = normalizeGap(data.VlmOnDemandMotionGapS, 60)
+	// prompt 不可为空：旧配置/异常数据缺该字段或被清空时回落默认，避免引擎拒绝分析。
+	cfg.VLM.Prompt = data.VlmPrompt
+	if strings.TrimSpace(cfg.VLM.Prompt) == "" {
+		cfg.VLM.Prompt = config.DefaultVLMPrompt
+	}
 	if data.VlmProviders != nil {
 		cfg.VLM.Providers = make(map[string]config.VLMProvider)
 		for k, p := range data.VlmProviders {

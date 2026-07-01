@@ -32,9 +32,9 @@ type Engine interface {
 }
 
 // NewCloudEngineForTest 暴露给 grpcapi 用作临时连接测试，不依赖完整 config。
-// 用一个最小占位图片验证连通性（探测逻辑在调用方，如 voice_server.TestConnection）。
-func NewCloudEngineForTest(cfg config.VLMProvider) (Engine, error) {
-	return newCloudEngine(cfg)
+// prompt 取自当前服务端配置（voice_server 传入 s.cfg.VLM.Prompt），空时引擎兜底回落默认。
+func NewCloudEngineForTest(cfg config.VLMProvider, prompt string) (Engine, error) {
+	return newCloudEngine(cfg, prompt)
 }
 
 // New 根据配置创建 VLM 引擎。
@@ -47,13 +47,13 @@ func New(cfg config.VLMConfig) (Engine, error) {
 		if !ok {
 			return nil, fmt.Errorf("未找到 VLM provider: %s", cfg.ActiveProvider)
 		}
-		return newCloudEngine(p)
+		return newCloudEngine(p, cfg.Prompt)
 	case "ollama":
 		p, ok := cfg.Providers[cfg.ActiveProvider]
 		if !ok {
 			return nil, fmt.Errorf("未找到 VLM provider: %s", cfg.ActiveProvider)
 		}
-		return newOllamaEngine(p)
+		return newOllamaEngine(p, cfg.Prompt)
 	default:
 		return nil, fmt.Errorf("不支持的 VLM 模式: %s", cfg.Mode)
 	}

@@ -49,6 +49,8 @@ class SettingsViewModel : public QObject {
                  vlmSwitchGapChanged)
   Q_PROPERTY(int vlmMotionGap READ vlmMotionGap WRITE setVlmMotionGap NOTIFY
                  vlmMotionGapChanged)
+  Q_PROPERTY(QString vlmPrompt READ vlmPrompt WRITE setVlmPrompt NOTIFY
+                 vlmPromptChanged)
 
   // LLM / Polish
   Q_PROPERTY(bool llmEnabled READ llmEnabled WRITE setLlmEnabled NOTIFY
@@ -119,6 +121,8 @@ public:
   void setVlmSwitchGap(int v);
   int vlmMotionGap() const { return m_vlmMotionGap; }
   void setVlmMotionGap(int v);
+  QString vlmPrompt() const { return m_vlmPrompt; }
+  void setVlmPrompt(const QString &v);
 
   // LLM
   bool llmEnabled() const { return m_llmEnabled; }
@@ -180,6 +184,7 @@ signals:
   void vlmCaptureRangeChanged();
   void vlmSwitchGapChanged();
   void vlmMotionGapChanged();
+  void vlmPromptChanged();
 
   void llmEnabledChanged();
   void llmActiveProviderChanged();
@@ -229,6 +234,7 @@ private:
   QString m_vlmCaptureRange = QStringLiteral("active");
   int m_vlmSwitchGap = 20;  // on-demand: 切窗口触发冷却秒
   int m_vlmMotionGap = 60;  // on-demand: 活跃点触发冷却秒
+  QString m_vlmPrompt;
 
   bool m_llmEnabled = false;
   QString m_llmActiveProvider;

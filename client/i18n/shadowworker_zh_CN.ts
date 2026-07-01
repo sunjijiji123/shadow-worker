@@ -850,6 +850,26 @@
         <translation>截图范围</translation>
     </message>
     <message>
+        <location filename="../qml/pages/SettingsPage.qml" line="1485" />
+        <source>VLM Prompt</source>
+        <translation>VLM 提示词</translation>
+    </message>
+    <message>
+        <location filename="../qml/pages/SettingsPage.qml" line="1486" />
+        <source>Prompt sent to the vision model when analyzing screenshots. Shared by all models and cannot be empty.</source>
+        <translation>分析截图时发给视觉模型的提示词。所有模型共用，不能为空。</translation>
+    </message>
+    <message>
+        <location filename="../qml/pages/SettingsPage.qml" line="1491" />
+        <source>Describe what the user is doing in this screenshot in one sentence...</source>
+        <translation>请用一句话描述用户在这张截图里正在做什么...</translation>
+    </message>
+    <message>
+        <location filename="../qml/pages/SettingsPage.qml" line="2183" />
+        <source>VLM prompt cannot be empty</source>
+        <translation>VLM 提示词不能为空</translation>
+    </message>
+    <message>
         <location filename="../qml/pages/SettingsPage.qml" line="1402" />
         <source>Screen area captured during VLM screenshots and behavior capture.</source>
         <translation>VLM 截图和行为采集时捕获的屏幕区域。</translation>

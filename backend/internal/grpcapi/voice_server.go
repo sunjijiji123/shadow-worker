@@ -301,7 +301,8 @@ func (s *VoiceServer) TestConnection(ctx context.Context, req *TestConnectionReq
 		if cfg.AuthType == "" {
 			cfg.AuthType = "bearer"
 		}
-		engine, err := vlm.NewCloudEngineForTest(cfg)
+		// Test Connection 只验证连通性，用默认提示词即可（Describe 要求非空）。
+		engine, err := vlm.NewCloudEngineForTest(cfg, config.DefaultVLMPrompt)
 		if err != nil {
 			return &TestConnectionResponse{Ok: false, Message: err.Error()}, nil
 		}

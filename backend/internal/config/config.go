@@ -15,6 +15,11 @@ import (
 //go:embed default_prompt.txt
 var defaultPrompt string
 
+// DefaultVLMPrompt 是 VLM 视觉理解提示词的默认值。
+// 用户可在设置页修改（存入 config.yaml 的 vlm.prompt），但不可为空——
+// 空时引擎拒绝分析（Describe 返回错误），保存时 UI 也会拦截。
+const DefaultVLMPrompt = "请用一句话概括这张屏幕截图里用户正在做什么，不超过 50 字。"
+
 // ASRMode 是 ASR 模式。
 type ASRMode string
 
@@ -90,6 +95,9 @@ type VLMConfig struct {
 	// 键鼠输入/标题变化）后，距上次采集超过该秒数才触发一次截图。同一场景内
 	// 不频繁采集，避免资源损耗。默认 60s。与 SwitchGap 共用"上次采集时刻"。
 	OnDemandMotionGapS int `yaml:"on_demand_motion_gap_s"`
+	// Prompt 是送给 VLM 的提示词（所有 provider 共用一份，与 LLMConfig.Prompt 对称）。
+	// 不可为空：空时 Describe 返回错误、保存时 UI 拦截。Default 为 DefaultVLMPrompt。
+	Prompt string `yaml:"prompt"`
 	// SaveScreenshots 由 main.go 从 cfg.Debug.SaveVLMScreenshots 注入（非 yaml 字段）。
 	// true 时送去 VLM 分析的截图落盘到 screenshots/ 目录供调试（文件名无 -mv- 前缀）。
 	SaveScreenshots bool `yaml:"-"`
@@ -216,6 +224,8 @@ func Default() *Config {
 			// on_demand 默认冷却：切窗口 20s（过滤 Alt+Tab 抖动），活跃点 60s。
 			OnDemandSwitchGapS: 20,
 			OnDemandMotionGapS: 60,
+			// 默认提示词，用户可改但不可清空（空时引擎拒绝分析）。
+			Prompt:    DefaultVLMPrompt,
 			// 初始无 provider，用户通过 Add Model 添加。
 			Providers: map[string]VLMProvider{},
 		},

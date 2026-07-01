@@ -137,6 +137,7 @@ Item {
     property int vlmInterval: 5            // scheduled 模式定时截图间隔（分钟）
     property int vlmSwitchGap: 20          // on-demand: 切窗口触发冷却秒
     property int vlmMotionGap: 60          // on-demand: 活跃点触发冷却秒
+    property string vlmPrompt: ""          // VLM 视觉理解提示词（所有 provider 共用，不可为空）
     // VLM model list (mutable so chips can be removed at runtime)
     property var vlmModels: []
     // VLM 云端字段暂存（仿 LLM 的 llm* 字段，无 binding，显式赋值）
@@ -309,6 +310,7 @@ Item {
             viewModel.vlmCaptureRangeChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
             viewModel.vlmSwitchGapChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
             viewModel.vlmMotionGapChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
+            viewModel.vlmPromptChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
             // Movement 信号
             viewModel.movementSampleMsChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
             viewModel.movementIdleSChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
@@ -394,6 +396,7 @@ Item {
         captureRange = (viewModel.vlmCaptureRange === "screen") ? "screen" : "active"
         vlmSwitchGap = viewModel.vlmSwitchGap || 20
         vlmMotionGap = viewModel.vlmMotionGap || 60
+        vlmPrompt = viewModel.vlmPrompt || ""
         vlmModels = providersToChips(viewModel.vlmProviders || [])
         vlmActiveModel = viewModel.vlmActiveProvider || ""
         vlmModelType = activeProviderType(vlmActiveModel, "vlm")
@@ -604,6 +607,7 @@ Item {
         viewModel.vlmCaptureRange = captureRange
         viewModel.vlmSwitchGap = vlmSwitchGap
         viewModel.vlmMotionGap = vlmMotionGap
+        viewModel.vlmPrompt = vlmPrompt
         viewModel.vlmActiveProvider = vlmActiveModel
         flushVlmFields()
 
@@ -1471,6 +1475,25 @@ Item {
                 }
             }
 
+            // ---- Card: VLM Prompt ----
+            // 提示词所有 provider 共用一份，存 vlmPrompt；onTextEdited 回写，
+            // 保存时 pushToViewModel 推回 viewModel.vlmPrompt。
+            // 单一 owner-truth 字符串（非 per-provider 字段），可像 Polish Prompt
+            // 一样用 text: 绑定 + onTextEdited 回写（坑 #2 的例外）。
+            Card {
+                Layout.fillWidth: true
+                visible: activeTab === "vision"
+                title: qsTr("VLM Prompt")
+                description: qsTr("Prompt sent to the vision model when analyzing screenshots. Shared by all models and cannot be empty.")
+
+                TextArea {
+                    Layout.fillWidth: true
+                    text: vlmPrompt
+                    placeholder: qsTr("Describe what the user is doing in this screenshot in one sentence...")
+                    onTextEdited: function(newText) { vlmPrompt = newText }
+                }
+            }
+
             // ---- Card 4: Capture Parameters ----
             // HTML: 采集参数 (3-field form row)
             Card {
@@ -2148,6 +2171,12 @@ Item {
             if (!viewModel) {
                 var win0 = ApplicationWindow.window
                 if (win0 && win0.toast) win0.toast(qsTr("Settings backend not connected"), "warning")
+                return
+            }
+            // VLM 开启时提示词不可为空（后端 Describe 也会兜底拒绝，这里先拦给用户看）。
+            if (vlmEnabled && vlmPrompt.trim() === "") {
+                var w = ApplicationWindow.window
+                if (w && w.toast) w.toast(qsTr("VLM prompt cannot be empty"), "error")
                 return
             }
             // push local UI props into the viewModel, then persist via gRPC.

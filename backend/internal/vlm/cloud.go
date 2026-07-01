@@ -15,15 +15,14 @@ import (
 	"shadow-worker/backend/internal/httputil"
 )
 
-const vlmPrompt = "请用一句话概括这张屏幕截图里用户正在做什么，不超过 50 字。"
-
 // cloudEngine 实现 OpenAI 兼容的 /chat/completions 视觉接口。
 type cloudEngine struct {
 	cfg        config.VLMProvider
+	prompt     string
 	httpClient *http.Client
 }
 
-func newCloudEngine(cfg config.VLMProvider) (Engine, error) {
+func newCloudEngine(cfg config.VLMProvider, prompt string) (Engine, error) {
 	if cfg.BaseURL == "" {
 		return nil, fmt.Errorf("cloud VLM: base_url 不能为空")
 	}
@@ -35,6 +34,7 @@ func newCloudEngine(cfg config.VLMProvider) (Engine, error) {
 	}
 	return &cloudEngine{
 		cfg:        cfg,
+		prompt:     prompt,
 		httpClient: &http.Client{Timeout: 60 * time.Second},
 	}, nil
 }
@@ -47,6 +47,9 @@ func (e *cloudEngine) Describe(ctx context.Context, imagePNG []byte) (string, er
 	if len(imagePNG) == 0 {
 		return "", fmt.Errorf("空图片")
 	}
+	if strings.TrimSpace(e.prompt) == "" {
+		return "", fmt.Errorf("VLM 提示词为空，请在设置中配置")
+	}
 
 	dataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(imagePNG)
 	body := map[string]any{
@@ -55,7 +58,7 @@ func (e *cloudEngine) Describe(ctx context.Context, imagePNG []byte) (string, er
 			{
 				"role": "user",
 				"content": []map[string]any{
-					{"type": "text", "text": vlmPrompt},
+					{"type": "text", "text": e.prompt},
 					{"type": "image_url", "image_url": map[string]string{"url": dataURL}},
 				},
 			},

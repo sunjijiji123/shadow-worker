@@ -107,6 +107,13 @@ void SettingsViewModel::setVlmMotionGap(int v) {
   emit vlmMotionGapChanged();
 }
 
+void SettingsViewModel::setVlmPrompt(const QString &v) {
+  if (m_vlmPrompt == v)
+    return;
+  m_vlmPrompt = v;
+  emit vlmPromptChanged();
+}
+
 // LLM setters
 void SettingsViewModel::setLlmEnabled(bool v) {
   if (m_llmEnabled == v)
@@ -455,6 +462,7 @@ void SettingsViewModel::applyConfig(const ConfigData &data) {
   setVlmSwitchGap(sg > 0 ? sg : 20);
   int mg = data.vlmOnDemandMotionGapS();
   setVlmMotionGap(mg > 0 ? mg : 60);
+  setVlmPrompt(data.vlmPrompt());
 
   QVariantList vlmList;
   const auto vlmMap = data.vlmProviders();
@@ -501,6 +509,7 @@ ConfigData SettingsViewModel::buildConfig() const {
   data.setVlmCaptureRange(m_vlmCaptureRange);
   data.setVlmOnDemandSwitchGapS((qint32)m_vlmSwitchGap);
   data.setVlmOnDemandMotionGapS((qint32)m_vlmMotionGap);
+  data.setVlmPrompt(m_vlmPrompt);
   data.setVlmProviders(providersFromList(m_vlmProviders));
 
   data.setPolishEnabled(m_llmEnabled);
