@@ -227,6 +227,19 @@ if errorlevel 1 (
 )
 
 echo.
+echo === Package: mcp standalone exe (pure Go, no CGO) ===
+REM MCP server 只依赖 storage(modernc.org/sqlite 纯 Go)+ MCP SDK，不碰 whisper/CGO，
+REM 故用普通 go build（无需 gcc，几秒完成）。拆成独立 exe 是为了让 agent 持有的
+REM MCP 子进程跑在独立文件上，升级主程序时覆盖 shadow-worker.exe 不再被锁文件阻断
+REM （AGENTS.md 坑 50）。
+cd /d "%BACKEND_DIR%"
+go build -o "%DIST%\bin\shadow-worker-mcp.exe" ./cmd/shadow-worker-mcp/
+if errorlevel 1 (
+    echo [FAIL] mcp standalone build failed
+    exit /b 1
+)
+
+echo.
 echo === Package: client (release) ===
 cd /d "%CLIENT_DIR%"
 rmdir /s /q build 2>nul

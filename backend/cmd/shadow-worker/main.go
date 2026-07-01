@@ -1,14 +1,12 @@
 // Package main 是 shadow-worker Go 后台服务的入口。
 //
-// 两种运行模式:
-//   1. 默认(无参): 启动 gRPC + 采集引擎 + SQLite 的后台服务
-//   2. --mcp:      启动 stdio MCP server,只读 SQLite,供 AI agent 调用
+// 启动后台服务（gRPC + 采集引擎 + ASR + SQLite）：
 //
-// 启动后台:
-//   go run cmd/shadow-worker/main.go
+//	go run cmd/shadow-worker/main.go
 //
-// 启动 MCP:
-//   go run cmd/shadow-worker/main.go --mcp
+// 注意：MCP server（stdio，供 AI agent 调用）已拆成独立 exe
+// shadow-worker-mcp.exe（cmd/shadow-worker-mcp），与主后端文件隔离——这样外部
+// agent 持有的 MCP 子进程不会锁住主 exe，覆盖安装不再被阻断（见 AGENTS.md 坑 50）。
 package main
 
 import (
@@ -30,7 +28,6 @@ import (
 	pb "shadow-worker/backend/internal/grpcapi"
 	"shadow-worker/backend/internal/llm"
 	"shadow-worker/backend/internal/logging"
-	mcpServer "shadow-worker/backend/internal/mcp"
 	"shadow-worker/backend/internal/storage"
 	"shadow-worker/backend/internal/winapi"
 )
@@ -41,25 +38,7 @@ const (
 )
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "--mcp" {
-		runMCPServer()
-		return
-	}
 	runBackgroundService()
-}
-
-// runMCPServer 启动 stdio MCP server。
-func runMCPServer() {
-	db, err := storage.Open()
-	if err != nil {
-		log.Fatalf("打开数据库失败: %v", err)
-	}
-	defer db.Close()
-
-	log.Println("Shadow Worker MCP server 已启动(stdio)")
-	if err := mcpServer.NewServer(db).RunStdio(context.Background()); err != nil {
-		log.Fatalf("MCP server 失败: %v", err)
-	}
 }
 
 // readVersion 从 exe 同目录的 VERSION 文件读取版本号。

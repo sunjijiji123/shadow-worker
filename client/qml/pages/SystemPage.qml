@@ -31,9 +31,24 @@ Item {
 
     // ---- MCP config snippets (per tab) ----
     // mcpExePath / mcpReady are injected from main.cpp (resolved against the
-    // actual backend exe location). Empty string means "not found".
+    // actual MCP exe location). Empty string means "not found".
+    // resolveMcpExePath 优先返回 shadow-worker-mcp.exe（拆分后的独立 exe），
+    // 找不到时 fallback 到 shadow-worker.exe（旧安装/开发期）。
     readonly property string mcpResolvedExePath: mcpExePath !== undefined ? mcpExePath : ""
     readonly property bool mcpResolvedReady: mcpReady !== undefined ? mcpReady : false
+
+    // mcpArgsJson：MCP 配置的 args 字段。
+    // 新拆分的 shadow-worker-mcp.exe 是独立 main（无参数），args 为 []；
+    // fallback 到 shadow-worker.exe（主后端）时，主后端的 --mcp 分支已被删除，
+    // 无法再用 —— 但此处保留旧参数仅用于「开发期 client/build 下既没有 mcp exe、
+    // 也没有删除 --mcp 分支的旧主 exe」这一过渡场景，避免无参数启动主后端误当 MCP。
+    // 末尾 basename 判断：shadow-worker-mcp.exe → []，其余 → ["--mcp"]。
+    readonly property string mcpArgsJson: {
+        var p = mcpResolvedExePath
+        var slash = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"))
+        var base = slash >= 0 ? p.substring(slash + 1).toLowerCase() : p.toLowerCase()
+        return base === "shadow-worker-mcp.exe" ? "[]" : '["--mcp"]'
+    }
 
     // mcpCommandValue 把 exe 路径转义成 JSON "command" 字段的字符串值。
     // 三个转换：① 正斜杠统一成反斜杠（Qt 的 QDir::absolutePath 在 Windows 返回
@@ -94,21 +109,21 @@ Item {
 
     readonly property string mcpClaudeConfig: {
         var p = mcpCommandValue()
-        return '{\n  "mcpServers": {\n    "shadow-worker": {\n      "command": "' + p + '",\n      "args": ["--mcp"]\n    }\n  }\n}'
+        return '{\n  "mcpServers": {\n    "shadow-worker": {\n      "command": "' + p + '",\n      "args": ' + mcpArgsJson + '\n    }\n  }\n}'
     }
     readonly property string mcpCursorConfig: {
         var p = mcpCommandValue()
-        return '{\n  "mcp.servers": {\n    "shadow-worker": {\n      "command": "' + p + '",\n      "args": ["--mcp"]\n    }\n  }\n}'
+        return '{\n  "mcp.servers": {\n    "shadow-worker": {\n      "command": "' + p + '",\n      "args": ' + mcpArgsJson + '\n    }\n  }\n}'
     }
     // Workbuddy/TRAE 配置：裸路径（无引号），用 8.3 短路径避开空格截断。
     // 结构与 Claude 一致（mcpServers），但 command 是不含空格的短路径。
     readonly property string mcpWorkbuddyConfig: {
         var p = mcpBareCommandValue()
-        return '{\n  "mcpServers": {\n    "shadow-worker": {\n      "command": "' + p + '",\n      "args": ["--mcp"]\n    }\n  }\n}'
+        return '{\n  "mcpServers": {\n    "shadow-worker": {\n      "command": "' + p + '",\n      "args": ' + mcpArgsJson + '\n    }\n  }\n}'
     }
     readonly property string mcpRawConfig: {
         var p = mcpCommandValue()
-        return '{\n  "command": "' + p + '",\n  "args": ["--mcp"]\n}'
+        return '{\n  "command": "' + p + '",\n  "args": ' + mcpArgsJson + '\n}'
     }
     function currentMcpConfig() {
         if (activeMcpTab === "cursor") return mcpCursorConfig

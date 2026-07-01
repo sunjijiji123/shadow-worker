@@ -177,14 +177,17 @@ int main(int argc, char *argv[]) {
     engine.rootContext()->setContextProperty("trayController", &trayController);
     engine.rootContext()->setContextProperty("translator", &translator);
 
-    // Resolve the backend executable path for the MCP config snippet.
+    // Resolve the MCP server executable path for the MCP config snippet.
+    // 用 resolveMcpExePath（指向 shadow-worker-mcp.exe，独立于主后端）而非
+    // resolveExePath（主后端 shadow-worker.exe）：MCP 拆成独立 exe 后，升级主程序
+    // 不会被 agent 持有的 MCP 子进程锁文件阻断（见 AGENTS.md 坑 50）。
     // Expose both the chosen path and a "ready" flag so the System page can
     // show an accurate status light (MCP is usable iff the exe exists).
-    // mcpShortPath：exe 的 8.3 短路径（仅 Windows，如 C:\PROGRA~2\...\shadow-worker.exe）。
+    // mcpShortPath：exe 的 8.3 短路径（仅 Windows，如 C:\PROGRA~2\...\shadow-worker-mcp.exe）。
     // 用于 work buddy/TRAE 配置（裸路径 command，不能带引号，短路径避开空格截断）。
     // 转换失败（API 报错 / 非 Windows）为空串，前端 workbuddy tab 回退到长路径+提示。
-    QString mcpExePath = BackendLauncher::resolveExePath();
-    QString mcpShortPath = BackendLauncher::resolveShortPath();
+    QString mcpExePath = BackendLauncher::resolveMcpExePath();
+    QString mcpShortPath = BackendLauncher::resolveMcpShortPath();
     engine.rootContext()->setContextProperty("mcpExePath", mcpExePath);
     engine.rootContext()->setContextProperty("mcpShortPath", mcpShortPath);
     engine.rootContext()->setContextProperty("mcpReady", !mcpExePath.isEmpty());

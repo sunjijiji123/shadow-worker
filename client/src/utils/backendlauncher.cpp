@@ -13,6 +13,7 @@
 BackendLauncher::BackendLauncher(QObject *parent) : QObject(parent) {}
 
 QString BackendLauncher::resolveExePath() {
+  // 后台服务 exe（gRPC + 采集 + ASR）。
   const QString exeName = QStringLiteral("shadow-worker.exe");
   const QString clientDir =
       QFileInfo(QCoreApplication::applicationFilePath()).absolutePath();
@@ -28,11 +29,31 @@ QString BackendLauncher::resolveExePath() {
   return {};
 }
 
-QString BackendLauncher::resolveShortPath() {
-  const QString exe = resolveExePath();
-  if (exe.isEmpty()) return {};
+QString BackendLauncher::resolveMcpExePath() {
+  // MCP server exe。优先独立 exe（shadow-worker-mcp.exe，与主后端文件隔离，
+  // 升级主程序不被 MCP 子进程锁文件阻断，见 AGENTS.md 坑 50）；
+  // 找不到时 fallback 到主后端 exe（旧安装 / 开发期未拆分，此时 MCP 配置
+  // 在 QML 侧会带 ["--mcp"] 参数）。
+  const QString clientDir =
+      QFileInfo(QCoreApplication::applicationFilePath()).absolutePath();
+  const QString mcpName = QStringLiteral("shadow-worker-mcp.exe");
+  const QStringList mcpCandidates = {
+      QDir(clientDir).absoluteFilePath(mcpName),
+      QDir(clientDir).absoluteFilePath(QStringLiteral("../../build/") + mcpName),
+  };
+  for (const QString &p : mcpCandidates) {
+    const QString abs = QDir(p).absolutePath();
+    if (QFileInfo::exists(abs)) return abs;
+  }
+  // fallback：主后端 exe（resolveExePath 已含两个候选目录）。
+  return resolveExePath();
+}
 
 #ifdef Q_OS_WIN
+// GetShortPathNameW 的公共实现（resolveShortPath / resolveMcpShortPath 共用）。
+// exe 为空或转换失败返回空串。
+static QString toShortPath(const QString &exe) {
+  if (exe.isEmpty()) return {};
   // GetShortPathNameW 需要反斜杠原生路径。先转一下。
   const QString native = QDir::toNativeSeparators(exe);
   // 第一次调用拿所需缓冲区长度，第二次写入短路径。
@@ -44,8 +65,24 @@ QString BackendLauncher::resolveShortPath() {
   if (written == 0 || written >= len) return {};  // 失败或截断
   buf.resize(written);
   return QString::fromStdWString(buf);
+}
+#endif
+
+QString BackendLauncher::resolveShortPath() {
+  const QString exe = resolveExePath();
+#ifdef Q_OS_WIN
+  return toShortPath(exe);
 #else
   return exe;  // 非 Windows 无短路径概念，原样返回
+#endif
+}
+
+QString BackendLauncher::resolveMcpShortPath() {
+  const QString exe = resolveMcpExePath();
+#ifdef Q_OS_WIN
+  return toShortPath(exe);
+#else
+  return exe;
 #endif
 }
 
