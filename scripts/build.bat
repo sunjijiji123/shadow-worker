@@ -31,9 +31,9 @@ if "%CMD%"=="" set "CMD=all"
 set "OPT=%2"
 
 if /i "%CMD%"=="clean"   goto :do_clean
-REM 只有 package（正式出包）才 bump 版本号；开发构建（backend/client/all/run）
-REM 只读取 VERSION、不写入——避免调试构建吃掉版本序号（曾因反复 build client
-REM 把当天序号从 05 直接跳到 07，06 被吞）。
+REM Only package (release) bumps the version; dev builds (backend/client/all/run)
+REM only read VERSION, never write -- avoids dev builds eating the daily sequence
+REM (repeated `build client` once jumped 05 -> 07, skipping 06).
 if /i "%CMD%"=="package" goto :bump_version
 if /i "%CMD%"=="backend" goto :read_version
 if /i "%CMD%"=="client"  goto :read_version
@@ -70,8 +70,8 @@ REM NOTE: keep all comments ASCII-only. This file is UTF-8 on disk but cmd.exe
 REM parses it as the system ANSI codepage (GBK on zh-CN); non-ASCII bytes can
 REM decode to characters containing ")" that break if-block paren balancing.
 REM ============================================================
-REM read_version: 开发构建（backend/client/all/run）只读 VERSION，不 bump。
-REM VERSION 缺失时才写一次（今天.01），保证后续构建有版本号可用。
+REM read_version: dev builds (backend/client/all/run) only read VERSION, no bump.
+REM Writes once (today.01) only when VERSION is missing, so later builds have one.
 REM ============================================================
 :read_version
 set "VERSION_FILE=%ROOT%\VERSION"
@@ -79,21 +79,22 @@ set "OLD_VER="
 if exist "%VERSION_FILE%" set /p OLD_VER=<"%VERSION_FILE%"
 
 if not "%OLD_VER%"=="" (
-    REM 已有 VERSION，直接用，绝不递增（开发构建不吃版本号）。
+    REM VERSION exists: use as-is, never bump (dev build must not eat the sequence).
     set "APP_VERSION=%OLD_VER%"
 ) else (
-    REM 缺失：初始化为今天.01 并写一次（首次检出/被 clean 掉的情况）。
+    REM Missing: init to today.01 and write once (first checkout / cleaned away).
     call :today_date
     set "APP_VERSION=%TODAY%.01"
     echo %APP_VERSION%> "%VERSION_FILE%"
-    echo [version] %APP_VERSION% ^(initialized VERSION — dev build does not bump^)
+    echo [version] %APP_VERSION% ^(initialized VERSION -- dev build does not bump^)
     goto :setup_env
 )
 echo [version] %APP_VERSION%
 goto :setup_env
 
 REM ============================================================
-REM bump_version: 仅 package（正式出包）调用。读旧版本、bump 序号、写回。
+REM bump_version: only called by package (release). Reads old version, bumps
+REM the daily sequence, writes it back.
 REM ============================================================
 :bump_version
 set "VERSION_FILE=%ROOT%\VERSION"
@@ -139,7 +140,7 @@ echo [version] %APP_VERSION% ^(written to VERSION^)
 goto :setup_env
 
 REM ============================================================
-REM today_date: 设 TODAY=yyyy.MM.dd（PowerShell 优先，%DATE% 兜底）。
+REM today_date: set TODAY=yyyy.MM.dd (PowerShell first, %DATE% fallback).
 REM ============================================================
 :today_date
 set "TODAY="
@@ -262,10 +263,11 @@ if errorlevel 1 (
 
 echo.
 echo === Package: mcp standalone exe (pure Go, no CGO) ===
-REM MCP server 只依赖 storage(modernc.org/sqlite 纯 Go)+ MCP SDK，不碰 whisper/CGO，
-REM 故用普通 go build（无需 gcc，几秒完成）。拆成独立 exe 是为了让 agent 持有的
-REM MCP 子进程跑在独立文件上，升级主程序时覆盖 shadow-worker.exe 不再被锁文件阻断
-REM （AGENTS.md 坑 50）。
+REM MCP server depends only on storage (modernc.org/sqlite, pure Go) + MCP SDK,
+REM no whisper/CGO, so a plain `go build` (no gcc, a few seconds) is enough.
+REM Splitting it into a separate exe lets the agent-held MCP subprocess run on
+REM its own file, so overwriting shadow-worker.exe on upgrade is no longer
+REM blocked by a file lock (AGENTS.md pitfall 50).
 cd /d "%BACKEND_DIR%"
 go build -o "%DIST%\bin\shadow-worker-mcp.exe" ./cmd/shadow-worker-mcp/
 if errorlevel 1 (

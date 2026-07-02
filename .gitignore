@@ -64,6 +64,10 @@ client/cfg_log.txt
 backend/server.log
 backend/server_err.log
 
+# ASR 本地测试脚本（本地维护，不入库；AGENTS.md 仍记录其用法）
+backend/test-asr-cloud.bat
+backend/test-asr-e2e.bat
+
 # Third-party tooling
 tools/
 
