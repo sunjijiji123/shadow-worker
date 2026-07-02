@@ -40,16 +40,30 @@ func (e *ollamaEngine) Name() string {
 }
 
 func (e *ollamaEngine) Describe(ctx context.Context, imagePNG []byte) (string, error) {
+	return e.describe(ctx, imagePNG, e.prompt)
+}
+
+// DescribeWith 用 promptOverride 覆盖引擎默认 prompt；为空则回落 e.prompt。
+func (e *ollamaEngine) DescribeWith(ctx context.Context, imagePNG []byte, promptOverride string) (string, error) {
+	p := promptOverride
+	if strings.TrimSpace(p) == "" {
+		p = e.prompt
+	}
+	return e.describe(ctx, imagePNG, p)
+}
+
+// describe 是 Describe / DescribeWith 共用的请求构建+发送逻辑。
+func (e *ollamaEngine) describe(ctx context.Context, imagePNG []byte, effectivePrompt string) (string, error) {
 	if len(imagePNG) == 0 {
 		return "", fmt.Errorf("空图片")
 	}
-	if strings.TrimSpace(e.prompt) == "" {
+	if strings.TrimSpace(effectivePrompt) == "" {
 		return "", fmt.Errorf("VLM 提示词为空，请在设置中配置")
 	}
 
 	body := map[string]any{
 		"model":  e.cfg.Model,
-		"prompt": e.prompt,
+		"prompt": effectivePrompt,
 		"images": []string{base64.StdEncoding.EncodeToString(imagePNG)},
 		"stream": false,
 	}

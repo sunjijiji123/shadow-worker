@@ -100,6 +100,7 @@ Item {
         if (settingsVm && settingsVm.screenshotWithVlm !== undefined) {
             screenshotWithVlm = settingsVm.screenshotWithVlm
         }
+        screenshotPrompt = (settingsVm && settingsVm.screenshotPrompt) ? settingsVm.screenshotPrompt : ""
         var sc = settingsVm && settingsVm.hotkeyScreenshot ? settingsVm.hotkeyScreenshot : ""
         if (sc === "") {
             screenshotEnabled = false
@@ -241,6 +242,9 @@ Item {
     property string screenshotKey: "S"
     // 截图后是否自动触发 VLM 分析（持久化在 settingsVm.screenshotWithVlm）。
     property bool screenshotWithVlm: false
+    // 桌面截图识别专用提示词（与视觉 tab 的 vlmPrompt 区分）。
+    // 「完成（自动识别）」和「✦识别」按钮两条路径都用这条提示词。
+    property string screenshotPrompt: ""
 
     // Remove a model from a list and re-select if the active one was removed.
     // Usage: removeModel("asrModels", "deepseek", "asrActiveModel", "asrModelType")
@@ -582,9 +586,10 @@ Item {
         if (!viewModel) return
         viewModel.recordMode = recordMode
         viewModel.hotkeyRecord = hotkeyString(hotkeyModifier, hotkeyKey)
-        // 截图烘键 + VLM 开关写回
+        // 截图烘键 + VLM 开关 + 桌面截图识别提示词写回
         viewModel.hotkeyScreenshot = screenshotEnabled ? hotkeyString(screenshotModifier, screenshotKey) : ""
         viewModel.screenshotWithVlm = screenshotWithVlm
+        viewModel.screenshotPrompt = screenshotPrompt
         viewModel.asrMode = asrModelType
         viewModel.asrActiveProvider = asrActiveModel
         // 保存前：把当前 UI 字段的值 Write-Through 到 viewModel，确保不丢
@@ -2116,6 +2121,24 @@ Item {
                             checked: screenshotWithVlm
                             onToggled: screenshotWithVlm = checked
                         }
+                    }
+
+                    // 桌面截图识别专用提示词（与视觉 tab 的全局 vlmPrompt 区分）。
+                    // 「完成（自动识别）」和「✦识别」按钮两条路径都用这条提示词。
+                    // 单一 owner-truth 字符串，可像 vlmPrompt 一样用 text 绑定 +
+                    // onTextEdited 回写（坑 #2 的例外）。空值由后端回落默认。
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("Screenshot Recognition Prompt")
+                        color: Theme.ink
+                        font.pixelSize: 13
+                        Layout.topMargin: 4
+                    }
+                    TextArea {
+                        Layout.fillWidth: true
+                        text: screenshotPrompt
+                        placeholder: qsTr("Describe the content of this screenshot in detail...")
+                        onTextEdited: function(newText) { screenshotPrompt = newText }
                     }
 
                     Row {

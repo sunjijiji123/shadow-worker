@@ -83,6 +83,9 @@ class SettingsViewModel : public QObject {
   // Screenshot tool: 截图完成后是否自动触发 VLM 分析（写时间线事件）。
   Q_PROPERTY(bool screenshotWithVlm READ screenshotWithVlm WRITE
                  setScreenshotWithVlm NOTIFY screenshotWithVlmChanged)
+  // Screenshot tool: 桌面截图识别专用提示词（与 vlmPrompt 区分）。
+  Q_PROPERTY(QString screenshotPrompt READ screenshotPrompt WRITE
+                 setScreenshotPrompt NOTIFY screenshotPromptChanged)
 
 public:
   explicit SettingsViewModel(QObject *parent = nullptr);
@@ -154,6 +157,8 @@ public:
   // Screenshot
   bool screenshotWithVlm() const { return m_screenshotWithVlm; }
   void setScreenshotWithVlm(bool v);
+  QString screenshotPrompt() const { return m_screenshotPrompt; }
+  void setScreenshotPrompt(const QString &v);
 
   Q_INVOKABLE void addProvider(const QString &category, const QString &key);
   Q_INVOKABLE void removeProvider(const QString &category, const QString &key);
@@ -201,6 +206,7 @@ signals:
   void hotkeyPromptPrefixChanged();
 
   void screenshotWithVlmChanged();
+  void screenshotPromptChanged();
 
 private:
   void setLoading(bool v);
@@ -250,4 +256,5 @@ private:
   QString m_hotkeyScreenshot;
   QString m_hotkeyPromptPrefix = "Ctrl";
   bool m_screenshotWithVlm = false;
+  QString m_screenshotPrompt;
 };

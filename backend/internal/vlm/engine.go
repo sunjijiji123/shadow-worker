@@ -27,8 +27,12 @@ var ProbePNG []byte
 // Engine 是 VLM 引擎接口。
 type Engine interface {
 	Name() string
-	// Describe 对一张截图进行文字描述。
+	// Describe 对一张截图进行文字描述（用引擎构造时固化的 prompt）。
 	Describe(ctx context.Context, imagePNG []byte) (string, error)
+	// DescribeWith 对一张截图进行文字描述，promptOverride 非空时覆盖引擎默认 prompt，
+	// 为空则回落引擎构造时的 prompt。用于"桌面截图识别"等需要独立提示词的场景，
+	// 不污染引擎全局状态、不影响热重载。
+	DescribeWith(ctx context.Context, imagePNG []byte, promptOverride string) (string, error)
 }
 
 // NewCloudEngineForTest 暴露给 grpcapi 用作临时连接测试，不依赖完整 config。

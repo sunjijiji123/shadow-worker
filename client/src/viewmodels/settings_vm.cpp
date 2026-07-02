@@ -194,6 +194,13 @@ void SettingsViewModel::setScreenshotWithVlm(bool v) {
   emit screenshotWithVlmChanged();
 }
 
+void SettingsViewModel::setScreenshotPrompt(const QString &v) {
+  if (m_screenshotPrompt == v)
+    return;
+  m_screenshotPrompt = v;
+  emit screenshotPromptChanged();
+}
+
 // Provider helpers
 QVariantList *SettingsViewModel::providerListRef(const QString &category) {
   if (category == "asr")
@@ -491,6 +498,7 @@ void SettingsViewModel::applyConfig(const ConfigData &data) {
   setHotkeyScreenshot(data.hotkeyScreenshot());
   setHotkeyPromptPrefix(data.hotkeyPromptPrefix());
   setScreenshotWithVlm(data.screenshotWithVlm());
+  setScreenshotPrompt(data.screenshotPrompt());
 }
 
 ConfigData SettingsViewModel::buildConfig() const {
@@ -526,6 +534,7 @@ ConfigData SettingsViewModel::buildConfig() const {
   data.setHotkeyScreenshot(m_hotkeyScreenshot);
   data.setHotkeyPromptPrefix(m_hotkeyPromptPrefix);
   data.setScreenshotWithVlm(m_screenshotWithVlm);
+  data.setScreenshotPrompt(m_screenshotPrompt);
 
   return data;
 }

@@ -11,20 +11,29 @@
 //
 // 移植自 ai-voice-tool（Qt5 → Qt6）。交互流程：
 //   Drag 阶段：鼠标按下 → 拖拽框选矩形 → 松开进入 Confirm 阶段
-//   Confirm 阶段：8 个调整手柄可缩放、选区内可整体移动、工具条 ✓完成/✗取消
+//   Confirm 阶段：8 个调整手柄可缩放、选区内可整体移动、工具条按钮
 //   ESC / 右键 / ✗ 取消
 //
 // 构造时抓取所有显示器（虚拟屏并集）的当前画面存到 m_fullPixmap，
 // 落盘时按选区在物理像素坐标裁剪（逻辑坐标 × dpr），保证高 DPI 清晰。
+//
+// 工具条按钮（Confirm 阶段）：
+//   showRecognizeBtn=false（默认，"自动识别"已开启时）：✓完成 / ✗取消
+//   showRecognizeBtn=true （"自动识别"未开启时）：✦识别 / ✓完成 / ✗取消
+// 「识别」与「完成」都会落盘+写剪贴板；区别是识别额外 emit recognized，
+// 由上层强制触发 VLM 分析（不受"自动识别"开关控制）。
 class ScreenShotWindow : public QWidget {
   Q_OBJECT
  public:
   explicit ScreenShotWindow(const QString &saveDir,
+                            bool showRecognizeBtn = false,
                             QWidget *parent = nullptr);
 
  signals:
   // 用户点 ✓ 完成，PNG 已落盘 + 已写剪贴板。path 为绝对路径。
   void finished(const QString &path);
+  // 用户点 ✦ 识别，PNG 已落盘 + 已写剪贴板。上层据此强制触发 VLM 分析。
+  void recognized(const QString &path);
   // 用户 ESC / 右键 / ✗ 取消。
   void cancelled();
 
@@ -50,15 +59,21 @@ class ScreenShotWindow : public QWidget {
   };
   static constexpr int kHandleSize = 6;
 
+  // 把当前选区裁剪落盘 + 写剪贴板。成功时填充 outPath（绝对路径）并返回 true。
+  // 「完成」和「识别」按钮共用此逻辑，区别仅在随后 emit 的信号。
+  bool saveSelection(QString &outPath);
+
   void initFullscreenPixmap();
   QRect handleRect(HandlePos pos) const;
   HandlePos handleAt(QPoint globalPos) const;
   void setCursorForPos(QPoint globalPos);
   QRect toolbarRect() const;
+  QRect recognizeBtnRect() const;
   QRect confirmBtnRect() const;
   QRect cancelBtnRect() const;
 
   QString m_saveDir;
+  bool m_showRecognizeBtn;  // 是否显示 ✦识别 按钮（"自动识别"未开启时为 true）
   Phase m_phase;
   QPixmap m_fullPixmap;  // 虚拟屏并集画面（物理像素，已设 devicePixelRatio）
   QRect m_selection;     // 选区，全局虚拟屏坐标

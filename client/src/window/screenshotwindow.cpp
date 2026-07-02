@@ -11,9 +11,12 @@
 #include <QPainterPath>
 #include <QScreen>
 
-ScreenShotWindow::ScreenShotWindow(const QString &saveDir, QWidget *parent)
+ScreenShotWindow::ScreenShotWindow(const QString &saveDir,
+                                   bool showRecognizeBtn,
+                                   QWidget *parent)
     : QWidget(parent),
       m_saveDir(saveDir),
+      m_showRecognizeBtn(showRecognizeBtn),
       m_phase(Drag),
       m_dragging(false),
       m_activeHandle(-1) {
@@ -141,7 +144,9 @@ QRect ScreenShotWindow::toolbarRect() const {
   const int btnH = 32;
   const int gap = 6;
   const int padding = 4;
-  int tw = btnW * 2 + gap + padding * 2;
+  // 按钮数：识别按钮可见时为 3（识别/完成/取消），否则 2（完成/取消）。
+  int btnCount = m_showRecognizeBtn ? 3 : 2;
+  int tw = btnW * btnCount + gap * (btnCount - 1) + padding * 2;
   int th = btnH + padding * 2;
   int x = m_selection.right() - tw;
   int y = m_selection.bottom() + 6;
@@ -156,14 +161,27 @@ QRect ScreenShotWindow::toolbarRect() const {
   return QRect(x, y, tw, th);
 }
 
+// 工具条按钮从左到右顺序：[识别?][完成][取消]。识别仅 showRecognizeBtn 时存在。
+// 各 rect 函数用统一的 btnW=72/btnH=32/gap=6/padding=4 偏移计算，与 toolbarRect 一致。
+
+QRect ScreenShotWindow::recognizeBtnRect() const {
+  QRect tb = toolbarRect();
+  // 识别在第一个位置（仅 showRecognizeBtn 时调用/绘制）。
+  return QRect(tb.left() + 4, tb.top() + 4, 72, 32);
+}
+
 QRect ScreenShotWindow::confirmBtnRect() const {
   QRect tb = toolbarRect();
-  return QRect(tb.left() + 4, tb.top() + 4, 72, 32);
+  // 完成的位置：识别存在时是第 2 个，否则第 1 个。
+  int idx = m_showRecognizeBtn ? 1 : 0;
+  return QRect(tb.left() + 4 + idx * (72 + 6), tb.top() + 4, 72, 32);
 }
 
 QRect ScreenShotWindow::cancelBtnRect() const {
   QRect tb = toolbarRect();
-  return QRect(tb.left() + 4 + 72 + 6, tb.top() + 4, 72, 32);
+  // 取消恒在最后一个位置。
+  int idx = m_showRecognizeBtn ? 2 : 1;
+  return QRect(tb.left() + 4 + idx * (72 + 6), tb.top() + 4, 72, 32);
 }
 
 void ScreenShotWindow::paintEvent(QPaintEvent *) {
@@ -223,6 +241,15 @@ void ScreenShotWindow::paintEvent(QPaintEvent *) {
     p.setCompositionMode(QPainter::CompositionMode_SourceOver);
     p.fillPath(tbPath, QColor(37, 37, 37, 235));
 
+    // 识别按钮（蓝，仅 showRecognizeBtn 时绘制）
+    if (m_showRecognizeBtn) {
+      QRect btnR = recognizeBtnRect();
+      btnR.translate(-origin);
+      QPainterPath rp;
+      rp.addRoundedRect(btnR.x(), btnR.y(), btnR.width(), btnR.height(), 4, 4);
+      p.fillPath(rp, QColor(59, 130, 246));
+    }
+
     // 确认按钮（绿）
     QRect btnC = confirmBtnRect();
     btnC.translate(-origin);
@@ -242,9 +269,47 @@ void ScreenShotWindow::paintEvent(QPaintEvent *) {
     f.setPixelSize(13);
     p.setFont(f);
     p.setPen(Qt::white);
+    if (m_showRecognizeBtn) {
+      QRect btnR = recognizeBtnRect();
+      btnR.translate(-origin);
+      p.drawText(btnR, Qt::AlignCenter, QString::fromUtf8("\u2726 \u8BC6\u522B"));
+    }
     p.drawText(btnC, Qt::AlignCenter, QString::fromUtf8("\u2713 \u5B8C\u6210"));
     p.drawText(btnX, Qt::AlignCenter, QString::fromUtf8("\u2717 \u53D6\u6D88"));
   }
+}
+
+// 把当前选区裁剪落盘 + 写剪贴板。「完成」「识别」按钮共用此逻辑。
+// 成功时 outPath 填绝对路径并返回 true。
+bool ScreenShotWindow::saveSelection(QString &outPath) {
+  QDir().mkpath(m_saveDir);
+  QString name = "screenshot_" +
+                 QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss") +
+                 ".png";
+  QString filePath = m_saveDir + "/" + name;
+
+  QRect total = geometry();
+  qreal dpr = devicePixelRatioF();
+  // m_fullPixmap 是纯物理像素（不设 devicePixelRatio），故 copy() 用物理坐标。
+  // 选区 m_selection 是逻辑坐标（虚拟屏全局），转换：offset = 选区相对虚拟屏
+  // 左上角的逻辑偏移 × dpr；size = 选区逻辑尺寸 × dpr。这样裁出的就是用户
+  // 框选的那块物理像素图像，100%/125%/150% 缩放下都正确。
+  QPoint offset = (m_selection.topLeft() - total.topLeft()) * dpr;
+  QSize size = m_selection.size() * dpr;
+  QRect deviceRect(offset, size);
+  QPixmap crop = m_fullPixmap.copy(deviceRect);
+
+  if (!crop.save(filePath, "PNG")) {
+    return false;
+  }
+
+  // 只写图像（贴近微信行为）。Windows 剪贴板是单一槽位，
+  // 若再 setText(filePath) 会把刚写入的 pixmap 清掉变成纯文本路径。
+  QClipboard *cb = QApplication::clipboard();
+  cb->setPixmap(crop);
+
+  outPath = filePath;
+  return true;
 }
 
 void ScreenShotWindow::mousePressEvent(QMouseEvent *event) {
@@ -266,33 +331,23 @@ void ScreenShotWindow::mousePressEvent(QMouseEvent *event) {
     m_dragging = true;
   } else {
     QPoint origin = geometry().topLeft();
-    // Confirm 阶段：先检查工具条按钮（转本地坐标）
+    // Confirm 阶段：先检查工具条按钮（转本地坐标）。
+    // 顺序：识别（若显示）→ 完成 → 取消，按从左到右的按钮位置。
+    if (m_showRecognizeBtn &&
+        recognizeBtnRect().translated(-origin).contains(lpos)) {
+      // 识别 = 落盘 + 写剪贴板（同完成）+ 强制触发 VLM 识别。
+      QString filePath;
+      if (saveSelection(filePath)) {
+        emit recognized(filePath);
+      }
+      close();
+      return;
+    }
     if (confirmBtnRect().translated(-origin).contains(lpos)) {
-      QDir().mkpath(m_saveDir);
-      QString name = "screenshot_" +
-                     QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss") +
-                     ".png";
-      QString filePath = m_saveDir + "/" + name;
-
-      QRect total = geometry();
-      qreal dpr = devicePixelRatioF();
-      // m_fullPixmap 是纯物理像素（不设 devicePixelRatio），故 copy() 用物理坐标。
-      // 选区 m_selection 是逻辑坐标（虚拟屏全局），转换：offset = 选区相对虚拟屏
-      // 左上角的逻辑偏移 × dpr；size = 选区逻辑尺寸 × dpr。这样裁出的就是用户
-      // 框选的那块物理像素图像，100%/125%/150% 缩放下都正确。
-      QPoint offset = (m_selection.topLeft() - total.topLeft()) * dpr;
-      QSize size = m_selection.size() * dpr;
-      QRect deviceRect(offset, size);
-      QPixmap crop = m_fullPixmap.copy(deviceRect);
-
-      crop.save(filePath, "PNG");
-
-      // 只写图像（贴近微信行为）。Windows 剪贴板是单一槽位，
-      // 若再 setText(filePath) 会把刚写入的 pixmap 清掉变成纯文本路径。
-      QClipboard *cb = QApplication::clipboard();
-      cb->setPixmap(crop);
-
-      emit finished(filePath);
+      QString filePath;
+      if (saveSelection(filePath)) {
+        emit finished(filePath);
+      }
       close();
       return;
     }

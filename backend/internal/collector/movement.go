@@ -28,6 +28,9 @@ type PrecisionConfig struct {
 	InputIdleS   int
 	DisplayIdleS int
 	AwayThresholdS int
+	// InputActiveS:输入活跃阈值(秒)。近该秒数内有键鼠输入 → 判定"正在打字"，
+	// 跳过帧差截图(s1)避免 PrintWindow 卡顿目标窗口 UI 线程。必须 < InputIdleS。
+	InputActiveS int
 	// SaveScreenshots 由 NewCollector 从 MovementConfig 复制；debug 模式时为 true。
 	SaveScreenshots bool
 }
@@ -35,10 +38,12 @@ type PrecisionConfig struct {
 // Presets 是预定义的精度档位。
 // AwayThresholdS 各档统一 600s(10 分钟)——离开判定与精度无关:
 // 精度只影响"正在动/思考"的灵敏度,而"离开"是绝对时长概念(10 分钟无交互即离开)。
+// InputActiveS 各档约为 InputIdleS 的一半——"打字停了再留点宽限才恢复帧差检测"，
+// 且必须 < InputIdleS，否则 s1 帧差永远被 s2 宽限期罩住不工作。
 var Presets = map[string]PrecisionConfig{
-	"low":    {Thresh: 50, ChangeRatio: 0.005, SampleMs: 500, InputIdleS: 20, DisplayIdleS: 120, AwayThresholdS: 600},
-	"medium": {Thresh: 30, ChangeRatio: 0.002, SampleMs: 300, InputIdleS: 15, DisplayIdleS: 90, AwayThresholdS: 600},
-	"high":   {Thresh: 15, ChangeRatio: 0.001, SampleMs: 200, InputIdleS: 10, DisplayIdleS: 60, AwayThresholdS: 600},
+	"low":    {Thresh: 50, ChangeRatio: 0.005, SampleMs: 500, InputIdleS: 20, DisplayIdleS: 120, AwayThresholdS: 600, InputActiveS: 10},
+	"medium": {Thresh: 30, ChangeRatio: 0.002, SampleMs: 300, InputIdleS: 15, DisplayIdleS: 90, AwayThresholdS: 600, InputActiveS: 8},
+	"high":   {Thresh: 15, ChangeRatio: 0.001, SampleMs: 200, InputIdleS: 10, DisplayIdleS: 60, AwayThresholdS: 600, InputActiveS: 5},
 }
 
 // 三态取值常量。写入 activity_segments.state。
@@ -112,6 +117,9 @@ func NewCollector(db *storage.DB, mc config.MovementConfig, logger *slog.Logger)
 	}
 	if mc.AwayThresholdS > 0 {
 		cfg.AwayThresholdS = mc.AwayThresholdS
+	}
+	if mc.InputActiveS > 0 {
+		cfg.InputActiveS = mc.InputActiveS
 	}
 	cfg.SaveScreenshots = mc.SaveScreenshots
 	return &Collector{
@@ -279,59 +287,74 @@ func (c *Collector) loop() {
 		// 记录每路信号的具体值（用于日志诊断 7.5h active 段问题：
 		// 确认是哪路信号在"续命"，便于定位帧差误报/键鼠噪声/标题抖动）。
 		strong := false
-		var frameRatio float64   // s1 帧差比例（<0 表示未计算/截图失败）
+		var frameRatio float64   // s1 帧差比例（<0 表示未计算/截图失败/打字跳过）
 		var inputIdleMs uint64   // s2 距上次系统输入的毫秒
 		var titleChanged bool    // s3 标题是否变化
 		const sigNone = ""       // 无信号
 		strongReason := sigNone  // 触发强信号的路："frame"/"input"/"title"（调试用）
 
-		// s1: 帧差(屏幕在变)
-		curr := CaptureWindow(app.HWND)
-		if curr == nil {
-			c.logger.Debug("截图失败", "app", app.Name)
-			// 截图失败不阻断其它信号判定，但帧差缺失。
+		// s2 的 inputIdleMs 提前计算：s1 守卫(打字时跳过截图)与 s2 强信号判定、
+		// 离开检测(loop 末尾)都依赖它，故先算好共用。GetLastInputInfo 是纯读、零开销。
+		if tick, ok := winapi.LastInputTick(); ok {
+			inputIdleMs = winapi.GetTickCount64() - uint64(tick)
+		}
+
+		// 输入活跃阈值(毫秒)：近该时长内有键鼠输入 = 正在打字。
+		// 打字时跳过 s1 帧差截图——PrintWindow 是同步跨进程 GDI 调用，会阻塞目标
+		// 窗口 UI 线程做合成重绘，对 Electron 应用(VS Code/ZCode)每 300ms 截一次
+		// 会让打字卡顿/丢字。而打字时 s2 键鼠信号已证明"在用电脑"，s1 帧差信息冗余。
+		// 帧差唯一不可替代的场景是"无输入但画面在变"(看视频)，那种场景用户不打字。
+		inputActiveMs := uint64(c.cfg.InputActiveS) * 1000
+		typing := inputIdleMs > 0 && inputIdleMs < inputActiveMs
+
+		// s1: 帧差(屏幕在变)。打字时跳过——既避免 PrintWindow 卡顿，又省一次截图。
+		// 跳过时 frameRatio=-1、prevFrame 不更新；用户停手(inputIdleMs 超阈值)后
+		// 下一 tick 若 prevFrame 仍为 nil 会走首帧分支建立基线，帧差检测自然恢复。
+		if typing {
 			frameRatio = -1
-		} else if prevFrame != nil {
-			ratio, err := FrameDiff(prevFrame, curr, CaptureTargetWidth, CaptureTargetHeight)
-			if err != nil {
-				c.logger.Warn("帧差计算失败", "err", err)
+		} else {
+			curr := CaptureWindow(app.HWND)
+			if curr == nil {
+				c.logger.Debug("截图失败", "app", app.Name)
+				// 截图失败不阻断其它信号判定，但帧差缺失。
 				frameRatio = -1
-			} else {
-				frameRatio = ratio
-				if ratio > c.cfg.ChangeRatio {
-					strong = true
-					strongReason = "frame"
-					// debug 模式：画面变化时保存完整截图，便于排查 movement 判断依据。
-					// 帧差超阈值才保存，避免每 tick 落盘（300ms 一次太密）。
-					if c.cfg.SaveScreenshots {
-						if debugPng := CaptureWindowPNG(app.HWND); debugPng != nil {
-							if _, saveErr := saveScreenshot(debugPng, "mv-"+app.Name, time.Now().UTC()); saveErr != nil {
-								c.logger.Debug("debug 保存 movement 截图失败", "err", saveErr)
+			} else if prevFrame != nil {
+				ratio, err := FrameDiff(prevFrame, curr, CaptureTargetWidth, CaptureTargetHeight)
+				if err != nil {
+					c.logger.Warn("帧差计算失败", "err", err)
+					frameRatio = -1
+				} else {
+					frameRatio = ratio
+					if ratio > c.cfg.ChangeRatio {
+						strong = true
+						strongReason = "frame"
+						// debug 模式：画面变化时保存完整截图，便于排查 movement 判断依据。
+						// 帧差超阈值才保存，避免每 tick 落盘（300ms 一次太密）。
+						if c.cfg.SaveScreenshots {
+							if debugPng := CaptureWindowPNG(app.HWND); debugPng != nil {
+								if _, saveErr := saveScreenshot(debugPng, "mv-"+app.Name, time.Now().UTC()); saveErr != nil {
+									c.logger.Debug("debug 保存 movement 截图失败", "err", saveErr)
+								}
 							}
 						}
 					}
 				}
+				prevFrame = curr
+			} else {
+				// 第一帧:无前帧可比,默认认为有变化(沿用旧行为)。
+				strong = true
+				strongReason = "frame(first)"
+				frameRatio = -1 // 首帧未实际计算
+				prevFrame = curr
 			}
-			prevFrame = curr
-		} else {
-			// 第一帧:无前帧可比,默认认为有变化(沿用旧行为)。
-			strong = true
-			strongReason = "frame(first)"
-			frameRatio = -1 // 首帧未实际计算
-			prevFrame = curr
 		}
 
 		// s2: GetLastInputInfo(系统级键鼠输入)。前台=白名单时,
 		// 系统输入几乎必然进了该前台应用,故可作为"该应用在用"的强信号。
-		// 每 tick 无条件计算 inputIdleMs——它除驱动本路强信号判定外,还供
-		// 离开检测（loop 末尾）直接使用:离开判据看真实键鼠空闲时间,不再依赖
-		// 被帧差污染的 lastEngaged（见坑 #45/#49 修复）。
-		if tick, ok := winapi.LastInputTick(); ok {
-			inputIdleMs = winapi.GetTickCount64() - uint64(tick)
-			if !strong && inputIdleMs < uint64(inputIdle/time.Millisecond) {
-				strong = true
-				strongReason = "input"
-			}
+		// inputIdleMs 已在上方提前计算（s1 守卫与离开检测共用）。
+		if inputIdleMs > 0 && !strong && inputIdleMs < uint64(inputIdle/time.Millisecond) {
+			strong = true
+			strongReason = "input"
 		}
 
 		// s3: 窗口标题变化(切标签/导航/文件)。

@@ -91,11 +91,28 @@ import ShadowWorker
     // 弹出截图框选覆盖层。热键、托盘菜单、设置页"Capture Now"都走这里。
     // saveDir 由 screenshotController 内部用默认（%APPDATA%\shadow-worker
     // \screenshots，与后端 VLM 截图目录一致），QML 不需关心路径。
+    // showRecognizeBtn：未开启"自动识别"时传 true，让选择框显示 ✦识别 按钮，
+    // 用户可手动触发 VLM 分析；开启自动识别时传 false（完成已含识别，避免冗余）。
     function startScreenshot() {
         if (screenshotInFlight) return
         if (!screenshotController) return
         screenshotInFlight = true
-        screenshotController.capture()
+        var autoVlm = settingsVm && settingsVm.screenshotWithVlm
+        screenshotController.capture("", !autoVlm)
+    }
+
+    // 弹出截图分析结果窗并发起 VLM 识别。finished（自动识别开启时）与
+    // recognized（手动点 ✦识别）两条路径共用。prompt 取桌面截图识别专用
+    // 提示词（settingsVm.screenshotPrompt），与视觉 tab 的全局 vlmPrompt 区分。
+    function showScreenshotAnalysis(path) {
+        if (!collectionClient) return
+        screenshotResult.imagePath = path
+        screenshotResult.summary = ""
+        screenshotResult.errorText = ""
+        screenshotResult.analyzing = true
+        screenshotResult.show()
+        var prompt = settingsVm ? settingsVm.screenshotPrompt : ""
+        collectionClient.analyzeImage(path, prompt)
     }
 
     // 截图完成/取消回调。放在 target:screenshotController 的 Connections 里
@@ -412,24 +429,24 @@ import ShadowWorker
         }
     }
 
-    // 截图覆盖层完成/取消回调。finished 时落盘成功 + 已写剪贴板；
-    // 若开启"截图后自动 VLM 分析"，把【用户框选的这张图】送去后端分析
-    // （AnalyzeImage，不重新截图），并在独立结果窗口展示摘要。
+    // 截图覆盖层完成/取消/识别回调。finished/recognized 时截图已落盘 + 写剪贴板；
+    // finished：若开启"自动识别"，把【用户框选的这张图】送去后端分析。
+    // recognized：用户手动点 ✦识别（仅"自动识别"未开启时出现该按钮），强制触发分析。
+    // 两条路径都走独立提示词（screenshotPrompt），由 showScreenshotAnalysis 统一处理。
     Connections {
         target: screenshotController
         function onFinished(path) {
             screenshotInFlight = false
             // 截图本身已落盘 + 写剪贴板，提示一下
             toast(qsTr("Screenshot saved"), "success")
-            if (settingsVm && settingsVm.screenshotWithVlm && collectionClient) {
-                // 弹结果窗口（analyzing 态），然后发起分析
-                screenshotResult.imagePath = path
-                screenshotResult.summary = ""
-                screenshotResult.errorText = ""
-                screenshotResult.analyzing = true
-                screenshotResult.show()
-                collectionClient.analyzeImage(path)
+            if (settingsVm && settingsVm.screenshotWithVlm) {
+                showScreenshotAnalysis(path)
             }
+        }
+        function onRecognized(path) {
+            // ✦识别 按钮：截图已落盘 + 写剪贴板，强制触发 VLM 分析。
+            toast(qsTr("Screenshot saved"), "success")
+            showScreenshotAnalysis(path)
         }
         function onCancelled() {
             screenshotInFlight = false

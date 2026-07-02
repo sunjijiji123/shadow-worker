@@ -38,7 +38,7 @@ void CollectionClient::triggerVLM() {
                    });
 }
 
-void CollectionClient::analyzeImage(const QString &path) {
+void CollectionClient::analyzeImage(const QString &path, const QString &prompt) {
   if (!m_channel) {
     emit imageAnalyzed(path, QString(),
                        QStringLiteral("gRPC channel not initialized"));
@@ -46,6 +46,7 @@ void CollectionClient::analyzeImage(const QString &path) {
   }
   shadowworker::AnalyzeImageRequest req;
   req.setPath(path);
+  req.setPrompt(prompt);
   auto reply = m_client.AnalyzeImage(req);
   auto *replyPtr = reply.get();
   reply.release();

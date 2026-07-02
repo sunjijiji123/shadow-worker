@@ -148,6 +148,9 @@ func runBackgroundService() {
 		if err != nil {
 			slog.Error("创建 VLM 引擎失败", "err", err)
 		} else {
+			// 注入输入活跃阈值：VLM motion 回调打字守卫与 movement 共用同一真相源
+			// （cfg.Movement.InputActiveS）。<=0 时 VLMCapturer 内部兜底 8s。
+			vlmCapturer.SetInputActiveS(cfg.Movement.InputActiveS)
 			vlmCapturer.Start()
 			slog.Info("VLM 引擎已就绪", "engine", vlmCapturer.EngineName(), "mode", cfg.VLM.Mode)
 		}

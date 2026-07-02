@@ -30,8 +30,9 @@ class CollectionClient : public QObject {
 
   // 分析指定路径的 PNG 截图（"快捷工具-桌面截图"框选结果）。后端直接对这张
   // 图做 VLM 分析，不重新截图——保证"用户框选什么"和"VLM 分析什么"一致。
+  // prompt 是桌面截图识别专用提示词（空=后端引擎回落默认），与全局 VLM 提示词区分。
   // 结果经 vlmSummaryReady 信号发出（summary 字段带路径）。
-  Q_INVOKABLE void analyzeImage(const QString &path);
+  Q_INVOKABLE void analyzeImage(const QString &path, const QString &prompt);
 
  signals:
   // VLM 触发完成。summary 为摘要文本（失败或被白名单跳过时可能为空），

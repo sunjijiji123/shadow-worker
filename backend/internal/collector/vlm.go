@@ -13,6 +13,7 @@ import (
 	"shadow-worker/backend/internal/config"
 	"shadow-worker/backend/internal/storage"
 	"shadow-worker/backend/internal/vlm"
+	"shadow-worker/backend/internal/winapi"
 )
 
 // VLMCapturer 负责定时/按需截图并调用 VLM 生成摘要。
@@ -34,6 +35,13 @@ type VLMCapturer struct {
 	//     两个 gap（switch/motion）共用此时间戳，任一触发成功后都更新它。
 	triggerCh     chan triggerEvent
 	lastCaptureUnix atomic.Int64
+
+	// inputActiveS: 输入活跃阈值(秒)，由 main.go 从 MovementConfig 注入。
+	// OnActivity 收到 motion 回调时，若近该秒数内有键鼠输入(正在打字)，直接跳过
+	// 不入队——打字时 VLM 截图是冗余的，且 PrintWindow 会卡顿目标窗口。
+	// switch 回调(切窗口)不受此限。默认 0 → OnActivity 内兜底 8s。
+	// 用 atomic 保护：main.go 装配阶段写、onDemandLoop goroutine 读。
+	inputActiveS atomic.Int64
 }
 
 // triggerEvent 是 on_demand 触发事件。
@@ -106,6 +114,12 @@ func (v *VLMCapturer) Stop() {
 	})
 }
 
+// SetInputActiveS 注入输入活跃阈值(秒)。应在 Start() 之前调用（main.go 装配阶段）。
+// 用于 OnActivity 的 motion 回调打字守卫。<=0 时 OnActivity 兜底 8s。
+func (v *VLMCapturer) SetInputActiveS(sec int) {
+	v.inputActiveS.Store(int64(sec))
+}
+
 // Trigger 立即执行一次截图理解(按需模式也走这里)。
 func (v *VLMCapturer) Trigger(ctx context.Context) (string, error) {
 	var (
@@ -175,8 +189,9 @@ func (v *VLMCapturer) Trigger(ctx context.Context) (string, error) {
 // DescribePath 读取指定路径的 PNG 文件并送 VLM 分析，返回摘要。
 // 用于"快捷工具-桌面截图"：用户框选并保存的截图由前端送到这里分析，
 // 保证 VLM 分析的就是用户框选的那块图（而非后端重新截图）。
-// 不写时间线事件、不重新截图——只做"看图说话"。
-func (v *VLMCapturer) DescribePath(ctx context.Context, path string) (string, error) {
+// prompt 是桌面截图识别专用提示词（与引擎构造时的全局 vlm.prompt 区分），
+// 为空时由引擎回落默认。不写时间线事件、不重新截图——只做"看图说话"。
+func (v *VLMCapturer) DescribePath(ctx context.Context, path, prompt string) (string, error) {
 	if v.engine == nil {
 		return "", fmt.Errorf("VLM 未启用")
 	}
@@ -184,7 +199,7 @@ func (v *VLMCapturer) DescribePath(ctx context.Context, path string) (string, er
 	if err != nil {
 		return "", fmt.Errorf("读取截图失败: %w", err)
 	}
-	summary, err := v.engine.Describe(ctx, png)
+	summary, err := v.engine.DescribeWith(ctx, png, prompt)
 	if err != nil {
 		return "", fmt.Errorf("VLM 识别失败: %w", err)
 	}
@@ -201,6 +216,23 @@ func (v *VLMCapturer) DescribePath(ctx context.Context, path string) (string, er
 // gap 判定通过才 non-blocking 入队 triggerCh；channel 满（上次还没处理完）则丢，
 // 这天然实现防重入——消费 goroutine 串行处理，不会并发 Trigger。
 func (v *VLMCapturer) OnActivity(reason string, app App, at time.Time) {
+	// motion 回调打字守卫：用户正在打字时跳过 VLM 截图。
+	// 打字时画面变化会高频触发 motion，但此刻截图既冗余又会卡顿目标窗口
+	// （PrintWindow 同步阻塞目标 UI 线程）。键鼠信号已证明在用电脑，无需再"看"。
+	// switch 回调(切窗口)不受此限——切窗口是低频强信号，值得截。
+	if reason == "motion" {
+		sec := v.inputActiveS.Load()
+		if sec <= 0 {
+			sec = 8 // 默认兜底（与 movement medium 档 InputActiveS 一致）
+		}
+		if tick, ok := winapi.LastInputTick(); ok {
+			idleMs := winapi.GetTickCount64() - uint64(tick)
+			if idleMs > 0 && idleMs < uint64(sec)*1000 {
+				return // 正在打字，跳过 motion 触发
+			}
+		}
+	}
+
 	// 按触发原因选 gap。切窗口是"明确换场景"的强信号，冷却短；
 	// 活跃点是"还在同一场景动"，冷却长。
 	gapS := v.cfg.OnDemandSwitchGapS

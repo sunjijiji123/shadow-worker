@@ -227,7 +227,8 @@ func (s *CollectionServer) AnalyzeImage(ctx context.Context, req *AnalyzeImageRe
 	if req.Path == "" {
 		return nil, fmt.Errorf("截图路径为空")
 	}
-	summary, err := cap.DescribePath(ctx, req.Path)
+	// req.Prompt 是桌面截图识别专用提示词（空=引擎回落默认）。
+	summary, err := cap.DescribePath(ctx, req.Path, req.Prompt)
 	if err != nil {
 		return nil, fmt.Errorf("VLM 分析失败: %w", err)
 	}

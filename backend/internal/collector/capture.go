@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"sync"
 	"syscall"
 	"unsafe"
 
@@ -17,6 +18,14 @@ const (
 	CaptureTargetHeight = 180
 )
 
+// captureMu 是所有截图函数共用的全局互斥锁。
+// movement loop(每 300ms 截帧差图)和 vlm onDemandLoop(触发时截识别图)是两个
+// 独立 goroutine，会并发对同一 HWND 调用 PrintWindow。GDI 层面线程安全，但两个
+// PrintWindow 同时让目标窗口 UI 线程做合成重绘会让卡顿叠加（尤其 Electron 应用）。
+// 串行化后最坏情况是截图排队等一拍，但 ticker 节流，下一个 tick 补上，不影响正确性，
+// 且让卡顿"平摊"而非"叠加"，目标窗口感知更轻。
+var captureMu sync.Mutex
+
 // CaptureWindow 截取指定窗口并降采样为 RGB 字节（长度=320*180*3）。
 // 失败返回 nil。
 //
@@ -24,6 +33,9 @@ const (
 // （Electron/CEF）用 BitBlt 只能拿到空白/加载态，导致帧差信号失效、
 // state 误判。PrintWindow 对所有窗口类型都能拿到真实内容。
 func CaptureWindow(hwnd winapi.HWND) []byte {
+	captureMu.Lock()
+	defer captureMu.Unlock()
+
 	var rect winapi.RECT
 	if !winapi.GetWindowRect(hwnd, &rect) {
 		return nil
@@ -130,6 +142,9 @@ func abs(a int) int {
 // 加载态画面。PrintWindow 让窗口把内容绘制到我们提供的 DC，对所有窗口类型都
 // 有效（Windows 8.1+）。失败返回 nil。
 func CaptureWindowPNG(hwnd winapi.HWND) []byte {
+	captureMu.Lock()
+	defer captureMu.Unlock()
+
 	var rect winapi.RECT
 	if !winapi.GetWindowRect(hwnd, &rect) {
 		return nil
@@ -174,6 +189,9 @@ func CaptureWindowPNG(hwnd winapi.HWND) []byte {
 // 多显示器场景下虚拟屏原点可能为负；GetDC(0) 的 DC 覆盖整块虚拟屏，
 // BitBlt 源坐标恒为 (0,0)（DC 已对齐到虚拟屏左上角）。失败返回 nil。
 func CaptureScreenPNG() []byte {
+	captureMu.Lock()
+	defer captureMu.Unlock()
+
 	w := winapi.GetSystemMetrics(winapi.SM_CXVIRTUALSCREEN)
 	h := winapi.GetSystemMetrics(winapi.SM_CYVIRTUALSCREEN)
 	if w <= 0 || h <= 0 {

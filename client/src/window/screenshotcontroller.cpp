@@ -8,7 +8,8 @@
 ScreenshotController::ScreenshotController(QObject *parent)
     : QObject(parent) {}
 
-void ScreenshotController::capture(const QString &saveDir) {
+void ScreenshotController::capture(const QString &saveDir,
+                                   bool showRecognizeBtn) {
   // 防重入：已有覆盖层在活动，忽略。
   if (m_window) return;
 
@@ -20,7 +21,7 @@ void ScreenshotController::capture(const QString &saveDir) {
           QStringLiteral("/shadow-worker/screenshots");
   }
 
-  m_window = new ScreenShotWindow(dir);
+  m_window = new ScreenShotWindow(dir, showRecognizeBtn);
   // 关闭后由 deleteLater 回收，并清空 m_window（避免悬空指针）。
   m_window->setAttribute(Qt::WA_DeleteOnClose);
 
@@ -28,6 +29,11 @@ void ScreenshotController::capture(const QString &saveDir) {
           [this](const QString &path) {
             m_window = nullptr;
             emit finished(path);
+          });
+  connect(m_window, &ScreenShotWindow::recognized, this,
+          [this](const QString &path) {
+            m_window = nullptr;
+            emit recognized(path);
           });
   connect(m_window, &ScreenShotWindow::cancelled, this, [this]() {
     m_window = nullptr;

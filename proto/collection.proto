@@ -79,5 +79,6 @@ message VLMSummary {
 
 // AnalyzeImage: 分析用户提供的截图文件（"快捷工具-桌面截图"框选结果）。
 message AnalyzeImageRequest {
-  string path = 1;  // PNG 绝对路径
+  string path = 1;   // PNG 绝对路径
+  string prompt = 2;  // 桌面截图识别独立提示词（空=回落引擎构造时的默认 prompt）
 }

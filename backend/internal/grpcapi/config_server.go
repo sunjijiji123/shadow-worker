@@ -162,6 +162,7 @@ func configToProto(cfg *config.Config) *ConfigData {
 		HotkeyScreenshot:         cfg.Hotkeys.Screenshot,
 		HotkeyPromptPrefix:       cfg.Hotkeys.PromptPrefix,
 		ScreenshotWithVlm:        cfg.Screenshot.WithVLM,
+		ScreenshotPrompt:         cfg.Screenshot.Prompt,
 		Autostart:                false,
 		CollectOnStart:           true,
 	}
@@ -293,6 +294,12 @@ func protoToConfig(data *ConfigData) *config.Config {
 	cfg.Hotkeys.Screenshot = data.HotkeyScreenshot
 	cfg.Hotkeys.PromptPrefix = data.HotkeyPromptPrefix
 	cfg.Screenshot.WithVLM = data.ScreenshotWithVlm
+	// screenshot.prompt 不可为空：旧配置/异常数据缺该字段或被清空时回落默认，
+	// 避免桌面截图识别因空提示词失败（与 vlm.prompt 同范式）。
+	cfg.Screenshot.Prompt = data.ScreenshotPrompt
+	if strings.TrimSpace(cfg.Screenshot.Prompt) == "" {
+		cfg.Screenshot.Prompt = config.DefaultScreenshotPrompt
+	}
 
 	return cfg
 }

@@ -70,6 +70,7 @@ message ConfigData {
 
   // Screenshot tool
   bool screenshot_with_vlm = 36;   // 区域截图完成后是否自动触发 VLM 分析（默认 false）
+  string screenshot_prompt = 38;   // 桌面截图识别专用提示词（与 vlm_prompt 区分，空=回落 DefaultScreenshotPrompt）
 
   // General
   bool autostart = 20;

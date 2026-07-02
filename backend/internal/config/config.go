@@ -20,6 +20,12 @@ var defaultPrompt string
 // 空时引擎拒绝分析（Describe 返回错误），保存时 UI 也会拦截。
 const DefaultVLMPrompt = "请用一句话概括这张屏幕截图里用户正在做什么，不超过 50 字。"
 
+// DefaultScreenshotPrompt 是"快捷工具-桌面截图"识别专用提示词的默认值。
+// 与 vlm_prompt 区分：VLM 那条用于后台定时/on_demand 截图（强调概括"在做什么"），
+// 桌面截图是用户主动框选一块区域做识别，语义偏"描述这块截图里有什么"。
+// 存入 config.yaml 的 screenshot.prompt，不可为空（空时回落本默认值）。
+const DefaultScreenshotPrompt = "请详细描述这张截图中的内容：用户正在使用什么应用、界面展示了什么信息、正在进行什么操作。用中文简洁回答。"
+
 // ASRMode 是 ASR 模式。
 type ASRMode string
 
@@ -136,6 +142,9 @@ type ScreenshotConfig struct {
 	// WithVLM: 区域截图完成后是否自动触发一次 VLM 截图理解，把摘要写进时间线。
 	// 默认 false（纯截图落盘 + 写剪贴板，不调 VLM）。
 	WithVLM bool `yaml:"with_vlm"`
+	// Prompt 是桌面截图识别专用提示词（与 vlm.prompt 区分）。
+	// 适用于"完成（自动识别）"和"识别"按钮两条路径。空时回落 DefaultScreenshotPrompt。
+	Prompt string `yaml:"prompt"`
 }
 
 // MovementConfig 是采集配置块。
@@ -153,6 +162,16 @@ type MovementConfig struct {
 	// 短 idle（< 阈值）仍视为"思考"，段不断（见 movement.go 的段合并语义）。
 	// 为 0 时 NewCollector 用 Preset 默认值（600=10min）。
 	AwayThresholdS int `yaml:"away_threshold_s"`
+	// InputActiveS:输入活跃阈值。近该秒数内有键鼠输入 → 判定"正在打字"，
+	// 跳过帧差截图(s1)，只信键鼠信号(s2)。
+	// 原因：PrintWindow 是同步跨进程 GDI 调用，会阻塞目标窗口 UI 线程做合成
+	// 重绘，对 Electron 应用(VS Code/ZCode)每 300ms 截一次会让打字卡顿/丢字。
+	// 而打字时 s2 已证明"在用电脑"，帧差信息完全冗余；帧差唯一不可替代的场景
+	// 是"无输入但画面在变"(看视频)，那种场景用户本就不打字。故输入活跃时跳过
+	// 截图功能无损，且消除卡顿。
+	// 必须小于 InputIdleS（否则 s1 永远被 s2 的宽限期罩住，帧差永不工作）。
+	// 为 0 时 NewCollector 用 Preset 默认值（medium=8s）。
+	InputActiveS int `yaml:"input_active_s"`
 	// SaveScreenshots 由 main.go 从 cfg.Debug.SaveMotionScreenshots 注入（非 yaml 字段）。
 	// true 时 movement 活动窗口帧落盘到 screenshots/ 目录供调试（文件名带 -mv- 前缀）。
 	SaveScreenshots bool `yaml:"-"`
@@ -246,6 +265,9 @@ func Default() *Config {
 			// idle 超 10 分钟判为离开（吃饭/开会），结束当前段。
 			// 短 idle（看文档/思考）仍不打断段。
 			AwayThresholdS: 600,
+			// 8 秒内有键鼠输入 = 正在打字，跳过帧差截图避免 PrintWindow 卡顿。
+			// 小于 InputIdleS(15s)，确保"打字停了再留点宽限才恢复帧差检测"。
+			InputActiveS: 8,
 		},
 		Hotkeys: HotkeyConfig{
 			Record:       "F9",
@@ -254,6 +276,8 @@ func Default() *Config {
 		},
 		Screenshot: ScreenshotConfig{
 			WithVLM: false, // 默认纯截图，不调 VLM
+			// 桌面截图识别专用提示词默认值（与 vlm.prompt 区分）。
+			Prompt: DefaultScreenshotPrompt,
 		},
 		Hotwords: []string{},
 		Log: LogConfig{

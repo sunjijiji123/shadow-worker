@@ -44,10 +44,25 @@ func (e *cloudEngine) Name() string {
 }
 
 func (e *cloudEngine) Describe(ctx context.Context, imagePNG []byte) (string, error) {
+	return e.describe(ctx, imagePNG, e.prompt)
+}
+
+// DescribeWith 用 promptOverride 覆盖引擎默认 prompt；为空则回落 e.prompt。
+func (e *cloudEngine) DescribeWith(ctx context.Context, imagePNG []byte, promptOverride string) (string, error) {
+	p := promptOverride
+	if strings.TrimSpace(p) == "" {
+		p = e.prompt
+	}
+	return e.describe(ctx, imagePNG, p)
+}
+
+// describe 是 Describe / DescribeWith 共用的请求构建+发送逻辑。
+// effectivePrompt 是本次调用实际使用的提示词（调用方负责回落默认）。
+func (e *cloudEngine) describe(ctx context.Context, imagePNG []byte, effectivePrompt string) (string, error) {
 	if len(imagePNG) == 0 {
 		return "", fmt.Errorf("空图片")
 	}
-	if strings.TrimSpace(e.prompt) == "" {
+	if strings.TrimSpace(effectivePrompt) == "" {
 		return "", fmt.Errorf("VLM 提示词为空，请在设置中配置")
 	}
 
@@ -58,7 +73,7 @@ func (e *cloudEngine) Describe(ctx context.Context, imagePNG []byte) (string, er
 			{
 				"role": "user",
 				"content": []map[string]any{
-					{"type": "text", "text": e.prompt},
+					{"type": "text", "text": effectivePrompt},
 					{"type": "image_url", "image_url": map[string]string{"url": dataURL}},
 				},
 			},
