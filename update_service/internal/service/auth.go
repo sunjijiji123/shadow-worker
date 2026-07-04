@@ -4,66 +4,87 @@ package service
 import (
 	"crypto/subtle"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
-	"shadow-worker/update_service/internal/model"
-	"shadow-worker/update_service/internal/storage"
+	"shadow-worker/update_service/internal/config"
 )
 
-// AuthService 处理登录与 JWT。
+// AuthService 处理登录、JWT、改密码。
+//
+// 密码以 bcrypt 哈希存在 config.yaml（admin_password_hash 字段），
+// 启动时加载到内存。改密码时更新内存 + 写回 config.yaml（cfg.Save）。
+// 不再依赖 SQLite。
 type AuthService struct {
-	users     *storage.UserStorage
-	jwtSecret []byte
+	cfg        *config.Config // 持有指针，改密码时同步更新 + Save
+	jwtSecret  []byte
+
+	// passwordHash 受 mu 保护（并发读写：Login 读 / ChangePassword 写）
+	mu           sync.RWMutex
+	passwordHash []byte
 }
 
-// NewAuthService 创建 AuthService。
-func NewAuthService(users *storage.UserStorage, jwtSecret string) *AuthService {
+// NewAuthService 创建 AuthService。cfg 必须已通过 Load 完成（含 hash 迁移）。
+func NewAuthService(cfg *config.Config, jwtSecret string) *AuthService {
 	return &AuthService{
-		users:     users,
-		jwtSecret: []byte(jwtSecret),
+		cfg:          cfg,
+		jwtSecret:    []byte(jwtSecret),
+		passwordHash: []byte(cfg.AdminPasswordHash),
 	}
-}
-
-// EnsureAdmin 在数据库为空时创建初始管理员账号。
-func (s *AuthService) EnsureAdmin(username, password string) error {
-	count, err := s.users.Count()
-	if err != nil {
-		return fmt.Errorf("count users: %w", err)
-	}
-	if count > 0 {
-		return nil
-	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return fmt.Errorf("hash password: %w", err)
-	}
-	return s.users.Create(&model.User{
-		Username:     username,
-		PasswordHash: string(hash),
-	})
 }
 
 // Login 验证账号密码并返回 JWT。
 func (s *AuthService) Login(username, password string) (string, error) {
-	u, err := s.users.GetByUsername(username)
-	if err != nil {
-		return "", fmt.Errorf("lookup user: %w", err)
-	}
-	if u == nil {
+	// 用户名常量时间比较（避免枚举）
+	if subtle.ConstantTimeCompare([]byte(username), []byte(s.cfg.AdminUsername)) != 1 {
 		return "", fmt.Errorf("invalid credentials")
 	}
-	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
+
+	s.mu.RLock()
+	hash := s.passwordHash
+	s.mu.RUnlock()
+	if err := bcrypt.CompareHashAndPassword(hash, []byte(password)); err != nil {
 		return "", fmt.Errorf("invalid credentials")
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub": u.Username,
+		"sub": username,
 		"iat": time.Now().UTC().Unix(),
 		"exp": time.Now().UTC().Add(24 * time.Hour).Unix(),
 	})
 	return token.SignedString(s.jwtSecret)
+}
+
+// ChangePassword 验证旧密码，更新成新密码（bcrypt 哈希），
+// 同步更新内存 + config.yaml（持久化）。
+func (s *AuthService) ChangePassword(username, oldPassword, newPassword string) error {
+	// 先验证旧密码（复用 Login 的校验逻辑，失败则拒绝）
+	if _, err := s.Login(username, oldPassword); err != nil {
+		return fmt.Errorf("invalid old password")
+	}
+	if len(newPassword) < 6 {
+		return fmt.Errorf("new password too short (min 6 chars)")
+	}
+
+	newHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash new password: %w", err)
+	}
+
+	// 更新内存
+	s.mu.Lock()
+	s.passwordHash = newHash
+	s.mu.Unlock()
+
+	// 同步到 cfg 并持久化
+	s.cfg.AdminPasswordHash = string(newHash)
+	s.cfg.AdminPassword = "" // 明文字段保持空
+	if err := s.cfg.Save(); err != nil {
+		return fmt.Errorf("persist config: %w", err)
+	}
+	return nil
 }
 
 // ValidateToken 验证 JWT 并返回用户名。

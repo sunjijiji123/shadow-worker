@@ -1,8 +1,6 @@
 const API = '';
 let token = localStorage.getItem('update_token') || '';
 let statusData = null;
-let uptimeSec = 0;
-let uptimeTimer = null;
 
 function $(id) { return document.getElementById(id); }
 function hide(id) { $(id).classList.add('hidden'); }
@@ -25,13 +23,6 @@ function formatDate(iso) {
     if (!iso) return '-';
     const d = new Date(iso);
     return d.toLocaleString('zh-CN', { dateStyle: 'long', timeStyle: 'short' });
-}
-
-function formatUptime(totalSeconds) {
-    const h = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
-    const m = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
-    const s = String(totalSeconds % 60).padStart(2, '0');
-    return `${h}:${m}:${s}`;
 }
 
 function showToast(message, type = 'info') {
@@ -79,17 +70,6 @@ function showDashboard() {
     $('login-screen').classList.remove('active');
     show('dashboard');
     $('dashboard').classList.add('active');
-    startUptime();
-}
-
-function startUptime() {
-    if (uptimeTimer) clearInterval(uptimeTimer);
-    uptimeSec = 0;
-    $('uptime').textContent = formatUptime(uptimeSec);
-    uptimeTimer = setInterval(() => {
-        uptimeSec++;
-        $('uptime').textContent = formatUptime(uptimeSec);
-    }, 1000);
 }
 
 function setLoginLoading(isLoading) {
@@ -134,7 +114,6 @@ async function login() {
 function logout() {
     token = '';
     localStorage.removeItem('update_token');
-    if (uptimeTimer) clearInterval(uptimeTimer);
     showLogin();
     showToast('Signed out', 'info');
 }
@@ -176,8 +155,6 @@ function renderStatus(data) {
         </div>
     `;
 
-    $('listen-addr').textContent = data.listen_addr || '--';
-
     const releasesUrl = repoUrl + '/releases';
     const link = $('github-empty-link');
     if (link) link.href = releasesUrl;
@@ -198,7 +175,6 @@ async function loadReleases() {
         const data = await res.json();
         const releases = data.releases || [];
         renderReleases(releases);
-        $('release-count').textContent = releases.length;
     } catch (e) {
         hide('releases-loading');
         hide('releases-empty');
@@ -206,7 +182,6 @@ async function loadReleases() {
         $('releases-error').textContent = e.message;
         show('releases-error');
         showToast(e.message, 'error');
-        $('release-count').textContent = 'ERR';
     }
 }
 
@@ -249,6 +224,7 @@ async function refreshAll() {
     btn.disabled = true;
     btn.textContent = 'Refreshing...';
     try {
+        // 仪表盘只刷状态 + releases；配置数据进设置页时才加载
         await Promise.all([loadStatus(), loadReleases()]);
         showToast('Refreshed', 'success');
     } catch (e) {
@@ -258,6 +234,145 @@ async function refreshAll() {
         btn.textContent = original;
     }
 }
+
+// ============ View Switching（仪表盘内：主视图 ↔ 设置视图）============
+// 注意：不要命名成 showDashboard，会和上面的登录屏切换函数冲突（同名覆盖）。
+function showSettingsView() {
+    $('dashboard-view').classList.add('hidden');
+    $('settings-view').classList.remove('hidden');
+    // 进入设置页默认显示 GitHub tab，并加载配置（懒加载）
+    switchSettingsTab('github');
+}
+
+// 设置页内 tab 切换：github | account
+function switchSettingsTab(tab) {
+    const isGithub = tab === 'github';
+    $('tab-github').classList.toggle('active', isGithub);
+    $('tab-account').classList.toggle('active', !isGithub);
+    $('settings-tab-github').classList.toggle('hidden', !isGithub);
+    $('settings-tab-account').classList.toggle('hidden', isGithub);
+    // 首次进 GitHub tab 时加载配置
+    if (isGithub) loadConfig();
+}
+
+function showDashboardView() {
+    $('settings-view').classList.add('hidden');
+    $('dashboard-view').classList.remove('hidden');
+}
+
+// ============ GitHub Configuration ============
+async function loadConfig() {
+    const cfgLoading = $('config-loading');
+    const cfgForm = $('config-form');
+    cfgLoading.classList.remove('hidden');
+    cfgForm.classList.add('hidden');
+    try {
+        const res = await api('/admin/api/config');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Load config failed');
+        cfgLoading.classList.add('hidden');
+        cfgForm.classList.remove('hidden');
+
+        $('cfg-owner').value = data.github_owner || '';
+        $('cfg-repo').value = data.github_repo || '';
+        $('cfg-token').value = '';  // 脱敏：永远不回显，留空=不修改
+        $('cfg-token-status').textContent = data.github_token_masked
+            ? `(configured: ${data.github_token_masked})`
+            : '(not configured)';
+        $('cfg-ttl').value = data.github_cache_ttl || '';
+        $('cfg-asset').value = data.asset_name_template || '';
+    } catch (e) {
+        cfgLoading.classList.add('hidden');
+        $('config-error').textContent = e.message;
+        $('config-error').classList.remove('hidden');
+    }
+}
+
+async function saveConfig(e) {
+    e.preventDefault();
+    const errEl = $('config-error');
+    const btn = $('config-save-btn');
+    errEl.classList.add('hidden');
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+    try {
+        const body = {
+            github_owner: $('cfg-owner').value.trim(),
+            github_repo: $('cfg-repo').value.trim(),
+            github_cache_ttl: $('cfg-ttl').value.trim(),
+            asset_name_template: $('cfg-asset').value.trim()
+        };
+        // token 留空=不修改；填了才提交
+        const tokenVal = $('cfg-token').value;
+        if (tokenVal) body.github_token = tokenVal;
+
+        const res = await api('/admin/api/config', {
+            method: 'PUT',
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Save failed');
+        showToast('Configuration saved (hot-reloaded)', 'success');
+        $('cfg-token').value = '';  // 清空，避免重复提交
+        await loadConfig();  // 刷新脱敏显示
+    } catch (e) {
+        errEl.textContent = e.message;
+        errEl.classList.remove('hidden');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Save Configuration';
+    }
+}
+
+// ============ Change Password ============
+async function changePassword(e) {
+    e.preventDefault();
+    const errEl = $('password-error');
+    const btn = $('password-save-btn');
+    errEl.classList.add('hidden');
+
+    const oldPw = $('pw-old').value;
+    const newPw = $('pw-new').value;
+    const confirmPw = $('pw-confirm').value;
+    if (newPw !== confirmPw) {
+        errEl.textContent = 'New passwords do not match';
+        errEl.classList.remove('hidden');
+        return;
+    }
+    if (newPw.length < 6) {
+        errEl.textContent = 'New password must be at least 6 characters';
+        errEl.classList.remove('hidden');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Changing...';
+    try {
+        const res = await api('/admin/api/password', {
+            method: 'POST',
+            body: JSON.stringify({
+                old_password: oldPw,
+                new_password: newPw
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Change failed');
+        showToast('Password changed. Use the new password next login.', 'success');
+        $('pw-old').value = '';
+        $('pw-new').value = '';
+        $('pw-confirm').value = '';
+    } catch (e) {
+        errEl.textContent = e.message;
+        errEl.classList.remove('hidden');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Change Password';
+    }
+}
+
+// Bind form submits
+$('config-form').addEventListener('submit', saveConfig);
+$('password-form').addEventListener('submit', changePassword);
 
 // Initialize
 if (token) {

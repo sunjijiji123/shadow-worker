@@ -74,6 +74,22 @@ type ghRelease struct {
 	Assets      []ghAsset `json:"assets"`
 }
 
+// UpdateSource 热加载 GitHub 源配置（owner/repo/token/ttl）。
+// 用于管理后台改 GitHub 配置后无需重启即生效。
+// 写锁内同时更新字段 + 清空缓存（换仓库后旧缓存必须失效，否则 TTL 内返回旧数据）。
+func (c *Client) UpdateSource(owner, repo, token string, ttl time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.owner = owner
+	c.repo = repo
+	c.token = token
+	c.ttl = ttl
+	// 清空缓存：owner/repo 换了，旧 cached 是上一个仓库的数据
+	c.cached = nil
+	c.cachedAt = time.Time{}
+	c.cachedErr = nil
+}
+
 // ListReleases 返回该仓库的 releases（默认最新 100 条）。结果会按 ttl 缓存。
 func (c *Client) ListReleases(ctx context.Context) ([]Release, error) {
 	c.mu.RLock()
@@ -98,7 +114,8 @@ func (c *Client) ListReleases(ctx context.Context) ([]Release, error) {
 		return c.copyCache(), nil
 	}
 
-	releases, err := c.fetch(ctx)
+	// fetch 在持锁状态下调用，内部读 owner/repo/token 安全（已加锁）
+	releases, err := c.fetchLocked(ctx)
 	c.cachedAt = time.Now()
 	c.cachedErr = err
 	if err != nil {
@@ -115,7 +132,9 @@ func (c *Client) copyCache() []Release {
 	return out
 }
 
-func (c *Client) fetch(ctx context.Context) ([]Release, error) {
+// fetchLocked 调用方必须持有 c.mu（ListReleases 在写锁内调用）。
+// 读 owner/repo/token 字段在锁内，避免与 UpdateSource 的 data race。
+func (c *Client) fetchLocked(ctx context.Context) ([]Release, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=100", c.owner, c.repo)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

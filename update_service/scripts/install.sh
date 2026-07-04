@@ -5,7 +5,6 @@ set -euo pipefail
 
 INSTALL_DIR="/opt/shadow-worker-update"
 CONFIG_DIR="/etc/shadow-worker-update"
-DATA_DIR="/var/lib/shadow-worker-update/data"
 SERVICE_NAME="shadow-worker-update"
 
 if [ "$EUID" -ne 0 ]; then
@@ -35,13 +34,11 @@ chmod +x "$INSTALL_DIR/server"
 
 # 配置目录
 mkdir -p "$CONFIG_DIR"
-mkdir -p "$DATA_DIR"
 
-# 首次安装时写入默认配置
+# 首次安装时写入默认配置（admin_password 明文，启动后自动迁移成 hash）
 if [ ! -f "$CONFIG_DIR/config.yaml" ]; then
     cat > "$CONFIG_DIR/config.yaml" <<EOF
 listen_addr: "0.0.0.0:8080"
-data_dir: "$DATA_DIR"
 
 admin_username: "admin"
 admin_password: "changeme"

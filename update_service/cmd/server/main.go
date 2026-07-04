@@ -11,18 +11,19 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"shadow-worker/update_service/internal/config"
-	"shadow-worker/update_service/internal/db"
 	"shadow-worker/update_service/internal/github"
 	"shadow-worker/update_service/internal/handler"
 	"shadow-worker/update_service/internal/middleware"
 	"shadow-worker/update_service/internal/service"
-	"shadow-worker/update_service/internal/storage"
 )
 
 func main() {
@@ -36,18 +37,9 @@ func main() {
 		log.Fatalf("加载配置失败: %v", err)
 	}
 
-	sqlDB, err := db.Open(cfg.DBPath())
-	if err != nil {
-		log.Fatalf("打开数据库失败: %v", err)
-	}
-	defer sqlDB.Close()
-
-	userStore := storage.NewUserStorage(sqlDB)
-
-	authSvc := service.NewAuthService(userStore, cfg.JWTSecret)
-	if err := authSvc.EnsureAdmin(cfg.AdminUsername, cfg.AdminPassword); err != nil {
-		log.Fatalf("初始化管理员账号失败: %v", err)
-	}
+	// 已去掉 SQLite：admin 密码以 bcrypt 哈希存在 config.yaml（admin_password_hash），
+	// 启动时 config.Load 已完成明文→hash 迁移。AuthService 直接从 cfg 加载。
+	authSvc := service.NewAuthService(cfg, cfg.JWTSecret)
 
 	ghClient := github.NewClient(cfg.GitHubOwner, cfg.GitHubRepo, cfg.GitHubToken, cfg.GitHubCacheTTL)
 	releaseSvc := service.NewReleaseService(ghClient, cfg)
@@ -56,6 +48,8 @@ func main() {
 	releaseHandler := handler.NewReleaseHandler(releaseSvc)
 	updateHandler := handler.NewUpdateHandler(releaseSvc)
 	statusHandler := handler.NewStatusHandler(cfg)
+	configHandler := handler.NewConfigHandler(cfg, ghClient)
+	accountHandler := handler.NewAccountHandler(authSvc)
 
 	mux := http.NewServeMux()
 
@@ -75,12 +69,36 @@ func main() {
 			webRoot = "web/admin"
 		}
 	}
-	mux.Handle("/admin/", http.StripPrefix("/admin", http.FileServer(http.Dir(webRoot))))
+
+	// index.html 用专用 handler：把 ?v=__APP_VERSION__ 占位符替换成启动时间戳，
+	// 这样每次重启服务，app.js 的 URL 版本号就变，浏览器自动失效缓存。
+	// 开发期改 app.js 后只需重启服务即可，无需让用户手动硬刷新。
+	startEpoch := fmt.Sprintf("%d", time.Now().Unix())
+	indexHandler := func(w http.ResponseWriter, r *http.Request) {
+		data, err := os.ReadFile(filepath.Join(webRoot, "index.html"))
+		if err != nil {
+			http.Error(w, "index.html not found", http.StatusInternalServerError)
+			return
+		}
+		rendered := strings.ReplaceAll(string(data), "__APP_VERSION__", startEpoch)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(rendered))
+	}
+	mux.HandleFunc("/admin/", func(w http.ResponseWriter, r *http.Request) {
+		// 根路径 /admin/ 和 /admin/index.html 走模板注入；其它静态文件走 FileServer
+		if r.URL.Path == "/admin/" || r.URL.Path == "/admin/index.html" {
+			indexHandler(w, r)
+			return
+		}
+		http.StripPrefix("/admin", http.FileServer(http.Dir(webRoot))).ServeHTTP(w, r)
+	})
 
 	// 管理 API（需 JWT）
 	adminMux := http.NewServeMux()
 	adminMux.HandleFunc("/releases", releaseHandler.List)
 	adminMux.HandleFunc("/status", statusHandler.Status)
+	adminMux.HandleFunc("/config", configHandler.ServeHTTP)
+	adminMux.HandleFunc("/password", accountHandler.ChangePassword)
 
 	mux.Handle("/admin/api/", http.StripPrefix("/admin/api", middleware.Auth(authSvc)(adminMux)))
 
