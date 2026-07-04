@@ -1,0 +1,21 @@
+listen_addr: "0.0.0.0:8080"
+data_dir: "./data"
+
+admin_username: "admin"
+# 生产环境强烈建议通过环境变量 UPDATE_ADMIN_PASSWORD 传入
+admin_password: "changeme"
+
+# 生产环境强烈建议通过环境变量 UPDATE_JWT_SECRET 传入
+jwt_secret: "replace-with-a-random-secret-at-least-32-bytes"
+
+# GitHub Releases 源配置
+github_owner: "your-github-username"
+github_repo: "shadow-worker"
+
+# 可选：私有仓库或需要更高 rate limit 时填写
+# github_token: ""
+
+# 缓存 GitHub Releases 列表，避免服务端 IP 触发 rate limit
+github_cache_ttl: "5m"
+
+asset_name_template: "ShadowWorker-{version}-setup.exe"

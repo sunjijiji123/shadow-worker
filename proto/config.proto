@@ -76,6 +76,12 @@ message ConfigData {
   bool autostart = 20;
   bool collect_on_start = 21;
   string data_dir = 22;
+
+  // Update
+  string update_server_url = 39;
+  bool   update_check_on_startup = 40;
+  bool   update_check_daily = 41;
+  string update_channel = 42;      // stable | beta
 }
 
 // 通用 provider 配置(ASR/Polish/VLM 共用)

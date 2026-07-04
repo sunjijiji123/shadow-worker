@@ -25,6 +25,7 @@
 #include "viewmodels/overview_vm.h"
 #include "viewmodels/settings_vm.h"
 #include "viewmodels/timeline_vm.h"
+#include "viewmodels/update_vm.h"
 #include "viewmodels/whitelist_vm.h"
 #include "window/windowpicker.h"
 #include "window/windowhelper.h"
@@ -107,6 +108,12 @@ int main(int argc, char *argv[]) {
     timelineVm.setChannel(channel);
     SettingsViewModel settingsVm;
     settingsVm.setChannel(channel);
+    UpdateViewModel updateVm;
+    updateVm.setChannel(channel);
+    // 下载完成并拉起安装包后，请求退出客户端，让 Inno Setup 能覆盖 exe 文件
+    // （否则文件被锁，PrepareToInstall 的 taskkill 走不到复制阶段）。
+    QObject::connect(&updateVm, &UpdateViewModel::requestQuit,
+                     &app, &QApplication::quit);
     AutostartManager autostartManager;
     const bool autostartMode =
         QCoreApplication::arguments().contains(QLatin1String("--autostart"));
@@ -153,12 +160,14 @@ int main(int argc, char *argv[]) {
         ver = QString::fromUtf8(vf.readAll()).trimmed();
       }
       engine.rootContext()->setContextProperty("appVersion", ver);
+      updateVm.setCurrentVersion(ver);
     }
 
     engine.rootContext()->setContextProperty("overviewVm", &overviewVm);
     engine.rootContext()->setContextProperty("whitelistVm", &whitelistVm);
     engine.rootContext()->setContextProperty("timelineVm", &timelineVm);
     engine.rootContext()->setContextProperty("settingsVm", &settingsVm);
+    engine.rootContext()->setContextProperty("updateVm", &updateVm);
     engine.rootContext()->setContextProperty("autostartManager",
                                              &autostartManager);
     engine.rootContext()->setContextProperty("autostartMode", autostartMode);

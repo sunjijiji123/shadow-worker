@@ -201,6 +201,35 @@ void SettingsViewModel::setScreenshotPrompt(const QString &v) {
   emit screenshotPromptChanged();
 }
 
+// Update setters
+void SettingsViewModel::setUpdateServerUrl(const QString &v) {
+  if (m_updateServerUrl == v)
+    return;
+  m_updateServerUrl = v;
+  emit updateServerUrlChanged();
+}
+
+void SettingsViewModel::setUpdateCheckOnStartup(bool v) {
+  if (m_updateCheckOnStartup == v)
+    return;
+  m_updateCheckOnStartup = v;
+  emit updateCheckOnStartupChanged();
+}
+
+void SettingsViewModel::setUpdateCheckDaily(bool v) {
+  if (m_updateCheckDaily == v)
+    return;
+  m_updateCheckDaily = v;
+  emit updateCheckDailyChanged();
+}
+
+void SettingsViewModel::setUpdateChannel(const QString &v) {
+  if (m_updateChannel == v)
+    return;
+  m_updateChannel = v;
+  emit updateChannelChanged();
+}
+
 // Provider helpers
 QVariantList *SettingsViewModel::providerListRef(const QString &category) {
   if (category == "asr")
@@ -334,6 +363,7 @@ void SettingsViewModel::setActiveProvider(const QString &category,
 void SettingsViewModel::load() {
   if (!m_channel) {
     setError(QStringLiteral("gRPC channel 未初始化"));
+    emit loadFinished(false);
     return;
   }
   setLoading(true);
@@ -352,21 +382,25 @@ void SettingsViewModel::load() {
                      if (!status.isOk()) {
                        setError(QStringLiteral("gRPC 错误: ") +
                                 status.message());
+                       emit loadFinished(false);
                        return;
                      }
 
                      auto opt = replyPtr->read<ConfigData>();
                      if (!opt.has_value()) {
                        setError(QStringLiteral("解析响应失败"));
+                       emit loadFinished(false);
                        return;
                      }
                      applyConfig(*opt);
+                     emit loadFinished(true);
                    });
 }
 
 void SettingsViewModel::save() {
   if (!m_channel) {
     setError(QStringLiteral("gRPC channel 未初始化"));
+    emit saveFinished(false, m_error);
     return;
   }
   setLoading(true);
@@ -385,14 +419,17 @@ void SettingsViewModel::save() {
                      if (!status.isOk()) {
                        setError(QStringLiteral("保存失败: ") +
                                 status.message());
+                       emit saveFinished(false, m_error);
                        return;
                      }
 
                      auto opt = replyPtr->read<Result>();
                      if (!opt.has_value() || !opt->ok()) {
                        setError(QStringLiteral("保存返回失败"));
+                       emit saveFinished(false, m_error);
                        return;
                      }
+                     emit saveFinished(true, QString{});
                    });
 }
 
@@ -499,6 +536,12 @@ void SettingsViewModel::applyConfig(const ConfigData &data) {
   setHotkeyPromptPrefix(data.hotkeyPromptPrefix());
   setScreenshotWithVlm(data.screenshotWithVlm());
   setScreenshotPrompt(data.screenshotPrompt());
+
+  setUpdateServerUrl(data.updateServerUrl());
+  setUpdateCheckOnStartup(data.updateCheckOnStartup());
+  setUpdateCheckDaily(data.updateCheckDaily());
+  QString ch = data.updateChannel();
+  setUpdateChannel(ch.isEmpty() ? QStringLiteral("stable") : ch);
 }
 
 ConfigData SettingsViewModel::buildConfig() const {
@@ -535,6 +578,11 @@ ConfigData SettingsViewModel::buildConfig() const {
   data.setHotkeyPromptPrefix(m_hotkeyPromptPrefix);
   data.setScreenshotWithVlm(m_screenshotWithVlm);
   data.setScreenshotPrompt(m_screenshotPrompt);
+
+  data.setUpdateServerUrl(m_updateServerUrl);
+  data.setUpdateCheckOnStartup(m_updateCheckOnStartup);
+  data.setUpdateCheckDaily(m_updateCheckDaily);
+  data.setUpdateChannel(m_updateChannel);
 
   return data;
 }

@@ -10,6 +10,9 @@ Rectangle {
     property string text: ""
     property string kind: "ghost"     // primary | ghost | danger
     property bool small: false
+    // loading=true 时按钮显示 "..."、降低不透明度并禁用点击，
+    // 用于异步操作（如 Save & Check、Check for Updates）的视觉反馈。
+    property bool loading: false
 
     signal clicked()
 
@@ -36,10 +39,14 @@ Rectangle {
 
     Behavior on border.color { ColorAnimation { duration: 150 } }
 
+    // loading 时整体变暗，文本末尾追加 "..."，让用户看到"正在处理"。
+    opacity: loading ? 0.6 : 1.0
+    Behavior on opacity { NumberAnimation { duration: 150 } }
+
     Text {
         id: btnText
         anchors.centerIn: parent
-        text: root.text
+        text: root.loading ? (root.text + " ...") : root.text
         color: {
             if (kind === "primary") return "#000000"
             if (kind === "danger") return Theme.danger
@@ -56,6 +63,8 @@ Rectangle {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
         hoverEnabled: true
+        // loading 期间禁用点击，防止重复触发异步操作。
+        enabled: !root.loading
         onClicked: root.clicked()
     }
 }

@@ -13,9 +13,52 @@ Item {
 
     // ---- local state (will bind to a viewModel later) ----
     property bool launchAtStartup: true
-    property bool checkUpdateOnStartup: true
-    property bool checkUpdateDaily: true
     property string activeMcpTab: "claude"   // claude | cursor | workbuddy | raw
+
+    // ---- update service helpers ----
+    readonly property string githubUrl: "https://github.com/sunjijiji123/shadow-worker"
+    readonly property string websiteUrl: githubUrl
+
+    function openExternalUrl(url) {
+        if (url && url.length > 0)
+            Qt.openUrlExternally(url)
+    }
+
+    function changelogUrl() {
+        return (updateVm && updateVm.changelogUrl && updateVm.changelogUrl.length > 0)
+               ? updateVm.changelogUrl
+               : (githubUrl + "/releases")
+    }
+
+    readonly property string updateBadgeText: {
+        if (!updateVm) return qsTr("Update service unavailable")
+        if (updateVm.loading) return qsTr("Checking...")
+        if (updateVm.error !== "") return qsTr("Update service unavailable")
+        if (updateVm.available) return qsTr("New version v%1 available").arg(updateVm.latestVersion)
+        return qsTr("Up to date")
+    }
+
+    readonly property string updateBadgeKind: {
+        if (!updateVm) return "warn"
+        return updateVm.error !== "" ? "warn" : "ok"
+    }
+
+    // debounced auto-save for the update server URL input
+    Timer {
+        id: saveDebounce
+        interval: 800
+        onTriggered: if (settingsVm) settingsVm.save()
+    }
+
+    Connections {
+        target: settingsVm
+        function onSaveFinished(ok, error) {
+            var win = ApplicationWindow.window
+            if (!win || !win.toast) return
+            if (ok) win.toast(qsTr("Settings saved"))
+            else win.toast(error || qsTr("Save failed"), "warning")
+        }
+    }
 
     // ---- MCP tools list ----
     // 与后端 server.go 注册的工具保持同步（名称 + 描述精简版）。
@@ -484,6 +527,10 @@ Item {
                     Layout.fillWidth: true
                     spacing: 12
 
+                    // 发现新版本的入口已移交标题栏 UpdateBadge + 全局 UpdateDialog
+                    // （挂在 main.qml 顶层，避开 StackLayout 可见性坑）。系统页只保留
+                    // 版本信息展示、检查更新按钮、URL 配置、开关。
+
                     // .update-row: title/version/badge on left, link buttons on right
                     RowLayout {
                         Layout.fillWidth: true
@@ -492,13 +539,15 @@ Item {
                         ColumnLayout {
                             spacing: 6
                             Text {
-                                text: qsTr("Current version v" + appVersion + " · last checked 2026-06-18")
+                                text: qsTr("Current version v%1 · last checked %2")
+                                      .arg(appVersion)
+                                      .arg(updateVm && updateVm.lastCheckedAt ? updateVm.lastCheckedAt : qsTr("never"))
                                 color: Theme.muted
                                 font.pixelSize: 13
                             }
                             Badge {
-                                text: qsTr("Update service unavailable")
-                                kind: "warn"
+                                text: root.updateBadgeText
+                                kind: root.updateBadgeKind
                             }
                         }
 
@@ -510,26 +559,23 @@ Item {
                             Button {
                                 text: qsTr("Website")
                                 kind: "ghost"
-                                onClicked: {
-                                    var win = ApplicationWindow.window
-                                    if (win && win.toast) win.toast(qsTr("Opening website..."))
-                                }
+                                onClicked: root.openExternalUrl(root.websiteUrl)
                             }
                             Button {
                                 text: "GitHub"
                                 kind: "ghost"
+                                onClicked: root.openExternalUrl(root.githubUrl)
                             }
                             Button {
                                 text: qsTr("Changelog")
                                 kind: "ghost"
+                                onClicked: root.openExternalUrl(root.changelogUrl())
                             }
                             Button {
                                 text: qsTr("Check for Updates")
                                 kind: "primary"
-                                onClicked: {
-                                    var win = ApplicationWindow.window
-                                    if (win && win.toast) win.toast(qsTr("Update service unavailable"), "warning")
-                                }
+                                loading: updateVm && updateVm.loading
+                                onClicked: if (updateVm) updateVm.checkUpdate()
                             }
                         }
                     }
@@ -554,8 +600,12 @@ Item {
                         }
                         Item { Layout.fillWidth: true }
                         Toggle {
-                            checked: checkUpdateOnStartup
-                            onToggled: checkUpdateOnStartup = checked
+                            checked: settingsVm ? settingsVm.updateCheckOnStartup : false
+                            onToggled: function(checked) {
+                                if (!settingsVm) return
+                                settingsVm.updateCheckOnStartup = checked
+                                settingsVm.save()
+                            }
                         }
                     }
 
@@ -577,16 +627,78 @@ Item {
                         }
                         Item { Layout.fillWidth: true }
                         Toggle {
-                            checked: checkUpdateDaily
-                            onToggled: checkUpdateDaily = checked
+                            checked: settingsVm ? settingsVm.updateCheckDaily : false
+                            onToggled: function(checked) {
+                                if (!settingsVm) return
+                                settingsVm.updateCheckDaily = checked
+                                if (updateVm) updateVm.checkDaily = checked
+                                settingsVm.save()
+                            }
                         }
                     }
 
                     // update server url
-                    TextField {
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        label: qsTr("Update Server URL")
-                        text: "https://updates.shadow-worker.example"
+                        spacing: 8
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+
+                            TextField {
+                                id: updateServerUrlField
+                                Layout.fillWidth: true
+                                label: qsTr("Update Server URL")
+                                placeholder: qsTr("https://updates.example.com")
+                                // 初始赋值 + 加载完成后回填：settingsVm.load() 异步，
+                                // Component.onCompleted 时值可能还是空，需要等
+                                // loadFinished / updateServerUrlChanged 信号回填。
+                                // 不用 text: 绑定（坑 2：编辑型 TextField 绑定会冲突）。
+                                Component.onCompleted: updateServerUrlField.syncFromVm()
+                                function syncFromVm() {
+                                    if (settingsVm) text = settingsVm.updateServerUrl
+                                }
+                                Connections {
+                                    target: settingsVm
+                                    function onLoadFinished() { updateServerUrlField.syncFromVm() }
+                                    function onUpdateServerUrlChanged() {
+                                        // 仅当用户未在编辑时回填，避免打字过程中被覆盖
+                                        if (!updateServerUrlField.activeFocus)
+                                            updateServerUrlField.syncFromVm()
+                                    }
+                                }
+                                onTextEdited: function(newText) {
+                                    if (!settingsVm) return
+                                    settingsVm.updateServerUrl = newText
+                                    saveDebounce.restart()
+                                }
+                            }
+
+                            Button {
+                                Layout.alignment: Qt.AlignBottom
+                                // 与 TextField 内 input 行同高（36px），底部对齐到
+                                // input 行底部，避免按钮浮在 input 中间或底部留白。
+                                Layout.preferredHeight: 36
+                                text: qsTr("Save")
+                                kind: "primary"
+                                // 只负责保存服务器地址；检查更新由上方的
+                                // "Check for Updates" 按钮独立完成，职责分离。
+                                loading: settingsVm && settingsVm.loading
+                                onClicked: if (settingsVm) settingsVm.save()
+                            }
+                        }
+
+                        // 发现新版本时，提示用户点标题栏徽标查看详情并更新。
+                        Text {
+                            visible: updateVm && updateVm.available
+                            text: qsTr("New version v%1 is available. Click the Update badge in the title bar to view details and update.")
+                                  .arg(updateVm.latestVersion)
+                            color: Theme.accent
+                            font.pixelSize: 12
+                            wrapMode: Text.WordWrap
+                            Layout.fillWidth: true
+                        }
                     }
                 }
             }

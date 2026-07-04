@@ -48,6 +48,7 @@ find_package(Qt6 REQUIRED COMPONENTS
     QuickLayouts     # QML 布局
     Widgets          # 托盘/QSystemTrayIcon
     Multimedia       # 麦克风
+    Network          # QNetworkAccessManager（更新包下载）
     Grpc             # gRPC 客户端
     Protobuf         # protobuf 消息
     ProtobufTools    # qt_add_protobuf 函数
@@ -116,6 +117,17 @@ qt_add_grpc(config_grpc CLIENT
     OUTPUT_DIRECTORY ${GEN_DIR}
 )
 
+# update
+qt_add_protobuf(update_proto
+    PROTO_FILES ${PROTO_DIR}/update.proto
+    OUTPUT_DIRECTORY ${GEN_DIR}
+)
+qt_add_grpc(update_grpc CLIENT
+    PROTO_FILES ${PROTO_DIR}/update.proto
+    OUTPUT_DIRECTORY ${GEN_DIR}
+)
+target_link_libraries(update_grpc PRIVATE update_proto)
+
 # voice (recording control + live spectrum stream)
 qt_add_protobuf(voice_proto
     PROTO_FILES ${PROTO_DIR}/voice.proto
@@ -145,6 +157,8 @@ qt_add_executable(shadow-worker-client
     src/viewmodels/categoryproxy.cpp
     src/viewmodels/settings_vm.h
     src/viewmodels/settings_vm.cpp
+    src/viewmodels/update_vm.h
+    src/viewmodels/update_vm.cpp
     src/window/windowpicker.h
     src/window/windowpicker.cpp
     src/window/windowhelper.h
@@ -189,6 +203,7 @@ target_link_libraries(shadow-worker-client PRIVATE
     Qt6::QuickLayouts
     Qt6::Widgets
     Qt6::Multimedia
+    Qt6::Network
     Qt6::Grpc
     overview_proto
     overview_grpc
@@ -200,6 +215,8 @@ target_link_libraries(shadow-worker-client PRIVATE
     collection_grpc
     config_proto
     config_grpc
+    update_proto
+    update_grpc
     voice_proto
     voice_grpc
 )
@@ -258,6 +275,8 @@ qt_add_qml_module(shadow-worker-client
         qml/components/TitleBar.qml
         qml/components/RecordingBubble.qml
         qml/components/ResultBubble.qml
+        qml/components/UpdateBadge.qml
+        qml/components/UpdateDialog.qml
         qml/RecordingWindow.qml
         qml/ScreenshotResultWindow.qml
         # pages
@@ -333,6 +352,8 @@ qt_add_translations(shadow-worker-client
         ${CMAKE_SOURCE_DIR}/qml/components/TitleBar.qml
         ${CMAKE_SOURCE_DIR}/qml/components/RecordingBubble.qml
         ${CMAKE_SOURCE_DIR}/qml/components/ResultBubble.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/UpdateBadge.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/UpdateDialog.qml
         ${CMAKE_SOURCE_DIR}/qml/pages/OverviewPage.qml
         ${CMAKE_SOURCE_DIR}/qml/pages/TimelinePage.qml
         ${CMAKE_SOURCE_DIR}/qml/pages/SettingsPage.qml

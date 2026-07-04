@@ -126,6 +126,9 @@ import ShadowWorker
         TitleBar {
             window: mainWindow
             Layout.fillWidth: true
+            onUpdateBadgeClicked: {
+                if (updateDialog) updateDialog.open()
+            }
         }
 
     RowLayout {
@@ -280,6 +283,13 @@ import ShadowWorker
     // collectionClient.imageAnalyzed 信号回填摘要。
     ScreenshotResultWindow {
         id: screenshotResult
+    }
+
+    // 更新详情弹窗（全局，挂在顶层避开 StackLayout 可见性坑）。
+    // 由标题栏 UpdateBadge 点击 / 发现新版本时打开。
+    // Dialog 默认会自动挂到窗口的 Overlay，无需手动设 parent。
+    UpdateDialog {
+        id: updateDialog
     }
 
     // ---- real recording flow driven by the global hotkey (or demo button) ----
@@ -542,6 +552,29 @@ import ShadowWorker
                     globalHotkey.registerShortcut(sc, "screenshot", "press")
                 }
             }
+        }
+    }
+
+    // 配置加载完成后，同步更新检查相关状态并触发启动时检查。
+    Connections {
+        target: settingsVm
+        function onLoadFinished(ok) {
+            if (!ok || !updateVm) return
+            updateVm.checkDaily = settingsVm.updateCheckDaily
+            if (settingsVm.updateCheckOnStartup)
+                updateVm.checkUpdate()
+        }
+    }
+
+    // 发现新版本的全局通知。
+    // 标题栏 UpdateBadge 会常驻显示，这里再用 toast 提示一次（任何页面都弹），
+    // 引导用户点徽标查看详情。徽标点击打开 UpdateDialog（挂在顶层）。
+    Connections {
+        target: updateVm
+        function onAvailableChanged() {
+            if (!updateVm || !updateVm.available) return
+            toast(qsTr("New version v%1 available. Click the Update badge in the title bar to view details and update.")
+                  .arg(updateVm.latestVersion))
         }
     }
 

@@ -1281,6 +1281,47 @@
         <translation>软件更新</translation>
     </message>
     <message>
+        <location filename="../qml/pages/SystemPage.qml" line="372" />
+        <source>Later</source>
+        <translation>稍后</translation>
+    </message>
+    <message>
+        <source>Checking...</source>
+        <translation>检查中…</translation>
+    </message>
+    <message>
+        <source>New version v%1 available</source>
+        <translation>新版本 v%1 可用</translation>
+    </message>
+    <message>
+        <source>Up to date</source>
+        <translation>已是最新版本</translation>
+    </message>
+    <message>
+        <source>Settings saved</source>
+        <translation>设置已保存</translation>
+    </message>
+    <message>
+        <source>Save failed</source>
+        <translation>保存失败</translation>
+    </message>
+    <message>
+        <source>Current version v%1 · last checked %2</source>
+        <translation>当前版本 v%1 · 上次检查 %2</translation>
+    </message>
+    <message>
+        <source>never</source>
+        <translation>从未</translation>
+    </message>
+    <message>
+        <source>Save</source>
+        <translation>保存</translation>
+    </message>
+    <message>
+        <source>New version v%1 is available. Click the Update badge in the title bar to view details and update.</source>
+        <translation>发现新版本 v%1。点击标题栏的 Update 徽标查看详情并更新。</translation>
+    </message>
+    <message>
         <location filename="../qml/pages/SystemPage.qml" line="374" />
         <location filename="../qml/pages/SystemPage.qml" line="405" />
         <source>Update service unavailable</source>
@@ -1290,11 +1331,6 @@
         <location filename="../qml/pages/SystemPage.qml" line="385" />
         <source>Website</source>
         <translation>网站</translation>
-    </message>
-    <message>
-        <location filename="../qml/pages/SystemPage.qml" line="389" />
-        <source>Opening website...</source>
-        <translation>正在打开网站...</translation>
     </message>
     <message>
         <location filename="../qml/pages/SystemPage.qml" line="397" />
@@ -1376,6 +1412,56 @@
         <location filename="../qml/pages/SystemPage.qml" line="523" />
         <source>All records cleared</source>
         <translation>所有记录已清除</translation>
+    </message>
+</context>
+<context>
+    <name>UpdateBadge</name>
+    <message>
+        <source>Update</source>
+        <translation>更新</translation>
+    </message>
+    <message>
+        <source>Restart to Update</source>
+        <translation>重启以更新</translation>
+    </message>
+    <message>
+        <source>Update failed</source>
+        <translation>更新失败</translation>
+    </message>
+</context>
+<context>
+    <name>UpdateDialog</name>
+    <message>
+        <source>v%1</source>
+        <translation>v%1</translation>
+    </message>
+    <message>
+        <source>Released %1 · %2</source>
+        <translation>发布于 %1 · %2</translation>
+    </message>
+    <message>
+        <source>Downloading... %1%</source>
+        <translation>下载中… %1%</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>取消</translation>
+    </message>
+    <message>
+        <source>Later</source>
+        <translation>稍后</translation>
+    </message>
+    <message>
+        <source>Update Now</source>
+        <translation>立即更新</translation>
+    </message>
+    <message>
+        <source>Retry</source>
+        <translation>重试</translation>
+    </message>
+    <message>
+        <source>Install &amp; Restart</source>
+        <translation>安装并重启</translation>
     </message>
 </context>
 <context>
@@ -1576,6 +1662,10 @@
         <location filename="../qml/main.qml" line="402" />
         <source>■ Stop</source>
         <translation>■ 停止</translation>
+    </message>
+    <message>
+        <source>New version v%1 available. Click the Update badge in the title bar to view details and update.</source>
+        <translation>发现新版本 v%1。点击标题栏的 Update 徽标查看详情并更新。</translation>
     </message>
 </context>
 <context>

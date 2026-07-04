@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package shadowworker;
+
+option go_package = "shadow-worker/backend/internal/grpcapi;grpcapi";
+
+service UpdateService {
+  rpc CheckUpdate(CheckUpdateRequest) returns (CheckUpdateResponse);
+}
+
+message CheckUpdateRequest {
+  string current_version = 1;
+}
+
+message CheckUpdateResponse {
+  bool   available = 1;
+  string latest_version = 2;
+  string download_url = 3;
+  string changelog_url = 4;
+  int64  package_size = 5;
+  string package_sha256 = 6;
+  string published_at = 7;   // RFC3339
+  string error = 8;          // 服务不可用/请求失败时返回
+  string changelog = 9;      // Markdown 更新日志原文（GitHub release body）
+}

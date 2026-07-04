@@ -165,6 +165,11 @@ func configToProto(cfg *config.Config) *ConfigData {
 		ScreenshotPrompt:         cfg.Screenshot.Prompt,
 		Autostart:                false,
 		CollectOnStart:           true,
+
+		UpdateServerUrl:        cfg.Update.ServerURL,
+		UpdateCheckOnStartup:   cfg.Update.CheckOnStartup,
+		UpdateCheckDaily:       cfg.Update.CheckDaily,
+		UpdateChannel:          cfg.Update.Channel,
 	}
 
 	for k, p := range cfg.ASR.Providers {
@@ -299,6 +304,15 @@ func protoToConfig(data *ConfigData) *config.Config {
 	cfg.Screenshot.Prompt = data.ScreenshotPrompt
 	if strings.TrimSpace(cfg.Screenshot.Prompt) == "" {
 		cfg.Screenshot.Prompt = config.DefaultScreenshotPrompt
+	}
+
+	// Update 配置：空 channel 回落 stable，兼容旧配置。
+	cfg.Update.ServerURL = data.UpdateServerUrl
+	cfg.Update.CheckOnStartup = data.UpdateCheckOnStartup
+	cfg.Update.CheckDaily = data.UpdateCheckDaily
+	cfg.Update.Channel = data.UpdateChannel
+	if strings.TrimSpace(cfg.Update.Channel) == "" {
+		cfg.Update.Channel = "stable"
 	}
 
 	return cfg

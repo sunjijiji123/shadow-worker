@@ -147,6 +147,18 @@ type ScreenshotConfig struct {
 	Prompt string `yaml:"prompt"`
 }
 
+// UpdateConfig 是软件更新配置块。
+type UpdateConfig struct {
+	// ServerURL 是更新服务器地址，空表示不检查更新。
+	ServerURL string `yaml:"server_url"`
+	// CheckOnStartup 是否在客户端启动时检查一次更新。
+	CheckOnStartup bool `yaml:"check_on_startup"`
+	// CheckDaily 是否每天后台检查一次更新。
+	CheckDaily bool `yaml:"check_daily"`
+	// Channel 更新通道：stable | beta。
+	Channel string `yaml:"channel"`
+}
+
 // MovementConfig 是采集配置块。
 type MovementConfig struct {
 	SampleIntervalMs int    `yaml:"sample_interval_ms"`
@@ -185,6 +197,7 @@ type Config struct {
 	Movement   MovementConfig   `yaml:"movement"`
 	Hotkeys    HotkeyConfig     `yaml:"hotkeys"`
 	Screenshot ScreenshotConfig `yaml:"screenshot"`
+	Update     UpdateConfig     `yaml:"update"`
 	Hotwords   []string         `yaml:"hotwords"`
 	Log        LogConfig        `yaml:"log"`
 	Debug      DebugConfig      `yaml:"debug"`
@@ -278,6 +291,12 @@ func Default() *Config {
 			WithVLM: false, // 默认纯截图，不调 VLM
 			// 桌面截图识别专用提示词默认值（与 vlm.prompt 区分）。
 			Prompt: DefaultScreenshotPrompt,
+		},
+		Update: UpdateConfig{
+			ServerURL:      "",
+			CheckOnStartup: true,
+			CheckDaily:     true,
+			Channel:        "stable",
 		},
 		Hotwords: []string{},
 		Log: LogConfig{

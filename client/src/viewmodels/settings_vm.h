@@ -87,6 +87,16 @@ class SettingsViewModel : public QObject {
   Q_PROPERTY(QString screenshotPrompt READ screenshotPrompt WRITE
                  setScreenshotPrompt NOTIFY screenshotPromptChanged)
 
+  // Update
+  Q_PROPERTY(QString updateServerUrl READ updateServerUrl WRITE
+                 setUpdateServerUrl NOTIFY updateServerUrlChanged)
+  Q_PROPERTY(bool updateCheckOnStartup READ updateCheckOnStartup WRITE
+                 setUpdateCheckOnStartup NOTIFY updateCheckOnStartupChanged)
+  Q_PROPERTY(bool updateCheckDaily READ updateCheckDaily WRITE
+                 setUpdateCheckDaily NOTIFY updateCheckDailyChanged)
+  Q_PROPERTY(QString updateChannel READ updateChannel WRITE
+                 setUpdateChannel NOTIFY updateChannelChanged)
+
 public:
   explicit SettingsViewModel(QObject *parent = nullptr);
 
@@ -160,6 +170,16 @@ public:
   QString screenshotPrompt() const { return m_screenshotPrompt; }
   void setScreenshotPrompt(const QString &v);
 
+  // Update
+  QString updateServerUrl() const { return m_updateServerUrl; }
+  void setUpdateServerUrl(const QString &v);
+  bool updateCheckOnStartup() const { return m_updateCheckOnStartup; }
+  void setUpdateCheckOnStartup(bool v);
+  bool updateCheckDaily() const { return m_updateCheckDaily; }
+  void setUpdateCheckDaily(bool v);
+  QString updateChannel() const { return m_updateChannel; }
+  void setUpdateChannel(const QString &v);
+
   Q_INVOKABLE void addProvider(const QString &category, const QString &key);
   Q_INVOKABLE void removeProvider(const QString &category, const QString &key);
   Q_INVOKABLE void updateProvider(const QString &category, const QString &key,
@@ -207,6 +227,14 @@ signals:
 
   void screenshotWithVlmChanged();
   void screenshotPromptChanged();
+
+  void updateServerUrlChanged();
+  void updateCheckOnStartupChanged();
+  void updateCheckDailyChanged();
+  void updateChannelChanged();
+
+  void loadFinished(bool ok);
+  void saveFinished(bool ok, const QString &error);
 
 private:
   void setLoading(bool v);
@@ -257,4 +285,9 @@ private:
   QString m_hotkeyPromptPrefix = "Ctrl";
   bool m_screenshotWithVlm = false;
   QString m_screenshotPrompt;
+
+  QString m_updateServerUrl;
+  bool m_updateCheckOnStartup = true;
+  bool m_updateCheckDaily = true;
+  QString m_updateChannel = QStringLiteral("stable");
 };

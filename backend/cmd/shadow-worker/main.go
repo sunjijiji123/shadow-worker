@@ -180,6 +180,7 @@ func runBackgroundService() {
 	pb.RegisterVoiceServiceServer(grpcServer, pb.NewVoiceServer(db, holder, llmHolder, slog.Default()))
 	pb.RegisterCollectionServiceServer(grpcServer, pb.NewCollectionServer(db, coll, vlmHolder))
 	pb.RegisterConfigServiceServer(grpcServer, pb.NewConfigServer(cfg, holder, llmHolder, vlmHolder, db, slog.Default()))
+	pb.RegisterUpdateServiceServer(grpcServer, pb.NewUpdateServer(cfg, version, slog.Default()))
 
 	slog.Info("后台服务已启动", "grpc_addr", grpcAddr)
 	slog.Info("Qt 客户端请连接", "addr", grpcAddr)
