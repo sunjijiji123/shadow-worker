@@ -76,19 +76,19 @@ type ListAppsResult struct {
 	Apps []AppOut `json:"apps"`
 }
 
-// parseDate 解析 YYYY-MM-DD 为当天的起止时间（UTC）。
+// parseDate 解析 YYYY-MM-DD 为当天的起止时间（本地时区）。
+// 使用本地时区切日，避免 UTC 切日导致凌晨 0-8 点的事件归属错位（坑 #44）。
 func parseDate(date string) (time.Time, time.Time, error) {
-	day, err := time.Parse("2006-01-02", date)
+	day, err := time.ParseInLocation("2006-01-02", date, time.Local)
 	if err != nil {
 		return time.Time{}, time.Time{}, fmt.Errorf("日期格式错误，应为 YYYY-MM-DD: %w", err)
 	}
-	day = day.UTC()
 	return day, day.Add(24 * time.Hour), nil
 }
 
-// formatHM 格式化为 HH:MM。
+// formatHM 格式化为本地时区的 HH:MM。
 func formatHM(t time.Time) string {
-	return t.UTC().Format("15:04")
+	return t.Local().Format("15:04")
 }
 
 // GetWorklog 查询指定日期的工作日志。limit/offset 对 segments 分页。
@@ -433,8 +433,8 @@ func (db *DB) SearchEventsByQuery(ctx context.Context, query, date string, event
 			return nil, err
 		}
 	} else {
-		now := time.Now().UTC()
-		start = now.Truncate(24 * time.Hour)
+		now := time.Now()
+		start = StartOfLocalDay(now)
 		end = start.Add(24 * time.Hour)
 	}
 
@@ -471,8 +471,8 @@ func (db *DB) ListAppsWithTodayMinutes(ctx context.Context) (*ListAppsResult, er
 		return nil, fmt.Errorf("列出白名单失败: %w", err)
 	}
 
-	now := time.Now().UTC()
-	start := now.Truncate(24 * time.Hour)
+	now := time.Now()
+	start := StartOfLocalDay(now)
 	end := start.Add(24 * time.Hour)
 
 	segs, err := db.ListActivitySegments(start, end)
