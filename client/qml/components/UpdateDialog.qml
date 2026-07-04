@@ -78,10 +78,21 @@ Dialog {
         }
 
         // ---- 主体：Markdown 更新日志 ----
-        ScrollView {
+        // 用 Flickable 而非 ScrollView：ScrollView 的内部 flickable 会让
+        // parent.width 解析成内容宽（循环依赖），导致 wrapMode 失效、文字溢出。
+        // Flickable 的 parent 就是自身，width: parent.width 取的是真实视口宽。
+        // 关键三点：contentWidth=width（禁水平滚动）、Text.width 绑定视口宽
+        // （让 wrapMode 有换行基准）、contentHeight 跟随 Text 高度（垂直滚动）。
+        Flickable {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
+            contentWidth: width              // 内容宽 = 视口宽，永不出现水平滚动条
+            contentHeight: bodyText.height   // 垂直可滚动，跟随 Markdown 实际渲染高度
+            boundsBehavior: Flickable.StopAtBounds
+
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+            // 不挂 ScrollBar.horizontal —— contentWidth==width 时它本就不会出现
 
             Text {
                 id: bodyText
@@ -90,7 +101,8 @@ Dialog {
                 text: updateVm ? updateVm.changelog : ""
                 color: Theme.ink
                 font.pixelSize: 13
-                wrapMode: Text.Wrap
+                wrapMode: Text.Wrap          // 配合 width 绑定，超长行在视口宽处换行
+                width: parent.width          // 绑定 Flickable 视口宽，wrapMode 才有基准
                 topPadding: 16
                 bottomPadding: 16
                 leftPadding: 20
