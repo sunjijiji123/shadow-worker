@@ -94,6 +94,10 @@ testconnect.png
 # AI agent 工作笔记（本地维护，不入库；含踩坑记录、构建细节等本地知识）
 AGENTS.md
 
+# VERSION 由 build.bat package 每次打包自动按 YYYY.MM.DD.NN 生成，
+# 提交无意义（下次打包又覆盖），停止跟踪。
+VERSION
+
 # update_service 构建产物与运行时数据
 update_service/server.exe
 update_service/dist/
