@@ -39,6 +39,7 @@ Item {
     property string cloudLang: "zh"
     property string cloudApiFmt: "openai"
     property string cloudAuth: "bearer"
+    property int cloudRetryCount: 3   // 云请求 HTTP 重试次数（0=不重试，默认 3）
 
     // ---- record hotkey: modifier + key, parsed from settingsVm.hotkeyRecord ----
     // e.g. "Ctrl+Shift+R" -> modifier="Ctrl + Shift" (UI label), key="R"
@@ -148,6 +149,7 @@ Item {
     property string vlmApiKey: ""
     property string vlmApiFmt: "openai"
     property string vlmAuth: "bearer"
+    property int vlmRetryCount: 3     // 云请求 HTTP 重试次数（0=不重试，默认 3）
 
     // ---- Movement/Capture Parameters（Card 4，synced from viewModel.movement*）----
     property int movementSampleMs: 300
@@ -173,6 +175,7 @@ Item {
     property string llmApiKey: ""
     property string llmApiFmt: "openai"
     property string llmAuth: "bearer"
+    property int llmRetryCount: 3     // 云请求 HTTP 重试次数（0=不重试，默认 3）
 
     // ---- Personal Prompts tab local state (will bind to viewModel later) ----
     property bool quickInjectEnabled: true
@@ -417,7 +420,7 @@ Item {
     function updateLlmFields() {
         if (!viewModel || !llmActiveModel) {
             llmName = ""; llmBaseUrl = ""; llmModel = ""; llmApiKey = ""
-            llmApiFmt = "openai"; llmAuth = "bearer"
+            llmApiFmt = "openai"; llmAuth = "bearer"; llmRetryCount = 3
         } else {
             llmName = providerField(llmActiveModel, "name", "llm") || llmActiveModel
             llmBaseUrl = providerField(llmActiveModel, "baseUrl", "llm")
@@ -425,6 +428,7 @@ Item {
             llmApiKey = providerField(llmActiveModel, "apiKey", "llm")
             llmApiFmt = providerField(llmActiveModel, "apiFormat", "llm") || "openai"
             llmAuth = providerField(llmActiveModel, "authType", "llm") || "bearer"
+            llmRetryCount = providerField(llmActiveModel, "retryCount", "llm") || 3
         }
         // 命令式更新 UI（无 binding）
         if (llmNameField) llmNameField.text = llmName
@@ -433,6 +437,7 @@ Item {
         if (llmKeyField) llmKeyField.text = llmApiKey
         if (llmApiFormatBox) llmApiFormatBox.currentIndex = (llmApiFmt === "anthropic") ? 1 : 0
         if (llmAuthBox) llmAuthBox.currentIndex = authToIndex(llmAuth)
+        if (llmRetryField) llmRetryField.text = llmRetryCount
     }
 
     // 把本地暂存的 LLM 云端字段 Write-Through 到 viewModel（保存前调用，仿 flushCloudFields）。
@@ -440,7 +445,8 @@ Item {
         if (!viewModel || !llmActiveModel) return
         viewModel.updateProvider("llm", llmActiveModel, {
             name: llmName, baseUrl: llmBaseUrl, model: llmModel,
-            apiKey: llmApiKey, apiFormat: llmApiFmt, authType: llmAuth
+            apiKey: llmApiKey, apiFormat: llmApiFmt, authType: llmAuth,
+            retryCount: llmRetryCount
         })
     }
 
@@ -460,7 +466,7 @@ Item {
     function updateVlmFields() {
         if (!viewModel || !vlmActiveModel) {
             vlmName = ""; vlmBaseUrl = ""; vlmModel = ""; vlmApiKey = ""
-            vlmApiFmt = "openai"; vlmAuth = "bearer"
+            vlmApiFmt = "openai"; vlmAuth = "bearer"; vlmRetryCount = 3
         } else {
             vlmName = providerField(vlmActiveModel, "name", "vlm") || vlmActiveModel
             vlmBaseUrl = providerField(vlmActiveModel, "baseUrl", "vlm")
@@ -468,6 +474,7 @@ Item {
             vlmApiKey = providerField(vlmActiveModel, "apiKey", "vlm")
             vlmApiFmt = providerField(vlmActiveModel, "apiFormat", "vlm") || "openai"
             vlmAuth = providerField(vlmActiveModel, "authType", "vlm") || "bearer"
+            vlmRetryCount = providerField(vlmActiveModel, "retryCount", "vlm") || 3
         }
         // 命令式更新 UI（无 binding）
         if (vlmNameField) vlmNameField.text = vlmName
@@ -477,6 +484,7 @@ Item {
         if (vlmApiFormatBox) vlmApiFormatBox.currentIndex = (vlmApiFmt === "anthropic") ? 1 : 0
         if (vlmAuthBox) vlmAuthBox.currentIndex = authToIndex(vlmAuth)
         if (vlmIntervalField) vlmIntervalField.text = vlmInterval
+        if (vlmRetryField) vlmRetryField.text = vlmRetryCount
         // local 块控件（与 cloud 块共享同一组暂存属性）
         if (vlmLocalUrlField) vlmLocalUrlField.text = vlmBaseUrl
         if (vlmLocalModelField) vlmLocalModelField.text = vlmModel
@@ -488,7 +496,8 @@ Item {
         if (!viewModel || !vlmActiveModel) return
         viewModel.updateProvider("vlm", vlmActiveModel, {
             name: vlmName, baseUrl: vlmBaseUrl, model: vlmModel,
-            apiKey: vlmApiKey, apiFormat: vlmApiFmt, authType: vlmAuth
+            apiKey: vlmApiKey, apiFormat: vlmApiFmt, authType: vlmAuth,
+            retryCount: vlmRetryCount
         })
     }
 
@@ -629,7 +638,8 @@ Item {
         viewModel.updateProvider("asr", asrActiveModel, {
             name: cloudName, baseUrl: cloudBaseUrl, model: cloudModel,
             apiKey: cloudApiKey, language: cloudLang,
-            apiFormat: cloudApiFmt, authType: cloudAuth
+            apiFormat: cloudApiFmt, authType: cloudAuth,
+            retryCount: cloudRetryCount
         })
     }
 
@@ -637,7 +647,7 @@ Item {
     function updateCloudFields() {
         if (!viewModel || !asrActiveModel) {
             cloudName = ""; cloudBaseUrl = ""; cloudModel = ""; cloudApiKey = ""
-            cloudLang = "zh"; cloudApiFmt = "openai"; cloudAuth = "bearer"
+            cloudLang = "zh"; cloudApiFmt = "openai"; cloudAuth = "bearer"; cloudRetryCount = 3
         } else {
             cloudName = providerField(asrActiveModel, "name") || asrActiveModel
             cloudBaseUrl = providerField(asrActiveModel, "baseUrl")
@@ -646,6 +656,7 @@ Item {
             cloudLang = providerField(asrActiveModel, "language") || "zh"
             cloudApiFmt = providerField(asrActiveModel, "apiFormat") || "openai"
             cloudAuth = providerField(asrActiveModel, "authType") || "bearer"
+            cloudRetryCount = providerField(asrActiveModel, "retryCount") || 3
         }
         // 命令式更新 UI（无 binding）
         if (cloudNameField) cloudNameField.text = cloudName
@@ -655,6 +666,7 @@ Item {
         if (cloudLangBox) cloudLangBox.currentIndex = langToIndex(cloudLang)
         if (cloudApiFormatBox) cloudApiFormatBox.currentIndex = cloudApiFmt === "anthropic" ? 1 : 0
         if (cloudAuthBox) cloudAuthBox.currentIndex = authToIndex(cloudAuth)
+        if (cloudRetryField) cloudRetryField.text = cloudRetryCount
     }
 
     // 从 active provider 读本地模型字段（per-provider，支持多本地模型切换）。
@@ -931,6 +943,16 @@ Item {
                             label: qsTr("API Key")
                             isPassword: true
                             onTextEdited: function(newText) { cloudApiKey = newText }
+                            Layout.columnSpan: 2
+                            Layout.fillWidth: true
+                        }
+
+                        // 重试次数：云请求失败（429/5xx/网络）时的 HTTP 重试次数。
+                        // 0=不重试，默认 3。仅对 type=cloud 的 provider 生效。
+                        TextField {
+                            id: cloudRetryField
+                            label: qsTr("Retry Count")
+                            onTextEdited: function(newText) { cloudRetryCount = parseInt(newText) || 0 }
                             Layout.columnSpan: 2
                             Layout.fillWidth: true
                         }
@@ -1361,6 +1383,16 @@ Item {
                             Layout.columnSpan: 2
                             Layout.fillWidth: true
                             onTextEdited: function(newText) { vlmApiKey = newText }
+                        }
+
+                        // 重试次数：云请求失败（429/5xx/网络）时的 HTTP 重试次数。
+                        // 0=不重试，默认 3。仅对 type=cloud 的 provider 生效。
+                        TextField {
+                            id: vlmRetryField
+                            label: qsTr("Retry Count")
+                            onTextEdited: function(newText) { vlmRetryCount = parseInt(newText) || 0 }
+                            Layout.columnSpan: 2
+                            Layout.fillWidth: true
                         }
                     }
 
@@ -1891,6 +1923,16 @@ Item {
                             label: qsTr("API Key")
                             isPassword: true
                             onTextEdited: function(newText) { llmApiKey = newText }
+                            Layout.columnSpan: 2
+                            Layout.fillWidth: true
+                        }
+
+                        // 重试次数：云请求失败（429/5xx/网络）时的 HTTP 重试次数。
+                        // 0=不重试，默认 3。仅对 type=cloud 的 provider 生效。
+                        TextField {
+                            id: llmRetryField
+                            label: qsTr("Retry Count")
+                            onTextEdited: function(newText) { llmRetryCount = parseInt(newText) || 0 }
                             Layout.columnSpan: 2
                             Layout.fillWidth: true
                         }

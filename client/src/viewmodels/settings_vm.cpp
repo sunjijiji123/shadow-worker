@@ -298,6 +298,7 @@ void SettingsViewModel::addProvider(const QString &category,
   m["language"] = "";
   m["stream"] = false;
   m["localModelPath"] = ""; // ASR type=local: whisper .bin 路径（per-provider）
+  m["retryCount"] = 3;      // 云请求 HTTP 重试次数（默认 3，与后端 DefaultMaxRetries 一致）
   list.append(m);
   setProviderList(category, list);
   qDebug() << "[VM]   added, total=" << list.size();
@@ -341,6 +342,8 @@ void SettingsViewModel::updateProvider(const QString &category,
         m["stream"] = data["stream"].toBool();
       if (data.contains("numCtx"))
         m["numCtx"] = data["numCtx"].toInt();
+      if (data.contains("retryCount"))
+        m["retryCount"] = data["retryCount"].toInt();
       qDebug() << "[VM]   after name=" << m["name"] << "type=" << m["type"];
       list[i] = m;
       setProviderList(category, list);
@@ -457,6 +460,7 @@ static QVariantMap providerToMap(const QString &key, const ProviderConfig &p) {
   m["language"] = p.language();
   m["stream"] = p.stream();
   m["localModelPath"] = p.localModelPath();
+  m["retryCount"] = (int)p.retryCount();
   return m;
 }
 
@@ -477,6 +481,7 @@ providersFromList(const QVariantList &list) {
     p.setLanguage(m["language"].toString());
     p.setStream(m["stream"].toBool());
     p.setLocalModelPath(m["localModelPath"].toString());
+    p.setRetryCount((qint32)m["retryCount"].toInt());
     map.insert(m["key"].toString(), p);
   }
   return map;
