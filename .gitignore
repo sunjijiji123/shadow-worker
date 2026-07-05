@@ -98,6 +98,9 @@ AGENTS.md
 # 提交无意义（下次打包又覆盖），停止跟踪。
 VERSION
 
+# update_service 配置（本地敏感信息）
+update_service/config.yaml
+
 # update_service 构建产物与运行时数据
 update_service/server.exe
 update_service/dist/
