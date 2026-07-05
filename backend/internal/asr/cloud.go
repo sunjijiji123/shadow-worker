@@ -127,7 +127,7 @@ func (e *cloudEngine) postTranscription(ctx context.Context, pcm []byte) (*http.
 		}
 		return e.buildTranscriptionMultipartRequest(ctx, wav)
 	}
-	return httputil.DoWithRetry(ctx, e.httpClient, reqBuilder, nil)
+	return httputil.DoWithRetry(ctx, e.httpClient, reqBuilder, nil, e.cfg.RetryCount)
 }
 
 // isChatCompletionsURL 判断 URL 是否是 chat completions endpoint。

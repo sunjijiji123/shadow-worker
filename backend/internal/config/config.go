@@ -53,6 +53,10 @@ type ASRProvider struct {
 	// 每个 local provider 各自持有，支持多个本地模型独立切换。
 	// （历史遗留：早期只有全局唯一的 cfg.ASR.Local，现已改为 per-provider。）
 	LocalModelPath string `yaml:"local_model_path"`
+	// RetryCount 是云请求 HTTP 重试次数（覆盖 429/5xx/网络错误，含指数退避）。
+	// 0 = 不重试（只发 1 次）；3 = 默认（共 4 次请求）。
+	// 由 httputil.DoWithRetry 读取。type=local 的 provider 不使用此字段。
+	RetryCount int `yaml:"retry_count"`
 }
 
 // LocalASRConfig 是本地 whisper 配置。
@@ -81,6 +85,10 @@ type VLMProvider struct {
 	APIFormat string `yaml:"api_format"` // openai | ollama
 	NumCtx    int    `yaml:"num_ctx"`
 	Type      string `yaml:"type"` // cloud | local
+	// RetryCount 是云请求 HTTP 重试次数（覆盖 429/5xx/网络错误，含指数退避）。
+	// 0 = 不重试；3 = 默认。由 httputil.DoWithRetry 读取。
+	// type=local 的 provider 不使用此字段。
+	RetryCount int `yaml:"retry_count"`
 }
 
 // VLMConfig 是 VLM 配置块。
@@ -119,6 +127,10 @@ type LLMProvider struct {
 	APIFormat string `yaml:"api_format"` // openai | anthropic
 	NumCtx    int    `yaml:"num_ctx"`
 	Type      string `yaml:"type"` // cloud | local
+	// RetryCount 是云请求 HTTP 重试次数（覆盖 429/5xx/网络错误，含指数退避）。
+	// 0 = 不重试；3 = 默认。由 httputil.DoWithRetry 读取。
+	// type=local 的 provider 不使用此字段。
+	RetryCount int `yaml:"retry_count"`
 }
 
 // LLMConfig 是 LLM(Polish) 配置块。
@@ -257,7 +269,7 @@ func Default() *Config {
 			OnDemandSwitchGapS: 20,
 			OnDemandMotionGapS: 60,
 			// 默认提示词，用户可改但不可清空（空时引擎拒绝分析）。
-			Prompt:    DefaultVLMPrompt,
+			Prompt: DefaultVLMPrompt,
 			// 初始无 provider，用户通过 Add Model 添加。
 			Providers: map[string]VLMProvider{},
 		},
@@ -331,7 +343,41 @@ func Load() (*Config, error) {
 	if err := yaml.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("解析配置失败: %w", err)
 	}
+	cfg.NormalizeRetryCount()
 	return cfg, nil
+}
+
+// DefaultRetryCount 是 provider 云请求 HTTP 重试次数的默认值。
+// 与 httputil.DefaultMaxRetries 保持一致；旧配置升级（无 retry_count 字段 → 零值）
+// 或用户填 0 时由 normalizeRetryCount 规范化到此值。
+const DefaultRetryCount = 3
+
+// NormalizeRetryCount 把所有 provider 的 RetryCount ≤ 0 规范化为 DefaultRetryCount。
+// 在 Load 和 protoToConfig 末尾调用，确保：
+//   - 旧配置升级（无 retry_count 字段 → 零值）自动获得默认值
+//   - 用户填 0 或负数时回落默认（不写 0 进 DoWithRetry 触发"不重试"语义，避免误操作）
+//   - 全链路一致：config.yaml 有值、UI 显示默认、后端收到默认
+//
+// 用户想"完全不重试"可在 UI 填 1（只发 1 次请求，0 次重试）。
+func (c *Config) NormalizeRetryCount() {
+	for k, p := range c.ASR.Providers {
+		if p.RetryCount <= 0 {
+			p.RetryCount = DefaultRetryCount
+			c.ASR.Providers[k] = p
+		}
+	}
+	for k, p := range c.VLM.Providers {
+		if p.RetryCount <= 0 {
+			p.RetryCount = DefaultRetryCount
+			c.VLM.Providers[k] = p
+		}
+	}
+	for k, p := range c.LLM.Providers {
+		if p.RetryCount <= 0 {
+			p.RetryCount = DefaultRetryCount
+			c.LLM.Providers[k] = p
+		}
+	}
 }
 
 // Save 保存配置到文件。

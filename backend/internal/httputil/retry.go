@@ -25,11 +25,13 @@ import (
 	"time"
 )
 
-// 重试参数（硬编码，不暴露给用户 —— 重试是底层网络韧性，不是业务配置）。
+// 重试参数。
+//   - DefaultMaxRetries：历史默认值，maxRetries ≤ 0 时回退到此（向后兼容旧行为）。
+//   - baseBackoff / jitterFactor：指数退避 + 抖动，固定不变（非业务配置）。
 const (
-	maxRetries   = 3              // 最多重试次数（共 4 次请求：1 次初始 + 3 次重试）
-	baseBackoff  = 1 * time.Second // 指数退避基数：attempt=0→1s, 1→2s, 2→4s
-	jitterFactor = 0.2            // ±20% 抖动，防限流风暴同步重试
+	DefaultMaxRetries = 3               // 默认重试次数（共 4 次请求：1 次初始 + 3 次重试）
+	baseBackoff       = 1 * time.Second // 指数退避基数：attempt=0→1s, 1→2s, 2→4s
+	jitterFactor      = 0.2             // ±20% 抖动，防限流风暴同步重试
 )
 
 // retryableStatusCodes 是值得重试的 HTTP 状态码：
@@ -47,15 +49,21 @@ func retryableStatus(code int) bool {
 //   - reqBuilder：构造请求的闭包。每次重试会调用它重建 request（body reader 一次性，
 //     必须重建）。闭包应捕获已序列化好的 body bytes，重建时 bytes.NewReader 即可。
 //   - logger：可选，nil 时用 slog.Default()。重试日志统一前缀 [httputil]。
+//   - maxRetries：最多重试次数（不含首次请求）。≤0 时回退到 DefaultMaxRetries。
+//     由各引擎从 provider 的 retry_count 透传；允许调用方按需配置。
 //
 // 返回：
 //   - 成功（2xx/3xx/不可重试的 4xx）：返回 response + nil error。调用方判业务成功。
 //   - 耗尽重试后仍失败：返回最后一次 response（可能 nil，如纯网络错误）+ error。
 //
 // 调用方负责关闭 resp.Body、读 body、判定业务成功（如 200 但 choices 为空不算重试范畴）。
-func DoWithRetry(ctx context.Context, client *http.Client, reqBuilder func() (*http.Request, error), logger *slog.Logger) (*http.Response, error) {
+func DoWithRetry(ctx context.Context, client *http.Client, reqBuilder func() (*http.Request, error), logger *slog.Logger, maxRetries int) (*http.Response, error) {
 	if logger == nil {
 		logger = slog.Default()
+	}
+	// maxRetries ≤ 0（含 0 / 未配置的零值）→ 回退默认，保持旧行为。
+	if maxRetries <= 0 {
+		maxRetries = DefaultMaxRetries
 	}
 
 	for attempt := 0; ; attempt++ {

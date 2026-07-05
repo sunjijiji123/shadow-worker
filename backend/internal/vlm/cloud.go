@@ -104,7 +104,7 @@ func (e *cloudEngine) describe(ctx context.Context, imagePNG []byte, effectivePr
 			r.Header.Set("Authorization", "Bearer "+e.cfg.APIKey)
 		}
 		return r, nil
-	}, nil)
+	}, nil, e.cfg.RetryCount)
 	if err != nil {
 		return "", fmt.Errorf("请求 VLM 失败: %w", err)
 	}

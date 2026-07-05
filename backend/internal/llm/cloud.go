@@ -86,7 +86,7 @@ func (e *cloudEngine) Polish(ctx context.Context, text string) (string, error) {
 			r.Header.Set("Authorization", "Bearer "+e.cfg.APIKey)
 		}
 		return r, nil
-	}, nil)
+	}, nil, e.cfg.RetryCount)
 	if err != nil {
 		return "", fmt.Errorf("请求润色失败: %w", err)
 	}

@@ -17,11 +17,11 @@ import (
 type ConfigServer struct {
 	UnimplementedConfigServiceServer
 	cfg       *config.Config
-	holder    *asr.EngineHolder     // 保存配置后热重载 ASR 引擎
-	llmHolder *llm.EngineHolder     // 保存配置后热重载润色引擎
-	vlmHolder *collector.VLMHolder  // 保存配置后热重载 VLM 采集器（含定时器/消费协程）
-	db        *storage.DB           // VLM 热重载重建 capturer 时需要
-	logger    *slog.Logger          // VLM 热重载日志
+	holder    *asr.EngineHolder    // 保存配置后热重载 ASR 引擎
+	llmHolder *llm.EngineHolder    // 保存配置后热重载润色引擎
+	vlmHolder *collector.VLMHolder // 保存配置后热重载 VLM 采集器（含定时器/消费协程）
+	db        *storage.DB          // VLM 热重载重建 capturer 时需要
+	logger    *slog.Logger         // VLM 热重载日志
 }
 
 // NewConfigServer 创建 ConfigServer。holder/llmHolder/vlmHolder 用于配置变更后热重载引擎。
@@ -96,32 +96,35 @@ func providerToProto(p config.ASRProvider) *ProviderConfig {
 		Language:       p.Language,
 		Stream:         p.Stream,
 		LocalModelPath: p.LocalModelPath,
+		RetryCount:     int32(p.RetryCount),
 	}
 }
 
 func vlmProviderToProto(p config.VLMProvider) *ProviderConfig {
 	return &ProviderConfig{
-		Name:      p.Name,
-		BaseUrl:   p.BaseURL,
-		Model:     p.Model,
-		ApiKey:    p.APIKey,
-		AuthType:  p.AuthType,
-		ApiFormat: p.APIFormat,
-		NumCtx:    int32(p.NumCtx),
-		Type:      p.Type,
+		Name:       p.Name,
+		BaseUrl:    p.BaseURL,
+		Model:      p.Model,
+		ApiKey:     p.APIKey,
+		AuthType:   p.AuthType,
+		ApiFormat:  p.APIFormat,
+		NumCtx:     int32(p.NumCtx),
+		Type:       p.Type,
+		RetryCount: int32(p.RetryCount),
 	}
 }
 
 func llmProviderToProto(p config.LLMProvider) *ProviderConfig {
 	return &ProviderConfig{
-		Name:      p.Name,
-		BaseUrl:   p.BaseURL,
-		Model:     p.Model,
-		ApiKey:    p.APIKey,
-		AuthType:  p.AuthType,
-		ApiFormat: p.APIFormat,
-		NumCtx:    int32(p.NumCtx),
-		Type:      p.Type,
+		Name:       p.Name,
+		BaseUrl:    p.BaseURL,
+		Model:      p.Model,
+		ApiKey:     p.APIKey,
+		AuthType:   p.AuthType,
+		ApiFormat:  p.APIFormat,
+		NumCtx:     int32(p.NumCtx),
+		Type:       p.Type,
+		RetryCount: int32(p.RetryCount),
 	}
 }
 
@@ -146,30 +149,30 @@ func configToProto(cfg *config.Config) *ConfigData {
 		MovementDisplayIdleS:     int32(cfg.Movement.DisplayIdleS),
 		MovementAwayThresholdS:   int32(cfg.Movement.AwayThresholdS),
 
-		LogLevel:        cfg.Log.Level,
-		LogConsole:      cfg.Log.Console,
-		LogRetentionDays: int32(cfg.Log.RetentionDays),
-		VlmMode:                  cfg.VLM.Mode,
-		VlmActiveProvider:        cfg.VLM.ActiveProvider,
-		VlmProviders:             make(map[string]*ProviderConfig),
-		VlmScheduleIntervalMin:   int32(cfg.VLM.ScheduleIntervalMin),
-		VlmCaptureRange:          cfg.VLM.CaptureRange,
-		VlmOnDemandSwitchGapS:    int32(cfg.VLM.OnDemandSwitchGapS),
-		VlmOnDemandMotionGapS:    int32(cfg.VLM.OnDemandMotionGapS),
-		VlmPrompt:                cfg.VLM.Prompt,
-		McpEnabled:               true,
-		HotkeyRecord:             cfg.Hotkeys.Record,
-		HotkeyScreenshot:         cfg.Hotkeys.Screenshot,
-		HotkeyPromptPrefix:       cfg.Hotkeys.PromptPrefix,
-		ScreenshotWithVlm:        cfg.Screenshot.WithVLM,
-		ScreenshotPrompt:         cfg.Screenshot.Prompt,
-		Autostart:                false,
-		CollectOnStart:           true,
+		LogLevel:               cfg.Log.Level,
+		LogConsole:             cfg.Log.Console,
+		LogRetentionDays:       int32(cfg.Log.RetentionDays),
+		VlmMode:                cfg.VLM.Mode,
+		VlmActiveProvider:      cfg.VLM.ActiveProvider,
+		VlmProviders:           make(map[string]*ProviderConfig),
+		VlmScheduleIntervalMin: int32(cfg.VLM.ScheduleIntervalMin),
+		VlmCaptureRange:        cfg.VLM.CaptureRange,
+		VlmOnDemandSwitchGapS:  int32(cfg.VLM.OnDemandSwitchGapS),
+		VlmOnDemandMotionGapS:  int32(cfg.VLM.OnDemandMotionGapS),
+		VlmPrompt:              cfg.VLM.Prompt,
+		McpEnabled:             true,
+		HotkeyRecord:           cfg.Hotkeys.Record,
+		HotkeyScreenshot:       cfg.Hotkeys.Screenshot,
+		HotkeyPromptPrefix:     cfg.Hotkeys.PromptPrefix,
+		ScreenshotWithVlm:      cfg.Screenshot.WithVLM,
+		ScreenshotPrompt:       cfg.Screenshot.Prompt,
+		Autostart:              false,
+		CollectOnStart:         true,
 
-		UpdateServerUrl:        cfg.Update.ServerURL,
-		UpdateCheckOnStartup:   cfg.Update.CheckOnStartup,
-		UpdateCheckDaily:       cfg.Update.CheckDaily,
-		UpdateChannel:          cfg.Update.Channel,
+		UpdateServerUrl:      cfg.Update.ServerURL,
+		UpdateCheckOnStartup: cfg.Update.CheckOnStartup,
+		UpdateCheckDaily:     cfg.Update.CheckDaily,
+		UpdateChannel:        cfg.Update.Channel,
 	}
 
 	for k, p := range cfg.ASR.Providers {
@@ -215,6 +218,7 @@ func protoToConfig(data *ConfigData) *config.Config {
 				Language:       p.Language,
 				Stream:         p.Stream,
 				LocalModelPath: p.LocalModelPath,
+				RetryCount:     int(p.RetryCount),
 			}
 		}
 	}
@@ -245,14 +249,15 @@ func protoToConfig(data *ConfigData) *config.Config {
 				ptype = "cloud"
 			}
 			cfg.VLM.Providers[k] = config.VLMProvider{
-				Name:      p.Name,
-				BaseURL:   p.BaseUrl,
-				Model:     p.Model,
-				APIKey:    p.ApiKey,
-				AuthType:  p.AuthType,
-				APIFormat: p.ApiFormat,
-				NumCtx:    int(p.NumCtx),
-				Type:      ptype,
+				Name:       p.Name,
+				BaseURL:    p.BaseUrl,
+				Model:      p.Model,
+				APIKey:     p.ApiKey,
+				AuthType:   p.AuthType,
+				APIFormat:  p.ApiFormat,
+				NumCtx:     int(p.NumCtx),
+				Type:       ptype,
+				RetryCount: int(p.RetryCount),
 			}
 		}
 	}
@@ -272,14 +277,15 @@ func protoToConfig(data *ConfigData) *config.Config {
 				ptype = "cloud"
 			}
 			cfg.LLM.Providers[k] = config.LLMProvider{
-				Name:      p.Name,
-				BaseURL:   p.BaseUrl,
-				Model:     p.Model,
-				APIKey:    p.ApiKey,
-				AuthType:  p.AuthType,
-				APIFormat: p.ApiFormat,
-				NumCtx:    int(p.NumCtx),
-				Type:      ptype,
+				Name:       p.Name,
+				BaseURL:    p.BaseUrl,
+				Model:      p.Model,
+				APIKey:     p.ApiKey,
+				AuthType:   p.AuthType,
+				APIFormat:  p.ApiFormat,
+				NumCtx:     int(p.NumCtx),
+				Type:       ptype,
+				RetryCount: int(p.RetryCount),
 			}
 		}
 	}
@@ -314,6 +320,10 @@ func protoToConfig(data *ConfigData) *config.Config {
 	if strings.TrimSpace(cfg.Update.Channel) == "" {
 		cfg.Update.Channel = "stable"
 	}
+
+	// 规范化所有 provider 的 retry_count（≤0 → 默认值 3）。
+	// 旧前端/proto 未带 retry_count 字段时零值会被规范化，保证全链路一致。
+	cfg.NormalizeRetryCount()
 
 	return cfg
 }

@@ -97,4 +97,5 @@ message ProviderConfig {
   string language = 9;     // provider 级语言提示
   bool stream = 10;        // ASR: 是否按 SSE 流式请求/解析（小米 true，标准 OpenAI false）
   string local_model_path = 11; // ASR type=local: whisper .bin 路径（per-provider）
+  int32 retry_count = 12;  // 云请求 HTTP 重试次数（429/5xx/网络错误），0=不重试，默认 3
 }
