@@ -102,8 +102,12 @@ func (s *CollectionServer) QueryTimeline(ctx context.Context, req *TimelineReque
 	for _, seg := range aggregated {
 		// 惰性回填：若聚合段尚无摘要，取该时间窗内最后一条 vlm_summary 事件。
 		// 聚合段无单一 DB ID，回填只更新返回值，不落库（每次查询重算，开销可接受）。
-		if seg.Summary == "" {
-			if sum, err := s.db.LatestVLMSummary(seg.StartTS, seg.EndTS); err == nil && sum != "" {
+		//
+		// 短段（<10s）跳过：1-2 秒的切换抖动段几乎不会有自己的 VLM 截图，回填到的
+		// 必然是邻段串扰（边界 event 被错误归属），显示成"摘要与 app 名矛盾"。
+		// 配合 LatestVLMSummary 的半开区间 + app 校验，杜绝相邻段雷同摘要。
+		if seg.Summary == "" && seg.EndTS.Sub(seg.StartTS) >= 10*time.Second {
+			if sum, err := s.db.LatestVLMSummary(seg.StartTS, seg.EndTS, seg.AppPath); err == nil && sum != "" {
 				seg.Summary = sum
 			}
 		}

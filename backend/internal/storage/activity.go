@@ -74,16 +74,33 @@ func (db *DB) UpdateActivitySegmentSummary(id int64, summary string) error {
 	return nil
 }
 
-// LatestVLMSummary 查询时间窗口 [start, end] 内最近一条 vlm_summary 事件的内容。
+// LatestVLMSummary 查询时间窗口 [start, end) 内最近一条 vlm_summary 事件的内容。
 // 走 idx_events_type_ts 索引。无结果返回空串。content 列可空，用 NullString 兜底。
-func (db *DB) LatestVLMSummary(start, end time.Time) (string, error) {
+//
+// 半开区间 + app 校验（坑：时间轴雷同摘要）：
+//   - 旧实现用闭区间 ts>=? AND ts<=?，相邻段边界上同一条 event 会被前后两段同时命中，
+//     导致"两个不同应用段显示完全相同的 VLM 摘要"。改半开区间 ts>=? AND ts<?，边界
+//     event 只属于前一段。
+//   - appPath 非空时追加 AND (app_path = ? OR app_path = '')：精确匹配该应用的事件；
+//     兼容 app_path 为空的旧/异常数据（不误杀）。appPath 为空则退化成不校验 app（防御）。
+func (db *DB) LatestVLMSummary(start, end time.Time, appPath string) (string, error) {
 	var content sql.NullString
-	err := db.QueryRow(
-		`SELECT content FROM events
-		 WHERE type = ? AND ts >= ? AND ts <= ?
-		 ORDER BY ts DESC LIMIT 1`,
-		string(EventTypeVLMSummary), toUnix(start), toUnix(end),
-	).Scan(&content)
+	var err error
+	if appPath == "" {
+		err = db.QueryRow(
+			`SELECT content FROM events
+			 WHERE type = ? AND ts >= ? AND ts < ?
+			 ORDER BY ts DESC LIMIT 1`,
+			string(EventTypeVLMSummary), toUnix(start), toUnix(end),
+		).Scan(&content)
+	} else {
+		err = db.QueryRow(
+			`SELECT content FROM events
+			 WHERE type = ? AND ts >= ? AND ts < ? AND (app_path = ? OR app_path = '')
+			 ORDER BY ts DESC LIMIT 1`,
+			string(EventTypeVLMSummary), toUnix(start), toUnix(end), appPath,
+		).Scan(&content)
+	}
 	if err == sql.ErrNoRows {
 		return "", nil
 	}
