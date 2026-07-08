@@ -105,3 +105,12 @@ update_service/config.yaml
 update_service/server.exe
 update_service/dist/
 update_service/data/
+
+# 本地设计稿/比赛投稿素材/临时目录（不入库）
+--brand-css
+assets/
+client/NO_TARGET_TARGET
+demo-post.md
+packaging-plan-v2.html
+ui-wireframes/ui-wireframe-v2.zip
+update-service-admin-redesign/
