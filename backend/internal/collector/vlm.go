@@ -33,13 +33,14 @@ type VLMCapturer struct {
 	//   - onDemandLoop goroutine 消费：300ms 延迟 → Trigger
 	//   - lastCaptureUnix: 上次采集时刻（unix 纳秒），用 atomic 保护跨 goroutine读写
 	//     两个 gap（switch/motion）共用此时间戳，任一触发成功后都更新它。
-	triggerCh     chan triggerEvent
+	triggerCh       chan triggerEvent
 	lastCaptureUnix atomic.Int64
 
 	// inputActiveS: 输入活跃阈值(秒)，由 main.go 从 MovementConfig 注入。
-	// OnActivity 收到 motion 回调时，若近该秒数内有键鼠输入(正在打字)，直接跳过
-	// 不入队——打字时 VLM 截图是冗余的，且 PrintWindow 会卡顿目标窗口。
-	// switch 回调(切窗口)不受此限。默认 0 → OnActivity 内兜底 8s。
+	// 两处打字守卫共用：① OnActivity 的 motion 回调（入队时拦）；② onDemandLoop
+	// 截图前（300ms 延迟后拦，覆盖 motion/switch）。若近该秒数内有键鼠输入
+	// (正在打字)即跳过截图——打字时 VLM 截图冗余，且 PrintWindow 会卡顿目标窗口。
+	// 默认 0 → isTypingActive 内兜底 8s。
 	// 用 atomic 保护：main.go 装配阶段写、onDemandLoop goroutine 读。
 	inputActiveS atomic.Int64
 }
@@ -74,12 +75,12 @@ func NewVLMCapturer(cfg config.VLMConfig, db *storage.DB, logger *slog.Logger) (
 		logger = slog.Default()
 	}
 	return &VLMCapturer{
-		cfg:        cfg,
-		engine:     engine,
-		db:         db,
-		logger:     logger,
-		stopCh:     make(chan struct{}),
-		triggerCh:  make(chan triggerEvent, 1), // cap=1：防重入，满则丢
+		cfg:       cfg,
+		engine:    engine,
+		db:        db,
+		logger:    logger,
+		stopCh:    make(chan struct{}),
+		triggerCh: make(chan triggerEvent, 1), // cap=1：防重入，满则丢
 	}, nil
 }
 
@@ -115,9 +116,27 @@ func (v *VLMCapturer) Stop() {
 }
 
 // SetInputActiveS 注入输入活跃阈值(秒)。应在 Start() 之前调用（main.go 装配阶段）。
-// 用于 OnActivity 的 motion 回调打字守卫。<=0 时 OnActivity 兜底 8s。
+// 用于打字守卫（OnActivity 的 motion 回调 + onDemandLoop 截图前）。<=0 时兜底 8s。
 func (v *VLMCapturer) SetInputActiveS(sec int) {
 	v.inputActiveS.Store(int64(sec))
+}
+
+// isTypingActive 判断用户是否正在打字：近 inputActiveS 秒内有键鼠输入即视为活跃。
+// 复用于 on_demand 的 motion/switch 两条触发路径——PrintWindow 是同步跨进程 GDI
+// 调用，会阻塞目标窗口 UI 线程，对 Electron 应用(ZCode/Qoder)会卡住 IME 导致
+// 中文输入丢字/中断，故截图前需统一判定。inputActiveS<=0 兜底 8s；
+// LastInputInfo 取数失败保守返回 false（不阻断采集，宁可偶发卡顿也不漏采）。
+func (v *VLMCapturer) isTypingActive() bool {
+	sec := v.inputActiveS.Load()
+	if sec <= 0 {
+		sec = 8 // 默认兜底（与 movement medium 档 InputActiveS 一致）
+	}
+	tick, ok := winapi.LastInputTick()
+	if !ok {
+		return false
+	}
+	idleMs := winapi.GetTickCount64() - uint64(tick)
+	return idleMs > 0 && idleMs < uint64(sec)*1000
 }
 
 // Trigger 立即执行一次截图理解(按需模式也走这里)。
@@ -219,18 +238,10 @@ func (v *VLMCapturer) OnActivity(reason string, app App, at time.Time) {
 	// motion 回调打字守卫：用户正在打字时跳过 VLM 截图。
 	// 打字时画面变化会高频触发 motion，但此刻截图既冗余又会卡顿目标窗口
 	// （PrintWindow 同步阻塞目标 UI 线程）。键鼠信号已证明在用电脑，无需再"看"。
-	// switch 回调(切窗口)不受此限——切窗口是低频强信号，值得截。
-	if reason == "motion" {
-		sec := v.inputActiveS.Load()
-		if sec <= 0 {
-			sec = 8 // 默认兜底（与 movement medium 档 InputActiveS 一致）
-		}
-		if tick, ok := winapi.LastInputTick(); ok {
-			idleMs := winapi.GetTickCount64() - uint64(tick)
-			if idleMs > 0 && idleMs < uint64(sec)*1000 {
-				return // 正在打字，跳过 motion 触发
-			}
-		}
+	// switch 回调(切窗口)不在此拦——切窗口瞬间用户尚未打字，真正的拦截在
+	// onDemandLoop 截图前（300ms 延迟后用户可能已开始输入）。
+	if reason == "motion" && v.isTypingActive() {
+		return // 正在打字，跳过 motion 触发
 	}
 
 	// 按触发原因选 gap。切窗口是"明确换场景"的强信号，冷却短；
@@ -264,7 +275,9 @@ func (v *VLMCapturer) OnActivity(reason string, app App, at time.Time) {
 }
 
 // onDemandLoop 是 on_demand 模式的消费 goroutine。
-// 串行处理 triggerCh 的事件：300ms 延迟（让新窗口/画面绘制稳定）→ 标记采集时刻 → Trigger。
+// 串行处理 triggerCh 的事件：300ms 延迟（让新窗口/画面绘制稳定）→ 打字守卫
+// （正在打字则放弃本次截图）→ Trigger。截图前的守卫是中文输入防卡顿的关键：
+// 切窗口后 300ms 正是用户在新窗口开始输入的时刻，此时 PrintWindow 会卡住 IME。
 func (v *VLMCapturer) onDemandLoop() {
 	for {
 		select {
@@ -277,6 +290,16 @@ func (v *VLMCapturer) onDemandLoop() {
 			case <-time.After(300 * time.Millisecond):
 			case <-v.stopCh:
 				return
+			}
+
+			// 截图前打字守卫：300ms 等待期间用户可能已经开始在新窗口打字（尤其切到
+			// 编辑器后立刻输入）。此时 PrintWindow 会阻塞目标 UI 线程，卡住 IME 导致
+			// 中文输入丢字/中断。检测到正在打字则放弃本次截图，等下一个活跃点重试。
+			// 覆盖 motion/switch 两条路径——motion 在入队时已守过一次，这里是第二道
+			// 保险（入队到此刻可能又过了几秒、用户恢复打字）；switch 入队时未守，全靠这里。
+			if v.isTypingActive() {
+				v.logger.Debug("打字守卫跳过 on-demand 截图", "reason", ev.Reason, "app", ev.App.Name)
+				continue
 			}
 
 			// Trigger 内部会重新读 ForegroundApp 拿延迟后的真实前台。
