@@ -555,7 +555,9 @@ import ShadowWorker
         }
     }
 
-    // 配置加载完成后，同步更新检查相关状态并触发启动时检查。
+    // 配置加载/保存完成的全局反馈。
+    // 注意：保存结果 toast 必须放在这里（全局 Connections），不能放在 SettingsPage
+    // 内部的 Connections——后者收不到 context property 信号（坑 #15，同 loadFinished）。
     Connections {
         target: settingsVm
         function onLoadFinished(ok) {
@@ -563,6 +565,13 @@ import ShadowWorker
             updateVm.checkDaily = settingsVm.updateCheckDaily
             if (settingsVm.updateCheckOnStartup)
                 updateVm.checkUpdate()
+        }
+        function onSaveFinished(ok, error) {
+            if (ok) {
+                toast(qsTr("Settings saved"))
+            } else {
+                toast(qsTr("Save failed: ") + error, "error")
+            }
         }
     }
 

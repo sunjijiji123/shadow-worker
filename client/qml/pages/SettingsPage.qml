@@ -491,6 +491,11 @@ Item {
         if (vlmApiFormatBox) vlmApiFormatBox.currentIndex = (vlmApiFmt === "anthropic") ? 1 : 0
         if (vlmAuthBox) vlmAuthBox.currentIndex = authToIndex(vlmAuth)
         if (vlmIntervalField) vlmIntervalField.text = vlmInterval
+        // on-demand 冷却参数（坑：与 interval 一样无 text 绑定，load 异步回来后
+        // 必须在这里回填，否则 Component.onCompleted 的一次性赋值会让输入框
+        // 永远停在启动时的默认值 20/60，表现为"保存了重启还是旧值"）。
+        if (vlmSwitchGapField) vlmSwitchGapField.text = vlmSwitchGap
+        if (vlmMotionGapField) vlmMotionGapField.text = vlmMotionGap
         if (vlmRetryField) vlmRetryField.text = vlmRetryCount
         // local 块控件（与 cloud 块共享同一组暂存属性）
         if (vlmLocalUrlField) vlmLocalUrlField.text = vlmBaseUrl
@@ -2256,21 +2261,10 @@ Item {
                 return
             }
             // push local UI props into the viewModel, then persist via gRPC.
+            // 保存结果反馈由 main.qml 的全局 Connections(onSaveFinished) 处理——
+            // SettingsPage 内部的 Connections 收不到 context property 信号（坑 #15）。
             pushToViewModel()
             viewModel.save()
-        }
-    }
-
-    Connections {
-        target: viewModel
-        function onSaveFinished(ok, error) {
-            var win = ApplicationWindow.window
-            if (!win || !win.toast) return
-            if (ok) {
-                win.toast(qsTr("Settings saved"))
-            } else {
-                win.toast(qsTr("Save failed: ") + error, "error")
-            }
         }
     }
 
