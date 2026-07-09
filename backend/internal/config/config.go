@@ -186,6 +186,9 @@ type MovementConfig struct {
 	// 短 idle（< 阈值）仍视为"思考"，段不断（见 movement.go 的段合并语义）。
 	// 为 0 时 NewCollector 用 Preset 默认值（600=10min）。
 	AwayThresholdS int `yaml:"away_threshold_s"`
+	// PauseOnLock:锁屏时是否暂停采集并把当前段收尾（判定离开）。
+	// true 时锁屏等价于“离开”，解锁后恢复并开新段。
+	PauseOnLock bool `yaml:"pause_on_lock"`
 	// InputActiveS:输入活跃阈值。近该秒数内有键鼠输入 → 判定"正在打字"，
 	// 跳过帧差截图(s1)，只信键鼠信号(s2)。
 	// 原因：PrintWindow 是同步跨进程 GDI 调用，会阻塞目标窗口 UI 线程做合成
@@ -290,6 +293,7 @@ func Default() *Config {
 			// idle 超 10 分钟判为离开（吃饭/开会），结束当前段。
 			// 短 idle（看文档/思考）仍不打断段。
 			AwayThresholdS: 600,
+			PauseOnLock:    true,
 			// 8 秒内有键鼠输入 = 正在打字，跳过帧差截图避免 PrintWindow 卡顿。
 			// 小于 InputIdleS(15s)，确保"打字停了再留点宽限才恢复帧差检测"。
 			InputActiveS: 8,

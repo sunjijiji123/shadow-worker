@@ -322,6 +322,8 @@ Item {
             viewModel.movementSampleMsChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
             viewModel.movementIdleSChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
             viewModel.movementPrecisionChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
+            viewModel.movementPauseOnLockChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
+            viewModel.movementAwayThresholdMinChanged.connect(function() { Qt.callLater(root.syncFromViewModel) })
         }
         // seed from whatever the viewModel already holds (defaults until load).
         Qt.callLater(syncFromViewModel)
@@ -413,6 +415,11 @@ Item {
         movementSampleMs = viewModel.movementSampleMs || 300
         movementIdleS = viewModel.movementIdleS || 10
         movementPrecision = viewModel.movementPrecision || "medium"
+        // Capture Rules
+        pauseOnLock = viewModel.movementPauseOnLock !== false
+        idleTimeoutMin = viewModel.movementAwayThresholdMin > 0
+                         ? viewModel.movementAwayThresholdMin
+                         : 10
         updateMovementFields()
     }
 
@@ -519,6 +526,8 @@ Item {
         if (movementSampleField) movementSampleField.text = movementSampleMs
         if (movementIdleField) movementIdleField.text = movementIdleS
         if (movementPrecisionBox) movementPrecisionBox.currentIndex = precisionToIndex(movementPrecision)
+        if (pauseOnLockSwitch) pauseOnLockSwitch.checked = pauseOnLock
+        if (idleInput) idleInput.text = idleTimeoutMin
     }
 
     // 查找指定 category 下某个 provider key 的 type。
@@ -629,6 +638,8 @@ Item {
         viewModel.movementSampleMs = movementSampleMs
         viewModel.movementIdleS = movementIdleS
         viewModel.movementPrecision = movementPrecision
+        viewModel.movementPauseOnLock = pauseOnLock
+        viewModel.movementAwayThresholdMin = idleTimeoutMin
     }
 
     // 把本地暂存的云端字段 Write-Through 到 viewModel。
@@ -2247,8 +2258,19 @@ Item {
             // push local UI props into the viewModel, then persist via gRPC.
             pushToViewModel()
             viewModel.save()
+        }
+    }
+
+    Connections {
+        target: viewModel
+        function onSaveFinished(ok, error) {
             var win = ApplicationWindow.window
-            if (win && win.toast) win.toast(qsTr("Settings saved"))
+            if (!win || !win.toast) return
+            if (ok) {
+                win.toast(qsTr("Settings saved"))
+            } else {
+                win.toast(qsTr("Save failed: ") + error, "error")
+            }
         }
     }
 

@@ -165,6 +165,20 @@ void SettingsViewModel::setMovementPrecision(const QString &v) {
   emit movementPrecisionChanged();
 }
 
+void SettingsViewModel::setMovementPauseOnLock(bool v) {
+  if (m_movementPauseOnLock == v)
+    return;
+  m_movementPauseOnLock = v;
+  emit movementPauseOnLockChanged();
+}
+
+void SettingsViewModel::setMovementAwayThresholdMin(int v) {
+  if (m_movementAwayThresholdMin == v)
+    return;
+  m_movementAwayThresholdMin = v;
+  emit movementAwayThresholdMinChanged();
+}
+
 // Hotkey setters
 void SettingsViewModel::setHotkeyRecord(const QString &v) {
   if (m_hotkeyRecord == v)
@@ -535,6 +549,9 @@ void SettingsViewModel::applyConfig(const ConfigData &data) {
   setMovementSampleMs((int)data.movementSampleIntervalMs());
   setMovementIdleS((int)data.movementIdleTimeoutS());
   setMovementPrecision(data.movementPrecision());
+  setMovementPauseOnLock(data.movementPauseOnLock());
+  int awaySec = (int)data.movementAwayThresholdS();
+  setMovementAwayThresholdMin(awaySec > 0 ? awaySec / 60 : 10);
 
   setHotkeyRecord(data.hotkeyRecord());
   setHotkeyScreenshot(data.hotkeyScreenshot());
@@ -577,6 +594,8 @@ ConfigData SettingsViewModel::buildConfig() const {
   data.setMovementSampleIntervalMs((qint32)m_movementSampleMs);
   data.setMovementIdleTimeoutS((qint32)m_movementIdleS);
   data.setMovementPrecision(m_movementPrecision);
+  data.setMovementPauseOnLock(m_movementPauseOnLock);
+  data.setMovementAwayThresholdS((qint32)(m_movementAwayThresholdMin * 60));
 
   data.setHotkeyRecord(m_hotkeyRecord);
   data.setHotkeyScreenshot(m_hotkeyScreenshot);

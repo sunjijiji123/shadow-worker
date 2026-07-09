@@ -31,6 +31,8 @@ type PrecisionConfig struct {
 	// InputActiveS:输入活跃阈值(秒)。近该秒数内有键鼠输入 → 判定"正在打字"，
 	// 跳过帧差截图(s1)避免 PrintWindow 卡顿目标窗口 UI 线程。必须 < InputIdleS。
 	InputActiveS int
+	// PauseOnLock:锁屏时是否暂停采集并视为离开。
+	PauseOnLock bool
 	// SaveScreenshots 由 NewCollector 从 MovementConfig 复制；debug 模式时为 true。
 	SaveScreenshots bool
 }
@@ -121,6 +123,7 @@ func NewCollector(db *storage.DB, mc config.MovementConfig, logger *slog.Logger)
 	if mc.InputActiveS > 0 {
 		cfg.InputActiveS = mc.InputActiveS
 	}
+	cfg.PauseOnLock = mc.PauseOnLock
 	cfg.SaveScreenshots = mc.SaveScreenshots
 	return &Collector{
 		db:       db,
@@ -260,6 +263,16 @@ func (c *Collector) loop() {
 			c.logger.Info("collector 已恢复")
 			continue
 		case <-ticker.C:
+		}
+
+		// 若配置为"锁屏时暂停"，检测到锁屏则立即收尾当前段并跳过本 tick。
+		// 解锁后下一 tick 会自然恢复，有真实输入时开新段。
+		if c.cfg.PauseOnLock && winapi.IsWorkstationLocked() {
+			if !c.away {
+				c.enterAway("locked", time.Now().UTC())
+				c.logger.Info("检测到锁屏，进入离开状态")
+			}
+			continue
 		}
 
 		app, err := ForegroundApp()

@@ -44,6 +44,7 @@ message ConfigData {
   int32 movement_input_idle_s = 27;  // 输入超时:GetLastInputInfo 近该秒数内有输入 → engaged
   int32 movement_display_idle_s = 28; // 展示超时:距上次 engaged 超该秒数 → idle
   int32 movement_away_threshold_s = 32; // 离开阈值:idle 持续超该秒数 → 判定离开，结束当前段（默认 600=10min）
+  bool movement_pause_on_lock = 43;   // 锁屏时是否暂停采集/判定离开
 
   // Log
   string log_level = 33;          // debug | info | warn（默认 info）

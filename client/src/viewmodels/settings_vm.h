@@ -71,6 +71,11 @@ class SettingsViewModel : public QObject {
                  movementIdleSChanged)
   Q_PROPERTY(QString movementPrecision READ movementPrecision WRITE
                  setMovementPrecision NOTIFY movementPrecisionChanged)
+  Q_PROPERTY(bool movementPauseOnLock READ movementPauseOnLock WRITE
+                 setMovementPauseOnLock NOTIFY movementPauseOnLockChanged)
+  Q_PROPERTY(int movementAwayThresholdMin READ movementAwayThresholdMin WRITE
+                 setMovementAwayThresholdMin NOTIFY
+                     movementAwayThresholdMinChanged)
 
   // Hotkeys
   Q_PROPERTY(QString hotkeyRecord READ hotkeyRecord WRITE setHotkeyRecord NOTIFY
@@ -155,6 +160,10 @@ public:
   void setMovementIdleS(int v);
   QString movementPrecision() const { return m_movementPrecision; }
   void setMovementPrecision(const QString &v);
+  bool movementPauseOnLock() const { return m_movementPauseOnLock; }
+  void setMovementPauseOnLock(bool v);
+  int movementAwayThresholdMin() const { return m_movementAwayThresholdMin; }
+  void setMovementAwayThresholdMin(int v);
 
   // Hotkeys
   QString hotkeyRecord() const { return m_hotkeyRecord; }
@@ -220,6 +229,8 @@ signals:
   void movementSampleMsChanged();
   void movementIdleSChanged();
   void movementPrecisionChanged();
+  void movementPauseOnLockChanged();
+  void movementAwayThresholdMinChanged();
 
   void hotkeyRecordChanged();
   void hotkeyScreenshotChanged();
@@ -279,6 +290,8 @@ private:
   int m_movementSampleMs = 300;
   int m_movementIdleS = 10;
   QString m_movementPrecision = "medium";
+  bool m_movementPauseOnLock = true;
+  int m_movementAwayThresholdMin = 10;
 
   QString m_hotkeyRecord = "F9";
   QString m_hotkeyScreenshot;

@@ -17,6 +17,15 @@ var (
 	procGetLastInputInfo         = moduser32.NewProc("GetLastInputInfo")
 	procGetSystemMetrics         = moduser32.NewProc("GetSystemMetrics")
 	procPrintWindow              = moduser32.NewProc("PrintWindow")
+	procOpenInputDesktop          = moduser32.NewProc("OpenInputDesktop")
+	procCloseDesktop              = moduser32.NewProc("CloseDesktop")
+	procGetUserObjectInformationW = moduser32.NewProc("GetUserObjectInformationW")
+)
+
+// 桌面访问与 UOI 常量。
+const (
+	DESKTOP_READOBJECTS = 0x0001
+	UOI_NAME            = 2
 )
 
 // PrintWindow 标志位。
@@ -137,4 +146,29 @@ func LastInputTick() (tick uint32, ok bool) {
 		return 0, false
 	}
 	return info.DwTime, true
+}
+
+// IsWorkstationLocked 检测当前工作站是否处于锁屏状态。
+// 原理：OpenInputDesktop 打开当前输入桌面；非锁屏时桌面名称为 "Default"，
+// 锁屏/登录桌面时为 "Winlogon" 等其它名称。失败时保守返回 false（认为未锁屏）。
+func IsWorkstationLocked() bool {
+	h, _, _ := procOpenInputDesktop.Call(0, 0, uintptr(DESKTOP_READOBJECTS))
+	if h == 0 {
+		return false
+	}
+	defer procCloseDesktop.Call(h)
+
+	var name [256]uint16
+	var needed uint32
+	r, _, _ := procGetUserObjectInformationW.Call(
+		h,
+		uintptr(UOI_NAME),
+		uintptr(unsafe.Pointer(&name[0])),
+		uintptr(len(name)*2),
+		uintptr(unsafe.Pointer(&needed)),
+	)
+	if r == 0 {
+		return false
+	}
+	return syscall.UTF16ToString(name[:]) != "Default"
 }

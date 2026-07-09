@@ -52,6 +52,24 @@ func (s *ConfigServer) SaveConfig(ctx context.Context, req *ConfigData) (*Result
 	newCfg.Debug = s.cfg.Debug
 	newCfg.VLM.SaveScreenshots = s.cfg.VLM.SaveScreenshots
 	newCfg.Movement.SaveScreenshots = s.cfg.Movement.SaveScreenshots
+	// Movement 中设置页未暴露的高级参数（input_idle_s / display_idle_s / away_threshold_s /
+	// input_active_s）和 hotwords 不应被 UI 保存清零。UI 不发送这些字段时会得到零值，
+	// 因此仅在新的 proto 值为零时保留旧值；非零说明调用方确实想修改。
+	if newCfg.Movement.InputIdleS == 0 {
+		newCfg.Movement.InputIdleS = s.cfg.Movement.InputIdleS
+	}
+	if newCfg.Movement.DisplayIdleS == 0 {
+		newCfg.Movement.DisplayIdleS = s.cfg.Movement.DisplayIdleS
+	}
+	if newCfg.Movement.AwayThresholdS == 0 {
+		newCfg.Movement.AwayThresholdS = s.cfg.Movement.AwayThresholdS
+	}
+	if newCfg.Movement.InputActiveS == 0 {
+		newCfg.Movement.InputActiveS = s.cfg.Movement.InputActiveS
+	}
+	if len(newCfg.Hotwords) == 0 {
+		newCfg.Hotwords = s.cfg.Hotwords
+	}
 
 	if err := newCfg.Save(); err != nil {
 		return nil, fmt.Errorf("保存配置失败: %w", err)
@@ -148,6 +166,7 @@ func configToProto(cfg *config.Config) *ConfigData {
 		MovementInputIdleS:       int32(cfg.Movement.InputIdleS),
 		MovementDisplayIdleS:     int32(cfg.Movement.DisplayIdleS),
 		MovementAwayThresholdS:   int32(cfg.Movement.AwayThresholdS),
+		MovementPauseOnLock:      cfg.Movement.PauseOnLock,
 
 		LogLevel:               cfg.Log.Level,
 		LogConsole:             cfg.Log.Console,
@@ -296,6 +315,7 @@ func protoToConfig(data *ConfigData) *config.Config {
 	cfg.Movement.InputIdleS = int(data.MovementInputIdleS)
 	cfg.Movement.DisplayIdleS = int(data.MovementDisplayIdleS)
 	cfg.Movement.AwayThresholdS = int(data.MovementAwayThresholdS)
+	cfg.Movement.PauseOnLock = data.MovementPauseOnLock
 
 	cfg.Log.Level = data.LogLevel
 	cfg.Log.Console = data.LogConsole
