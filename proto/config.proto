@@ -14,9 +14,20 @@ option go_package = "shadow-worker/backend/internal/grpcapi;grpcapi";
 service ConfigService {
   rpc GetConfig(GetConfigRequest) returns (ConfigData);
   rpc SaveConfig(ConfigData) returns (Result);
+  // GetPaths 返回配置文件/日志/数据目录的绝对路径，供系统设置页展示 + 打开目录。
+  rpc GetPaths(GetPathsRequest) returns (PathsResponse);
 }
 
 message GetConfigRequest {}
+
+message GetPathsRequest {}
+
+// PathsResponse 返回本地关键目录路径。客户端用 file:/// + Qt.openUrlExternally 打开。
+message PathsResponse {
+  string config_path = 1;  // %APPDATA%/shadow-worker/config.yaml
+  string log_dir = 2;      // %APPDATA%/shadow-worker/logs
+  string data_dir = 3;     // %APPDATA%/shadow-worker（含 data.db + screenshots/）
+}
 
 message ConfigData {
   // ASR

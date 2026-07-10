@@ -10,6 +10,7 @@ import (
 	"shadow-worker/backend/internal/collector"
 	"shadow-worker/backend/internal/config"
 	"shadow-worker/backend/internal/llm"
+	"shadow-worker/backend/internal/logging"
 	"shadow-worker/backend/internal/storage"
 )
 
@@ -28,6 +29,25 @@ type ConfigServer struct {
 // db/logger 供 VLMHolder.Rebuild 重建 capturer 使用。
 func NewConfigServer(cfg *config.Config, holder *asr.EngineHolder, llmHolder *llm.EngineHolder, vlmHolder *collector.VLMHolder, db *storage.DB, logger *slog.Logger) *ConfigServer {
 	return &ConfigServer{cfg: cfg, holder: holder, llmHolder: llmHolder, vlmHolder: vlmHolder, db: db, logger: logger}
+}
+
+// GetPaths 返回配置文件/日志/数据目录的绝对路径，供系统设置页展示 + 打开目录。
+// 各路径由对应包的导出函数计算（config.ConfigPath / logging.LogDir / storage.DataDir），
+// 均基于 os.UserConfigDir()（= %APPDATA%/shadow-worker），与实际落盘位置一致。
+func (s *ConfigServer) GetPaths(ctx context.Context, req *GetPathsRequest) (*PathsResponse, error) {
+	configPath, err := config.ConfigPath()
+	if err != nil {
+		return nil, fmt.Errorf("获取配置路径失败: %w", err)
+	}
+	dataDir, err := storage.DataDir()
+	if err != nil {
+		return nil, fmt.Errorf("获取数据目录失败: %w", err)
+	}
+	return &PathsResponse{
+		ConfigPath: configPath,
+		LogDir:     logging.LogDir(),
+		DataDir:    dataDir,
+	}, nil
 }
 
 // GetConfig 返回当前配置。

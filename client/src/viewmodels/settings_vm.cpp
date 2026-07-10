@@ -10,6 +10,8 @@
 
 using shadowworker::ConfigData;
 using shadowworker::GetConfigRequest;
+using shadowworker::GetPathsRequest;
+using shadowworker::PathsResponse;
 using shadowworker::ProviderConfig;
 using shadowworker::Result;
 
@@ -447,6 +449,26 @@ void SettingsViewModel::save() {
                        return;
                      }
                      emit saveFinished(true, QString{});
+                   });
+}
+
+void SettingsViewModel::loadPaths() {
+  if (!m_channel) return;
+  GetPathsRequest req;
+  auto reply = m_client.GetPaths(req);
+  auto *replyPtr = reply.get();
+  reply.release();
+
+  QObject::connect(replyPtr, &QGrpcCallReply::finished, this,
+                   [this, replyPtr](const QGrpcStatus &status) {
+                     replyPtr->deleteLater();
+                     if (!status.isOk()) return;
+                     auto opt = replyPtr->read<PathsResponse>();
+                     if (!opt.has_value()) return;
+                     m_configPath = opt->configPath();
+                     m_logDir = opt->logDir();
+                     m_dataDir = opt->dataDir();
+                     emit pathsChanged();
                    });
 }
 

@@ -102,6 +102,12 @@ class SettingsViewModel : public QObject {
   Q_PROPERTY(QString updateChannel READ updateChannel WRITE
                  setUpdateChannel NOTIFY updateChannelChanged)
 
+  // 系统路径（config.yaml / logs / data 目录）。由 loadPaths() 填充，
+  // 供系统设置页展示 + 打开目录。loadPaths 失败时为空字符串。
+  Q_PROPERTY(QString configPath READ configPath NOTIFY pathsChanged)
+  Q_PROPERTY(QString logDir READ logDir NOTIFY pathsChanged)
+  Q_PROPERTY(QString dataDir READ dataDir NOTIFY pathsChanged)
+
 public:
   explicit SettingsViewModel(QObject *parent = nullptr);
 
@@ -198,6 +204,13 @@ public:
 
   Q_INVOKABLE void load();
   Q_INVOKABLE void save();
+  // loadPaths 查询本地关键目录路径（config/logs/data），填充给系统设置页。
+  Q_INVOKABLE void loadPaths();
+
+  // 系统路径 getters（由 loadPaths 填充）。
+  QString configPath() const { return m_configPath; }
+  QString logDir() const { return m_logDir; }
+  QString dataDir() const { return m_dataDir; }
 
 signals:
   void loadingChanged();
@@ -243,6 +256,8 @@ signals:
   void updateCheckOnStartupChanged();
   void updateCheckDailyChanged();
   void updateChannelChanged();
+
+  void pathsChanged();
 
   void loadFinished(bool ok);
   void saveFinished(bool ok, const QString &error);
@@ -303,4 +318,9 @@ private:
   bool m_updateCheckOnStartup = true;
   bool m_updateCheckDaily = true;
   QString m_updateChannel = QStringLiteral("stable");
+
+  // 系统路径（由 loadPaths 填充）
+  QString m_configPath;
+  QString m_logDir;
+  QString m_dataDir;
 };

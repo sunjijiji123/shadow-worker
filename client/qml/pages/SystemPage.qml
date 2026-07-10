@@ -24,6 +24,19 @@ Item {
             Qt.openUrlExternally(url)
     }
 
+    // openDir 打开本地目录（资源管理器）。path 是后端返回的绝对路径。
+    // file:/// 前缀 + 正斜杠（Windows 资源管理器认正斜杠）。空路径时 toast 提示。
+    function openDir(path) {
+        if (!path || path.length === 0) {
+            var win = ApplicationWindow.window
+            if (win && win.toast) win.toast(qsTr("Path not available"), "warning")
+            return
+        }
+        // Windows 路径反斜杠 → 正斜杠（file:///C:/Users/... 形式）。
+        var url = "file:///" + path.replace(/\\/g, "/")
+        Qt.openUrlExternally(url)
+    }
+
     function changelogUrl() {
         return (updateVm && updateVm.changelogUrl && updateVm.changelogUrl.length > 0)
                ? updateVm.changelogUrl
@@ -717,10 +730,7 @@ Item {
                     Button {
                         text: qsTr("Open Data Directory")
                         kind: "ghost"
-                        onClicked: {
-                            var win = ApplicationWindow.window
-                            if (win && win.toast) win.toast(qsTr("Opening data directory..."))
-                        }
+                        onClicked: openDir(settingsVm ? settingsVm.dataDir : "")
                     }
                     Button {
                         text: qsTr("Clear All Records")
@@ -731,15 +741,55 @@ Item {
             }
 
             // ============================================================
-            // Card 6: Config File Path
+            // Card 6: Log Directory
+            // ============================================================
+            Card {
+                Layout.fillWidth: true
+                title: qsTr("Log Directory")
+                description: qsTr("Logs roll daily, retained for 7 days. Check today's log when troubleshooting VLM/ASR issues.")
+
+                RowLayout {
+                    spacing: 12
+                    Layout.topMargin: 4
+                    Layout.fillWidth: true
+
+                    TextField {
+                        Layout.fillWidth: true
+                        text: settingsVm ? settingsVm.logDir : ""
+                        readOnly: true
+                    }
+                    Button {
+                        text: qsTr("Open")
+                        kind: "ghost"
+                        onClicked: openDir(settingsVm ? settingsVm.logDir : "")
+                    }
+                }
+            }
+
+            // ============================================================
+            // Card 7: Config File Path
             // ============================================================
             Card {
                 Layout.fillWidth: true
                 title: qsTr("Config File Path")
-                TextField {
+                description: qsTr("All settings are written to this YAML file.")
+
+                RowLayout {
+                    spacing: 12
+                    Layout.topMargin: 4
                     Layout.fillWidth: true
-                    text: "%APPDATA%\\shadow-worker\\config.yaml"
-                    readOnly: true
+
+                    TextField {
+                        Layout.fillWidth: true
+                        text: settingsVm ? settingsVm.configPath : ""
+                        readOnly: true
+                    }
+                    Button {
+                        text: qsTr("Open")
+                        kind: "ghost"
+                        // config.yaml 在 dataDir 同级，打开 dataDir 即可定位。
+                        onClicked: openDir(settingsVm ? settingsVm.dataDir : "")
+                    }
                 }
             }
 

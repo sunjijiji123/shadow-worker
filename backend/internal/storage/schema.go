@@ -32,6 +32,11 @@ func dataDir() (string, error) {
 	return dir, nil
 }
 
+// DataDir 是 dataDir 的导出版本，供"系统设置-数据目录"展示用。
+func DataDir() (string, error) {
+	return dataDir()
+}
+
 // Open 打开 SQLite 数据库，必要时自动建表。
 func Open() (*DB, error) {
 	dir, err := dataDir()

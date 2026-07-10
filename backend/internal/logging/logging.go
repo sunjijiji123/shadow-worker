@@ -25,6 +25,15 @@ import (
 	"time"
 )
 
+// gLogDir 保存日志目录绝对路径，Init 时赋值，供 LogDir() 导出查询。
+// 供"系统设置-日志目录"卡片展示路径 + 打开目录用。
+var gLogDir string
+
+// LogDir 返回日志目录绝对路径。Init 之前调用返回空字符串。
+func LogDir() string {
+	return gLogDir
+}
+
 // 按天滚动的 Writer：首次写当天时打开当天文件，跨天自动切换。
 // 同时支持叠加控制台输出（io.MultiWriter）。
 type dailyFileWriter struct {
@@ -141,6 +150,7 @@ func Init(level string, console bool, retentionDays int) (func(), error) {
 	if err := os.MkdirAll(logsDir, 0755); err != nil {
 		return nil, fmt.Errorf("创建日志目录失败: %w", err)
 	}
+	gLogDir = logsDir
 
 	// 启动时清理过期日志（失败不阻断启动）。
 	if retentionDays > 0 {

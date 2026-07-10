@@ -412,6 +412,11 @@ func configPath() (string, error) {
 	return filepath.Join(cfgDir, "shadow-worker", "config.yaml"), nil
 }
 
+// ConfigPath 是 configPath 的导出版本，供"系统设置-配置文件路径"展示用。
+func ConfigPath() (string, error) {
+	return configPath()
+}
+
 // GetASRProvider 返回当前激活的 ASR provider。
 func (c *Config) GetASRProvider() (ASRProvider, bool) {
 	p, ok := c.ASR.Providers[c.ASR.ActiveProvider]

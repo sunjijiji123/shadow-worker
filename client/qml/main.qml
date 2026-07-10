@@ -529,6 +529,8 @@ import ShadowWorker
         // the startup hotkey — matches the ai-voice-tool pattern of registering
         // from config at startup.
         if (settingsVm) settingsVm.load()
+        // 加载本地关键目录路径（config/logs/data），供系统设置页展示 + 打开目录。
+        if (settingsVm) settingsVm.loadPaths()
     }
 
     // register hotkeys as soon as the saved config arrives. 用 unregisterByName
