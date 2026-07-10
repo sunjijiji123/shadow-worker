@@ -91,7 +91,7 @@ func (e *ollamaEngine) describe(ctx context.Context, imagePNG []byte, effectiveP
 		return "", fmt.Errorf("读取 Ollama 响应失败: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("Ollama API 状态 %d: %s", resp.StatusCode, string(respBody))
+		return "", fmt.Errorf("Ollama API 状态 %d: %s", resp.StatusCode, decodeBodyForError(resp, respBody))
 	}
 
 	var result struct {

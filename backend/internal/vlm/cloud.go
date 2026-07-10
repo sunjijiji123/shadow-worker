@@ -115,7 +115,9 @@ func (e *cloudEngine) describe(ctx context.Context, imagePNG []byte, effectivePr
 		return "", fmt.Errorf("读取 VLM 响应失败: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("VLM API 状态 %d: %s", resp.StatusCode, string(respBody))
+		// 错误页可能是 GBK 编码的 HTML（国内 CDN/WAF 常见），解码后再拼进 error，
+		// 避免日志里全是乱码无法判断真实错误（鉴权/限流/参数等）。
+		return "", fmt.Errorf("VLM API 状态 %d: %s", resp.StatusCode, decodeBodyForError(resp, respBody))
 	}
 
 	var result struct {
