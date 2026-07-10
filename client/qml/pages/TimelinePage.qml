@@ -44,6 +44,27 @@ Item {
         return m[type] || type
     }
 
+    // failKindFromMeta 解析 failMeta JSON，返回中文失败提示。
+    // failMeta 格式 {"kind":"rate_limit|auth_error|...","detail":"..."}。
+    // kind 决定段内显示的简短文字（如"未识别画面内容"/"未采集到画面"），
+    // detail 进 hover 气泡。空 JSON 或解析失败时兜底通用提示。
+    function failKindFromMeta(meta) {
+        if (!meta || meta.length === 0) return qsTr("未识别画面内容")
+        try {
+            var p = JSON.parse(meta)
+            var m = {
+                "rate_limit": qsTr("未识别画面内容"),
+                "auth_error": qsTr("未识别画面内容"),
+                "parse_error": qsTr("未识别画面内容"),
+                "capture_failed": qsTr("未采集到画面"),
+                "request_failed": qsTr("未识别画面内容")
+            }
+            return m[p.kind] || qsTr("未识别画面内容")
+        } catch(e) {
+            return qsTr("未识别画面内容")
+        }
+    }
+
     // formatDuration 把秒数格式化为智能进位的时长文本。
     function formatDuration(sec) {
         if (sec < 60) return Math.max(0, sec) + "s"
@@ -290,6 +311,7 @@ Item {
                             required property string state
                             required property string summary
                             required property string durationText
+                            required property string failMeta
 
                             width: worklogList.width
                             spacing: 10
@@ -370,15 +392,86 @@ Item {
                                 }
                             }
                             // seg-summary: 缩进 + └ 前缀（线框稿 margin-left:30px, ::before content:'└'）
-                            // 无摘要时不显示（VLM 摘要由后端惰性回填，可能为空）
-                            Text {
-                                visible: summary.length > 0
-                                text: "└ " + summary
-                                color: Theme.muted
-                                font.pixelSize: 12
+                            // 有摘要时显示；VLM 识别失败时（failMeta 非空）改显失败提示 + 灰色感叹号。
+                            // failMeta 是 JSON {"kind","detail"}，解析后 hover 显示详情。
+                            // 灰色空心圆感叹号，与 muted 正文同色系，克制不抢眼（对齐 HTML .seg-summary.fail）。
+                            RowLayout {
+                                // summary 行始终显示：有摘要显示摘要，有失败显示失败，
+                                // 都没有（如冷却间隔内未采集）显示中性"未采集画面"提示。
                                 Layout.leftMargin: 30
-                                wrapMode: Text.WordWrap
                                 Layout.fillWidth: true
+                                spacing: 6
+
+                                // 失败标记：灰色空心圆 + 感叹号（仅 failMeta 非空时）。
+                                Item {
+                                    visible: failMeta.length > 0
+                                    width: 14; height: 14
+                                    Layout.alignment: Qt.AlignVCenter
+
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        color: "transparent"
+                                        border.width: 1.5
+                                        border.color: Theme.muted
+                                        radius: width / 2
+                                    }
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "!"
+                                        color: Theme.muted
+                                        font.pixelSize: 10
+                                        font.bold: true
+                                    }
+                                }
+
+                                Text {
+                                    // 三种状态：
+                                    //   失败（failMeta 非空）：显示失败提示 + 左侧感叹号
+                                    //   正常（summary 非空）：显示 └ + VLM 摘要
+                                    //   未采集（都空）：中性提示"未采集画面"（无感叹号，不是错误）
+                                    text: failMeta.length > 0
+                                          ? root.failKindFromMeta(failMeta)
+                                          : (summary.length > 0
+                                             ? ("└ " + summary)
+                                             : ("└ " + qsTr("未采集画面")))
+                                    color: Theme.muted
+                                    font.pixelSize: 12
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideRight
+                                }
+
+                                // 失败行 hover 显示错误详情气泡。
+                                MouseArea {
+                                    id: failHover
+                                    anchors.fill: parent
+                                    enabled: failMeta.length > 0
+                                    hoverEnabled: true
+                                    cursorShape: enabled && containsMouse ? Qt.PointingHandCursor : Qt.ArrowCursor
+
+                                    onContainsMouseChanged: {
+                                        if (containsMouse && failMeta.length > 0) {
+                                            var parsed = JSON.parse(failMeta)
+                                            failTip.title = root.failKindFromMeta(failMeta)
+                                            failTip.text = parsed.detail || ""
+                                            failTip.show()
+                                        } else {
+                                            failTip.hide()
+                                        }
+                                    }
+
+                                    // ToolTip 内置跟随鼠标定位（x/y 基于鼠标坐标），
+                                    // delay 0 立即显示，timeout -1 持续到鼠标移开 hide()。
+                                    ToolTip {
+                                        id: failTip
+                                        parent: failHover
+                                        delay: 0
+                                        timeout: -1
+                                        // 定位到鼠标右下方（避开遮挡文字）。
+                                        x: failHover.mouseX + 12
+                                        y: failHover.mouseY + 12
+                                        width: 300
+                                    }
+                                }
                             }
                             // 分割线（线框稿 .seg-row border-bottom）
                             Rectangle {

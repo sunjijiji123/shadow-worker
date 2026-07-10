@@ -49,6 +49,10 @@ message TimelineSegment {
   string window_title = 5;
   string state = 6;
   string summary = 7;
+  // fail_meta: 段内最近一条 vlm_summary_fail 事件的元数据 JSON {"kind","detail"}。
+  // 非空表示该段有 VLM 识别失败，前端在工作日志段显示灰色感叹号 + hover 详情。
+  // 空表示无失败（正常段）。关联判据与 summary 一致（半开区间 + app_path）。
+  string fail_meta = 8;
 }
 
 message TimelineEvent {
@@ -56,6 +60,9 @@ message TimelineEvent {
   string type = 2;
   string text = 3;
   string app_name = 4;
+  // meta: 附加元数据 JSON。当前仅 vlm_summary_fail 类型用，存 {"kind","detail"}，
+  // 前端据此显示灰色空心圆感叹号 + hover 弹错误详情。其它类型为空。
+  string meta = 5;
 }
 
 message TimelineSnapshot {

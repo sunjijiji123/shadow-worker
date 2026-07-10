@@ -111,6 +111,17 @@ func (s *CollectionServer) QueryTimeline(ctx context.Context, req *TimelineReque
 				seg.Summary = sum
 			}
 		}
+		// 失败事件关联：查该时间窗内是否有 vlm_summary_fail 事件。
+		// 有则取最近一条的 meta（JSON {"kind","detail"}）填入 fail_meta，
+		// 前端据此在工作日志段显示灰色感叹号 + hover 详情。判据与 summary 一致。
+		var failMeta string
+		if seg.EndTS.Sub(seg.StartTS) >= 10*time.Second {
+			if cnt, err := s.db.CountVLMFailures(seg.StartTS, seg.EndTS, seg.AppPath); err == nil && cnt > 0 {
+				if m, err := s.db.LatestVLMFailMeta(seg.StartTS, seg.EndTS, seg.AppPath); err == nil {
+					failMeta = m
+				}
+			}
+		}
 		snapshot.Segments = append(snapshot.Segments, &TimelineSegment{
 			StartTs:     seg.StartTS.Unix(),
 			EndTs:       seg.EndTS.Unix(),
@@ -119,16 +130,18 @@ func (s *CollectionServer) QueryTimeline(ctx context.Context, req *TimelineReque
 			WindowTitle: seg.WindowTitle,
 			State:       seg.State,
 			Summary:     seg.Summary,
+			FailMeta:    failMeta,
 		})
 	}
-	for _, ev := range events {
-		snapshot.Events = append(snapshot.Events, &TimelineEvent{
-			Ts:      ev.TS.Unix(),
-			Type:    string(ev.Type),
-			Text:    ev.Content,
-			AppName: ev.AppName,
-		})
-	}
+		for _, ev := range events {
+			snapshot.Events = append(snapshot.Events, &TimelineEvent{
+				Ts:      ev.TS.Unix(),
+				Type:    string(ev.Type),
+				Text:    ev.Content,
+				AppName: ev.AppName,
+				Meta:    ev.Meta,
+			})
+		}
 
 	// 计算时间轴可视窗口并填入 snapshot，供前端画动态整点刻度。
 	// isToday：今天 end 含 now（今天还在进行中）；历史天 end=末条事件。

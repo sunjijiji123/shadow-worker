@@ -14,6 +14,10 @@ const (
 	EventTypePromptInject  EventType = "prompt_inject"
 	EventTypeScreenshot    EventType = "screenshot"
 	EventTypeVLMSummary    EventType = "vlm_summary"
+	// EventTypeVLMSummaryFail: VLM 识别失败或截图采集失败。Content 存简短描述，
+	// Meta 存 JSON {"kind":"rate_limit|auth_error|parse_error|request_failed|capture_failed","detail":"..."}。
+	// 与 vlm_summary 对称，让前端在事件列表用灰色空心圆感叹号标记，hover 看详情。
+	EventTypeVLMSummaryFail EventType = "vlm_summary_fail"
 )
 
 // Event 对应 events 表。

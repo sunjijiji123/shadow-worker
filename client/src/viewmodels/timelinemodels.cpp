@@ -37,6 +37,7 @@ QVariant SegmentListModel::data(const QModelIndex &index, int role) const {
     case AppIconRole: return s.appIcon;
     case StartTimeRole: return s.startTime;
     case EndTimeRole: return s.endTime;
+    case FailMetaRole: return s.failMeta;
   }
   return {};
 }
@@ -49,7 +50,7 @@ QHash<int, QByteArray> SegmentListModel::roleNames() const {
       {CategoryRole, "category"},     {WindowTitleRole, "windowTitle"},
       {StateRole, "state"},           {SummaryRole, "summary"},
       {AppIconRole, "appIcon"},       {StartTimeRole, "startTime"},
-      {EndTimeRole, "endTime"},
+      {EndTimeRole, "endTime"},      {FailMetaRole, "failMeta"},
   };
 }
 
@@ -73,6 +74,7 @@ QVariantMap SegmentListModel::get(int i) const {
   m["appIcon"] = s.appIcon;
   m["startTime"] = s.startTime;
   m["endTime"] = s.endTime;
+  m["failMeta"] = s.failMeta;
   return m;
 }
 
@@ -111,6 +113,7 @@ void SegmentListModel::replaceAll(const QList<SegItem> &items) {
       if (oldI.summary != newI.summary) changed << SummaryRole;
       if (oldI.windowTitle != newI.windowTitle) changed << WindowTitleRole;
       if (oldI.category != newI.category) changed << CategoryRole;
+      if (oldI.failMeta != newI.failMeta) changed << FailMetaRole;
       if (!changed.isEmpty()) {
         m_items[i] = newI;
         QModelIndex idx = index(i);
@@ -172,6 +175,7 @@ QVariant EventListModel::data(const QModelIndex &index, int role) const {
     case TypeRole: return e.type;
     case TextRole: return e.text;
     case AppNameRole: return e.appName;
+    case MetaRole: return e.meta;
   }
   return {};
 }
@@ -187,6 +191,8 @@ QHash<int, QByteArray> EventListModel::roleNames() const {
       // 改名后 QML 用 required property string evText 即可正确绑定。
       {TextRole, "evText"},
       {AppNameRole, "appName"},
+      // meta 同理用 "evMeta" 避开 QML 通用名冲突（坑 #39）。
+      {MetaRole, "evMeta"},
   };
 }
 

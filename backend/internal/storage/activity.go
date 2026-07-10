@@ -110,6 +110,62 @@ func (db *DB) LatestVLMSummary(start, end time.Time, appPath string) (string, er
 	return content.String, nil
 }
 
+// LatestVLMFailMeta 查询时间段内最近一条 vlm_summary_fail 事件的 meta。
+// 关联判据与 LatestVLMSummary 完全一致（半开区间 + app_path 校验），保持
+// "成功摘要"与"失败详情"在同一处的关联口径，避免不对称串扰。
+// 返回的 meta 是 JSON {"kind","detail"}（见 collector/vlm.go recordVLMFailure）。
+// 无失败事件时返回空字符串。
+func (db *DB) LatestVLMFailMeta(start, end time.Time, appPath string) (string, error) {
+	var meta sql.NullString
+	var err error
+	if appPath == "" {
+		err = db.QueryRow(
+			`SELECT meta FROM events
+			 WHERE type = ? AND ts >= ? AND ts < ?
+			 ORDER BY ts DESC LIMIT 1`,
+			string(EventTypeVLMSummaryFail), toUnix(start), toUnix(end),
+		).Scan(&meta)
+	} else {
+		err = db.QueryRow(
+			`SELECT meta FROM events
+			 WHERE type = ? AND ts >= ? AND ts < ? AND (app_path = ? OR app_path = '')
+			 ORDER BY ts DESC LIMIT 1`,
+			string(EventTypeVLMSummaryFail), toUnix(start), toUnix(end), appPath,
+		).Scan(&meta)
+	}
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("查询 VLM 失败事件失败: %w", err)
+	}
+	return meta.String, nil
+}
+
+// CountVLMFailures 统计时间段内 vlm_summary_fail 事件的数量。
+// 用于判断该段是否有失败（>0 则段标感叹号）。
+func (db *DB) CountVLMFailures(start, end time.Time, appPath string) (int, error) {
+	var count int
+	var err error
+	if appPath == "" {
+		err = db.QueryRow(
+			`SELECT COUNT(*) FROM events
+			 WHERE type = ? AND ts >= ? AND ts < ?`,
+			string(EventTypeVLMSummaryFail), toUnix(start), toUnix(end),
+		).Scan(&count)
+	} else {
+		err = db.QueryRow(
+			`SELECT COUNT(*) FROM events
+			 WHERE type = ? AND ts >= ? AND ts < ? AND (app_path = ? OR app_path = '')`,
+			string(EventTypeVLMSummaryFail), toUnix(start), toUnix(end), appPath,
+		).Scan(&count)
+	}
+	if err != nil {
+		return 0, fmt.Errorf("统计 VLM 失败事件失败: %w", err)
+	}
+	return count, nil
+}
+
 // GetActivitySegment 按 ID 查询活动段。
 func (db *DB) GetActivitySegment(id int64) (*ActivitySegment, error) {
 	row := db.QueryRow(

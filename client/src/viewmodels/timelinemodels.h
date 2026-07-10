@@ -33,6 +33,9 @@ struct SegItem {
   QString appIcon;
   QString startTime;  // "HH:mm"
   QString endTime;    // "HH:mm"
+  // failMeta: 段内最近一条 VLM 识别失败的元数据 JSON {"kind","detail"}。
+  // 非空 → 工作日志段显示灰色感叹号 + hover 详情。空 → 正常段。
+  QString failMeta;
 };
 
 // EvItem 是一条时间线事件（语音/截图/VLM 摘要等）。
@@ -42,6 +45,9 @@ struct EvItem {
   QString type;
   QString text;
   QString appName;
+  // meta: 附加元数据 JSON。仅 vlm_summary_fail 类型用，存 {"kind","detail"}，
+  // 前端 delegate 据此显示灰色空心圆感叹号 + hover 弹错误详情。其它类型为空。
+  QString meta;
 };
 
 // SegmentListModel 是 worklog 列表与 timeline track 的全量数据源。
@@ -71,6 +77,7 @@ public:
     AppIconRole,
     StartTimeRole,
     EndTimeRole,
+    FailMetaRole,
   };
   Q_ENUM(Role)
 
@@ -119,6 +126,7 @@ public:
     TypeRole,
     TextRole,
     AppNameRole,
+    MetaRole,
   };
   Q_ENUM(Role)
 

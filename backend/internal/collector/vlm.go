@@ -2,10 +2,12 @@ package collector
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -155,6 +157,9 @@ func (v *VLMCapturer) isTypingActive() bool {
 func (v *VLMCapturer) Trigger(ctx context.Context) (string, error) {
 	app, png, shotPath, err := v.capture()
 	if err != nil {
+		// 截图失败（PrintWindow 返回空/窗口关闭/UWP 全屏）也落一条事件，
+		// 让时间轴可见（与 analyze 失败对称，分类 capture_failed）。
+		v.recordVLMFailure(app, time.Now().UTC(), err)
 		return "", err
 	}
 	// capture 返回 png==nil 表示"静默跳过"（如前台不在白名单），不算错误。
@@ -213,6 +218,9 @@ func (v *VLMCapturer) capture() (app App, png []byte, shotPath string, err error
 func (v *VLMCapturer) analyze(ctx context.Context, app App, png []byte, shotPath string, ts time.Time) (string, error) {
 	summary, err := v.engine.Describe(ctx, png)
 	if err != nil {
+		// 失败也落一条事件，让时间轴事件列表能标记（灰色空心圆感叹号 + hover 看详情）。
+		// 分类错误（限流/鉴权/解析/网络）写入 Content（简短）和 Meta（JSON 含 detail）。
+		v.recordVLMFailure(app, ts, err)
 		return "", fmt.Errorf("VLM 识别失败: %w", err)
 	}
 
@@ -413,6 +421,61 @@ func (v *VLMCapturer) runOnce() {
 
 	if _, err := v.Trigger(ctx); err != nil {
 		v.logger.Warn("VLM 定时任务失败", "err", err)
+	}
+}
+
+// classifyVLMError 把底层 VLM 错误归类为前端可识别的 kind。
+// kind 决定时间轴事件列表里 hover 气泡的标题（限流/鉴权失败/解析失败/请求失败/截图失败）。
+// 解析依据是 cloud.go/ollama.go 产生的 error 字符串（"VLM API 状态 %d: ..."）。
+func classifyVLMError(err error) (kind, message string) {
+	if err == nil {
+		return "request_failed", "未知错误"
+	}
+	msg := err.Error()
+	lower := strings.ToLower(msg)
+
+	// 限流：429。最常见的"频繁失败"根因，重试也救不回时落事件让用户可见。
+	if strings.Contains(msg, "状态 429") || strings.Contains(lower, "rate limit") || strings.Contains(lower, "too many requests") {
+		return "rate_limit", "VLM 触发限流，稍后重试"
+	}
+	// 鉴权失败：401/403。通常是 api_key 配错或过期，不会自愈，需用户检查配置。
+	if strings.Contains(msg, "状态 401") || strings.Contains(msg, "状态 403") || strings.Contains(lower, "unauthorized") || strings.Contains(lower, "forbidden") {
+		return "auth_error", "VLM 鉴权失败，请检查 API Key"
+	}
+	// 解析失败：上游返回了响应但结构不符（空 choices/空文本/JSON 解析失败）。
+	// 常见诱因：上游返回非 OpenAI 标准结构、max_tokens 截断、代理返回 HTML。
+	if strings.Contains(msg, "空 choices") || strings.Contains(msg, "空文本") || strings.Contains(msg, "解析 VLM 响应失败") || strings.Contains(msg, "解析 Ollama 响应失败") {
+		return "parse_error", "VLM 响应解析失败"
+	}
+	// 截图失败：PrintWindow 返回空（窗口关闭/UWP 全屏）。
+	if strings.Contains(msg, "截图失败") {
+		return "capture_failed", "截图失败，未采集到画面"
+	}
+	// 其它 HTTP 错误 / 网络错误 / 超时。
+	return "request_failed", "VLM 请求失败"
+}
+
+// recordVLMFailure 写一条 vlm_summary_fail 事件，记录识别失败。
+// Content 存简短描述（事件列表显示），Meta 存 JSON {"kind","detail"}（hover 详情）。
+// detail 含解码后的真实错误（见 vlm/bodydecode.go），让用户能判断具体原因。
+func (v *VLMCapturer) recordVLMFailure(app App, ts time.Time, err error) {
+	if v.db == nil {
+		return
+	}
+	kind, message := classifyVLMError(err)
+	metaJSON, _ := json.Marshal(map[string]string{
+		"kind":   kind,
+		"detail": err.Error(),
+	})
+	if _, werr := v.db.InsertEvent(storage.Event{
+		TS:      ts,
+		Type:    storage.EventTypeVLMSummaryFail,
+		AppPath: app.Path,
+		AppName: app.Name,
+		Content: message,
+		Meta:    string(metaJSON),
+	}); werr != nil {
+		v.logger.Warn("写入 VLM 失败事件失败", "err", werr)
 	}
 }
 

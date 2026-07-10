@@ -138,6 +138,7 @@ void TimelineViewModel::refresh() {
           item.windowTitle = seg.windowTitle();
           item.state = seg.state();
           item.summary = seg.summary();
+          item.failMeta = seg.failMeta();
           item.appIcon = seg.appName();
           item.startTime =
               QDateTime::fromSecsSinceEpoch(item.startTs).toString("HH:mm");
@@ -166,6 +167,7 @@ void TimelineViewModel::refresh() {
           item.type = ev.type();
           item.text = ev.text();
           item.appName = ev.appName();
+          item.meta = ev.meta();
           evs.append(item);
         }
         std::sort(evs.begin(), evs.end(),
