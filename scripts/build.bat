@@ -126,7 +126,10 @@ if "!TODAY!"=="" (
 )
 set "NEW_SEQ=01"
 if "!OLD_DATE!"=="!TODAY!" (
-    set /a "NEW_SEQ=!OLD_SEQ!+1"
+    REM Strip leading zero to avoid octal: set /a treats "08"/"09" as octal
+    REM (8/9 invalid) -> parse error -> 0 -> +1 -> 01 (symptom: 08 resets to 001).
+    REM "1!OLD_SEQ!-100" turns "08"->108-100=8, decimal-safe for 01..99.
+    set /a "NEW_SEQ=1!OLD_SEQ!-100+1"
     if !NEW_SEQ! LSS 10 set "NEW_SEQ=0!NEW_SEQ!"
 )
 set "NEW_VER=!TODAY!.!NEW_SEQ!"
