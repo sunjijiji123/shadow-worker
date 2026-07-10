@@ -214,6 +214,33 @@
     .badge-ok { background: rgba(16,185,129,0.15); color: var(--accent); }
     .shortcut-hint { font-size: 11px; color: var(--muted); margin-top: 8px; }
 
+    /* VLM 识别失败的段标记：seg-summary 前加灰色感叹号，hover 显示错误详情。
+       灰色空心圆+感叹号，与 muted 正文同色系，克制不抢眼（不阻碍正常段阅读）。 */
+    .seg-summary.fail {
+      color: var(--muted);
+      position: relative;
+    }
+    .seg-summary.fail::before {
+      content: '!';
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 14px; height: 14px; border-radius: 50%;
+      border: 1.5px solid var(--muted); background: transparent;
+      font-size: 10px; font-weight: 700; color: var(--muted);
+      margin-right: 6px; vertical-align: -2px;
+      cursor: help;
+    }
+    /* hover 详情气泡（定位在 summary 行下方） */
+    .seg-summary.fail .seg-fail-tip {
+      display: none; position: absolute; left: 20px; top: 100%; z-index: 50;
+      background: var(--bg3); border: 1px solid var(--rule); border-radius: 6px;
+      padding: 8px 10px; font-size: 11px; color: var(--muted);
+      max-width: 320px; white-space: normal; line-height: 1.5;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    .seg-summary.fail .seg-fail-tip b { color: var(--ink); font-weight: 600; }
+    .seg-summary.fail:hover .seg-fail-tip { display: block; }
+
+
     .add-provider-form { display: none; background: var(--bg); border: 1px solid var(--rule); border-radius: 8px; padding: 12px; margin-top: 12px; }
     .hidden-field { display: none !important; }
 
@@ -937,8 +964,8 @@
           <!-- 列表 - 日视图 -->
           <div class="card list-view-section active" data-list-view="day">
             <div class="list-tabs" id="timeline-list-tabs">
-              <div class="list-tab active" data-list-tab="worklog">工作记录</div>
-              <div class="list-tab" data-list-tab="events">事件列表</div>
+              <div class="list-tab active" data-list-tab="worklog">工作日志</div>
+              <div class="list-tab" data-list-tab="events">事件</div>
             </div>
 
             <!-- 工作记录 -->
@@ -1044,7 +1071,7 @@
               </div>
             </div>
 
-            <!-- 事件列表 -->
+            <!-- 事件 -->
             <div class="list-section" data-list-tab="events">
               <div class="list-filter">
                 <span class="filter-chip active" data-ev-filter="all">全部</span>
@@ -1654,8 +1681,21 @@
             </div>
           </div>
           <div class="card">
+            <div class="card-title">日志目录</div>
+            <div class="card-desc">运行日志按天滚动，保留 7 天。排查 VLM/ASR 等问题时，直接查看当天日志文件。</div>
+            <div style="display:flex;gap:12px;align-items:center;margin-top:12px;">
+              <input class="input" style="flex:1;" value="%APPDATA%\shadow-worker\logs" readonly>
+              <span class="btn btn-ghost">打开目录</span>
+              <span class="btn btn-ghost">打开当天日志</span>
+            </div>
+          </div>
+          <div class="card">
             <div class="card-title">配置文件路径</div>
-            <input class="input" style="margin-top:12px;" value="%APPDATA%\shadow-worker\config.yaml" readonly>
+            <div class="card-desc">所有设置最终写入此 YAML 文件，可直接编辑。</div>
+            <div style="display:flex;gap:12px;align-items:center;margin-top:12px;">
+              <input class="input" style="flex:1;" value="%APPDATA%\shadow-worker\config.yaml" readonly>
+              <span class="btn btn-ghost">打开目录</span>
+            </div>
           </div>
         </div>
       </div>
@@ -2232,13 +2272,13 @@
           { cls: 'idle', left: 96, width: 4 },
         ],
         worklog: [
-          { time: '09:00 - 09:42', app: 'Cursor', icon: 'Cr', iconBg: '#3B82F6', cat: 'coding', dur: '42 min', sum: 'VLM: 正在重构 ASR 模块，修改 cloud.go 适配 Whisper 接口' },
+          { time: '09:00 - 09:42', app: 'Cursor', icon: 'Cr', iconBg: '#3B82F6', cat: 'coding', dur: '42 min', sum: '未识别画面内容', fail: true, failTitle: 'VLM 识别失败 · 触发限流', failDetail: 'VLM API 状态 429: Rate limit exceeded. 请求过于频繁，已自动重试 3 次仍失败。' },
           { time: '09:42 - 10:15', app: 'Cursor', icon: 'Cr', iconBg: '#3B82F6', cat: 'coding', dur: '33 min', sum: 'VLM: 编写 shadow-worker 配置模块 config.go' },
-          { time: '10:15 - 10:48', app: 'Chrome', icon: 'Ch', iconBg: '#F59E0B', cat: 'browser', dur: '33 min', sum: 'VLM: 搜索 SQLite 优化方案和索引策略' },
+          { time: '10:15 - 10:48', app: 'Chrome', icon: 'Ch', iconBg: '#F59E0B', cat: 'browser', dur: '33 min', sum: '未采集到画面', fail: true, failTitle: '截图失败 · 窗口句柄无效', failDetail: 'PrintWindow 返回空内容（目标窗口可能已关闭或为 UWP 全屏应用）。本次未发起 VLM 识别。' },
           { time: '10:48 - 11:03', app: 'WeChat', icon: 'We', iconBg: '#10B981', cat: 'chat', dur: '15 min', sum: 'VLM: 回复工作消息，确认下周排期' },
-          { time: '13:30 - 14:10', app: 'Word', icon: 'Wd', iconBg: '#8B5CF6', cat: 'office', dur: '32 min', sum: 'VLM: 编写需求文档和会议纪要' },
+          { time: '13:30 - 14:10', app: 'Word', icon: 'Wd', iconBg: '#8B5CF6', cat: 'office', dur: '32 min', sum: '未识别画面内容', fail: true, failTitle: 'VLM 识别失败 · 响应解析失败', failDetail: 'VLM 返回空文本。上游可能返回了非标准结构或内容被 max_tokens 截断。' },
           { time: '14:10 - 15:30', app: 'Cursor', icon: 'Cr', iconBg: '#3B82F6', cat: 'coding', dur: '80 min', sum: 'VLM: 实现 activity_segments 存储和查询逻辑' },
-          { time: '15:30 - 15:50', app: 'WeChat', icon: 'We', iconBg: '#10B981', cat: 'chat', dur: '20 min', sum: 'VLM: 回复工作消息，确认下周排期' },
+          { time: '15:30 - 15:50', app: 'WeChat', icon: 'We', iconBg: '#10B981', cat: 'chat', dur: '20 min', sum: '未采集画面（冷却间隔内未触发）' },
           { time: '15:50 - 17:00', app: 'Cursor', icon: 'Cr', iconBg: '#3B82F6', cat: 'coding', dur: '70 min', sum: 'VLM: 编写 gRPC 接口和 protobuf 定义' },
         ],
         events: [
@@ -2297,7 +2337,7 @@
               <span class="seg-cat-badge" style="background:rgba(${hexToRgb(w.iconBg)},0.15);color:${w.iconBg}">${w.cat}</span>
               <span class="seg-duration">${w.dur}</span>
             </div>
-            <div class="seg-summary">${w.sum}</div>
+            ${w.fail ? `<div class="seg-summary fail">${w.sum}<div class="seg-fail-tip"><b>${w.failTitle||'识别失败'}</b><br>${w.failDetail||''}</div></div>` : `<div class="seg-summary">${w.sum}</div>`}
           </div>
         `).join('');
       }
