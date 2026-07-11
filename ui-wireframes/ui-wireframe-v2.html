@@ -620,6 +620,40 @@
     .shaction-vlm { background: #3b82f6; color: #fff; }
     .shot-anno-demo { position: absolute; pointer-events: none; }
 
+    /* 颜色/笔粗下方弹窗 */
+    .shpop-anchor { position: relative; }
+    .shpop {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: #2d2d33;
+      border: 1px solid #3a3a42;
+      border-radius: 8px;
+      padding: 8px 10px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      display: none;
+      z-index: 100;
+      gap: 6px;
+      align-items: center;
+    }
+    .shpop.open { display: flex; }
+    .shpop::before {
+      content: ''; position: absolute; top: -5px; left: 50%; transform: translateX(-50%) rotate(45deg);
+      width: 8px; height: 8px; background: #2d2d33; border-left: 1px solid #3a3a42; border-top: 1px solid #3a3a42;
+    }
+    /* 弹窗内颜色组与笔粗组之间的竖分隔线 */
+    .shpop-vsep { width: 1px; height: 20px; background: #3a3a42; margin: 0 2px; flex-shrink: 0; }
+    /* 文字字号选项 */
+    .shtext-size {
+      padding: 2px 8px; border-radius: 4px; cursor: pointer; color: #c0c0c8;
+      font-size: 12px; user-select: none; transition: .12s; line-height: 1.4;
+    }
+    .shtext-size[data-size="small"] { font-size: 10px; }
+    .shtext-size[data-size="large"] { font-size: 15px; }
+    .shtext-size:hover { background: rgba(255,255,255,0.08); color: #fff; }
+    .shtext-size.active { background: rgba(59,130,246,0.25); color: #60a5fa; font-weight: 700; }
+
     /* ===== 截图分析结果窗口 ===== */
     .shot-result { width: 420px; background: var(--bg3); border: 1px solid var(--rule); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
     .shot-result-header { display: flex; justify-content: space-between; align-items: center; }
@@ -645,6 +679,74 @@
     .shot-result-btn-copy.disabled { opacity: 0.4; cursor: default; }
     .shot-result-btn-retake { background: var(--rule); color: var(--ink); }
     .shot-result-btn-retake:hover { background: var(--bg2); }
+
+    /* ===== 置顶窗口 PinWindow ===== */
+    .pinwin {
+      background: var(--bg3);
+      border: 1px solid var(--rule);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+      display: flex;
+      flex-direction: column;
+      width: fit-content;
+    }
+    .pinwin-bar {
+      height: 32px;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--rule);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 8px;
+      cursor: move;
+      user-select: none;
+    }
+    .pinwin-pin-ico {
+      width: 16px; height: 16px; color: #3b82f6; flex-shrink: 0;
+    }
+    .pinwin-pin-ico svg { width: 16px; height: 16px; fill: currentColor; }
+    .pinwin-title { font-size: 12px; color: var(--muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pinwin-scale-tag { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; background: var(--bg); border-radius: 4px; padding: 2px 6px; }
+    .pinwin-close { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border-radius: 5px; color: var(--muted); cursor: pointer; transition: .12s; }
+    .pinwin-close:hover { background: rgba(239,68,68,0.15); color: var(--danger); }
+    .pinwin-close svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+    .pinwin-canvas {
+      position: relative;
+      overflow: hidden;
+      background: #111;
+      min-width: 200px;
+      min-height: 100px;
+    }
+    .pinwin-canvas.fit {
+      display: flex; align-items: center; justify-content: center;
+    }
+    .pinwin-img {
+      display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #1e2a3a 0%, #16202e 100%);
+      transition: transform .15s ease-out;
+      transform-origin: center center;
+    }
+    .pinwin-img span { font-size: 13px; color: rgba(255,255,255,0.25); }
+    /* 模拟桌面背景（展示置顶效果） */
+    .pinwin-desktop-sim {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      border-radius: 8px;
+      padding: 40px;
+      position: relative;
+      min-height: 320px;
+    }
+    .pinwin-desktop-sim .fake-code-win {
+      position: absolute;
+      top: 24px; left: 24px;
+      width: 240px; height: 140px;
+      background: #1e1e24;
+      border: 1px solid #2a2a30;
+      border-radius: 6px;
+      font-size: 10px; color: #4a4a52;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .pinwin-desktop-sim .fake-code-win::before { content: 'VS Code — 编辑中'; }
 
     @media (max-width: 768px) {
       .app-body { flex-direction: column; }
@@ -1877,28 +1979,96 @@
           </div>
         </div>
         <div class="shot-toolbar" style="margin:8px 0 0;">
-          <div class="shcolors">
-            <div class="shcolor active" style="background:#ef4444"></div>
-            <div class="shcolor" style="background:#f59e0b"></div>
-            <div class="shcolor" style="background:#10b981"></div>
-            <div class="shcolor" style="background:#3b82f6"></div>
-            <div class="shcolor" style="background:#ffffff"></div>
+          <!-- 矩形：选中时下方弹出颜色+笔粗 -->
+          <div class="shtool shpop-anchor" title="矩形框" data-tool="rect">
+            <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="1.5"/></svg>
+            <div class="shpop shpop-colorpen">
+              <div class="shcolor active" style="background:#ef4444"></div>
+              <div class="shcolor" style="background:#f59e0b"></div>
+              <div class="shcolor" style="background:#10b981"></div>
+              <div class="shcolor" style="background:#3b82f6"></div>
+              <div class="shcolor" style="background:#ffffff"></div>
+              <div class="shpop-vsep"></div>
+              <div class="shpen"><div class="shpen-dot" style="width:4px;height:4px;"></div></div>
+              <div class="shpen active"><div class="shpen-dot" style="width:6px;height:6px;"></div></div>
+              <div class="shpen"><div class="shpen-dot" style="width:8px;height:8px;"></div></div>
+              <div class="shpen"><div class="shpen-dot" style="width:10px;height:10px;"></div></div>
+            </div>
+          </div>
+          <!-- 椭圆：选中时下方弹出颜色+笔粗 -->
+          <div class="shtool shpop-anchor" title="椭圆" data-tool="ellipse">
+            <svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8" ry="6.5"/></svg>
+            <div class="shpop shpop-colorpen">
+              <div class="shcolor active" style="background:#ef4444"></div>
+              <div class="shcolor" style="background:#f59e0b"></div>
+              <div class="shcolor" style="background:#10b981"></div>
+              <div class="shcolor" style="background:#3b82f6"></div>
+              <div class="shcolor" style="background:#ffffff"></div>
+              <div class="shpop-vsep"></div>
+              <div class="shpen"><div class="shpen-dot" style="width:4px;height:4px;"></div></div>
+              <div class="shpen active"><div class="shpen-dot" style="width:6px;height:6px;"></div></div>
+              <div class="shpen"><div class="shpen-dot" style="width:8px;height:8px;"></div></div>
+              <div class="shpen"><div class="shpen-dot" style="width:10px;height:10px;"></div></div>
+            </div>
+          </div>
+          <!-- 箭头：选中时下方弹出颜色+笔粗 -->
+          <div class="shtool active shpop-anchor" title="箭头" data-tool="arrow">
+            <svg viewBox="0 0 24 24"><line x1="5" y1="19" x2="17" y2="7"/><polyline points="11,7 17,7 17,13"/></svg>
+            <div class="shpop shpop-colorpen open">
+              <div class="shcolor active" style="background:#ef4444"></div>
+              <div class="shcolor" style="background:#f59e0b"></div>
+              <div class="shcolor" style="background:#10b981"></div>
+              <div class="shcolor" style="background:#3b82f6"></div>
+              <div class="shcolor" style="background:#ffffff"></div>
+              <div class="shpop-vsep"></div>
+              <div class="shpen"><div class="shpen-dot" style="width:4px;height:4px;"></div></div>
+              <div class="shpen active"><div class="shpen-dot" style="width:6px;height:6px;"></div></div>
+              <div class="shpen"><div class="shpen-dot" style="width:8px;height:8px;"></div></div>
+              <div class="shpen"><div class="shpen-dot" style="width:10px;height:10px;"></div></div>
+            </div>
+          </div>
+          <!-- 画笔：选中时下方弹出颜色+笔粗 -->
+          <div class="shtool shpop-anchor" title="画笔" data-tool="pen">
+            <svg viewBox="0 0 24 24"><path d="M4 20 L14 10 L18 6 a2 2 0 0 1 2 0 a2 2 0 0 1 0 2 L16 10 L6 20 Z"/><line x1="4" y1="20" x2="6" y2="18"/></svg>
+            <div class="shpop shpop-colorpen">
+              <div class="shcolor active" style="background:#ef4444"></div>
+              <div class="shcolor" style="background:#f59e0b"></div>
+              <div class="shcolor" style="background:#10b981"></div>
+              <div class="shcolor" style="background:#3b82f6"></div>
+              <div class="shcolor" style="background:#ffffff"></div>
+              <div class="shpop-vsep"></div>
+              <div class="shpen"><div class="shpen-dot" style="width:4px;height:4px;"></div></div>
+              <div class="shpen active"><div class="shpen-dot" style="width:6px;height:6px;"></div></div>
+              <div class="shpen"><div class="shpen-dot" style="width:8px;height:8px;"></div></div>
+              <div class="shpen"><div class="shpen-dot" style="width:10px;height:10px;"></div></div>
+            </div>
+          </div>
+          <!-- 马赛克：无弹窗 -->
+          <div class="shtool" title="马赛克" data-tool="mosaic"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="5" height="5"/><rect x="10" y="4" width="5" height="5" fill="currentColor" opacity="0.4"/><rect x="16" y="4" width="4" height="5"/><rect x="4" y="10" width="5" height="5" fill="currentColor" opacity="0.4"/><rect x="10" y="10" width="5" height="5"/><rect x="16" y="10" width="4" height="5" fill="currentColor" opacity="0.4"/><rect x="4" y="16" width="5" height="4" fill="currentColor" opacity="0.4"/><rect x="10" y="16" width="5" height="4"/><rect x="16" y="16" width="4" height="4" fill="currentColor" opacity="0.4"/></svg></div>
+          <!-- 文字：选中时下方弹出颜色+字号（小/中/大） -->
+          <div class="shtool shpop-anchor" title="文字" data-tool="text">
+            <svg viewBox="0 0 24 24"><path d="M5 5 H19 M12 5 V19 M9 19 H15"/></svg>
+            <div class="shpop shpop-colortext">
+              <div class="shcolor active" style="background:#ef4444"></div>
+              <div class="shcolor" style="background:#f59e0b"></div>
+              <div class="shcolor" style="background:#10b981"></div>
+              <div class="shcolor" style="background:#3b82f6"></div>
+              <div class="shcolor" style="background:#ffffff"></div>
+              <div class="shpop-vsep"></div>
+              <span class="shtext-size" data-size="small">小</span>
+              <span class="shtext-size active" data-size="medium">中</span>
+              <span class="shtext-size" data-size="large">大</span>
+            </div>
           </div>
           <div class="shtool-sep"></div>
-          <div class="shtool" title="矩形框"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="1.5"/></svg></div>
-          <div class="shtool" title="椭圆"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8" ry="6.5"/></svg></div>
-          <div class="shtool active" title="箭头"><svg viewBox="0 0 24 24"><line x1="5" y1="19" x2="17" y2="7"/><polyline points="11,7 17,7 17,13"/></svg></div>
-          <div class="shtool" title="画笔"><svg viewBox="0 0 24 24"><path d="M4 20 L14 10 L18 6 a2 2 0 0 1 2 0 a2 2 0 0 1 0 2 L16 10 L6 20 Z"/><line x1="4" y1="20" x2="6" y2="18"/></svg></div>
-          <div class="shtool" title="马赛克"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="5" height="5"/><rect x="10" y="4" width="5" height="5" fill="currentColor" opacity="0.4"/><rect x="16" y="4" width="4" height="5"/><rect x="4" y="10" width="5" height="5" fill="currentColor" opacity="0.4"/><rect x="10" y="10" width="5" height="5"/><rect x="16" y="10" width="4" height="5" fill="currentColor" opacity="0.4"/><rect x="4" y="16" width="5" height="4" fill="currentColor" opacity="0.4"/><rect x="10" y="16" width="5" height="4"/><rect x="16" y="16" width="4" height="4" fill="currentColor" opacity="0.4"/></svg></div>
-          <div class="shtool" title="文字"><svg viewBox="0 0 24 24"><path d="M5 5 H19 M12 5 V19 M9 19 H15"/></svg></div>
-          <div class="shtool-sep"></div>
           <div class="shtool" title="撤销 (Ctrl+Z)"><svg viewBox="0 0 24 24"><path d="M8 8 H16 a4 4 0 0 1 0 8 H10"/><polyline points="6,8 8,8 8,6"/><line x1="6" y1="8" x2="8" y2="10"/></svg></div>
+          <div class="shtool" title="置顶显示"><svg viewBox="0 0 24 24"><path d="M9 4 h6 v7 l3 3 v1 h-12 v-1 l3 -3 z"/><line x1="12" y1="15" x2="12" y2="20"/></svg></div>
           <div class="shtool-sep"></div>
           <div class="shaction shaction-vlm"><svg viewBox="0 0 24 24"><polygon points="12,3 14,9 20,9 15,13 17,19 12,15 7,19 9,13 4,9 10,9"/></svg>识别</div>
           <div class="shaction shaction-cancel"><svg viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>取消</div>
           <div class="shaction shaction-confirm"><svg viewBox="0 0 24 24"><polyline points="5,12 10,17 19,7"/></svg>完成</div>
         </div>
-        <div style="font-size:11px;color:var(--muted);margin-top:8px;">布局：颜色(5) | 矩形·椭圆·箭头·画笔·马赛克·文字 | 撤销 | 识别·取消·完成</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px;">选中矩形/椭圆/箭头/画笔 → 下方弹出颜色+笔粗；选中文字 → 下方弹出颜色+字号（小/中/大）；马赛克无弹窗。箭头当前为选中态，弹窗已展开。</div>
       </div>
 
       <!-- 工具图标细节 -->
@@ -1912,31 +2082,63 @@
           <div style="display:flex;flex-direction:column;align-items:center;gap:6px;"><div class="shtool" style="background:rgba(255,255,255,0.05);"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="5" height="5"/><rect x="10" y="4" width="5" height="5" fill="currentColor" opacity="0.4"/><rect x="16" y="4" width="4" height="5"/><rect x="4" y="10" width="5" height="5" fill="currentColor" opacity="0.4"/><rect x="10" y="10" width="5" height="5"/><rect x="16" y="10" width="4" height="5" fill="currentColor" opacity="0.4"/><rect x="4" y="16" width="5" height="4" fill="currentColor" opacity="0.4"/><rect x="10" y="16" width="5" height="4"/><rect x="16" y="16" width="4" height="4" fill="currentColor" opacity="0.4"/></svg></div><span style="font-size:10px;color:var(--muted);">马赛克</span></div>
           <div style="display:flex;flex-direction:column;align-items:center;gap:6px;"><div class="shtool" style="background:rgba(255,255,255,0.05);"><svg viewBox="0 0 24 24"><path d="M5 5 H19 M12 5 V19 M9 19 H15"/></svg></div><span style="font-size:10px;color:var(--muted);">文字</span></div>
           <div style="display:flex;flex-direction:column;align-items:center;gap:6px;"><div class="shtool" style="background:rgba(255,255,255,0.05);"><svg viewBox="0 0 24 24"><path d="M8 8 H16 a4 4 0 0 1 0 8 H10"/><polyline points="6,8 8,8 8,6"/><line x1="6" y1="8" x2="8" y2="10"/></svg></div><span style="font-size:10px;color:var(--muted);">撤销</span></div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px;"><div class="shtool" style="background:rgba(255,255,255,0.05);"><svg viewBox="0 0 24 24"><path d="M9 4 h6 v7 l3 3 v1 h-12 v-1 l3 -3 z"/><line x1="12" y1="15" x2="12" y2="20"/></svg></div><span style="font-size:10px;color:var(--muted);">置顶</span></div>
         </div>
       </div>
 
-      <!-- 颜色与笔粗 -->
+      <!-- 下拉弹窗展开状态预览 -->
       <div>
-        <div style="font-size:13px;color:var(--muted);margin-bottom:10px;">颜色与笔粗选择器</div>
-        <div style="display:flex;gap:24px;align-items:flex-start;background:#1a1a1e;border:1px solid var(--rule);border-radius:8px;padding:16px;">
-          <div style="display:flex;flex-direction:column;gap:6px;">
-            <span style="font-size:10px;color:var(--muted);">颜色（选中态白圈）</span>
-            <div class="shcolors" style="background:#2d2d33;padding:6px 8px;border-radius:6px;border:1px solid #3a3a42;">
-              <div class="shcolor active" style="background:#ef4444"></div>
-              <div class="shcolor" style="background:#f59e0b"></div>
-              <div class="shcolor" style="background:#10b981"></div>
-              <div class="shcolor" style="background:#3b82f6"></div>
-              <div class="shcolor" style="background:#ffffff"></div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:10px;">弹窗展开状态预览（选中标注工具时，工具按钮下方弹出）</div>
+        <div style="display:flex;gap:48px;align-items:flex-start;background:#1a1a1e;border:1px solid var(--rule);border-radius:8px;padding:40px 20px 20px;">
+          <!-- 形状/画笔工具的弹窗：颜色 + 笔粗 -->
+          <div style="display:flex;flex-direction:column;align-items:center;gap:0;">
+            <span style="font-size:10px;color:var(--muted);margin-bottom:10px;">矩形/椭圆/箭头/画笔 → 颜色 + 笔粗</span>
+            <div style="position:relative;">
+              <div class="shtool active" style="pointer-events:none;">
+                <svg viewBox="0 0 24 24"><line x1="5" y1="19" x2="17" y2="7"/><polyline points="11,7 17,7 17,13"/></svg>
+              </div>
+              <div class="shpop open" style="position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);">
+                <div class="shcolor active" style="background:#ef4444"></div>
+                <div class="shcolor" style="background:#f59e0b"></div>
+                <div class="shcolor" style="background:#10b981"></div>
+                <div class="shcolor" style="background:#3b82f6"></div>
+                <div class="shcolor" style="background:#ffffff"></div>
+                <div class="shpop-vsep"></div>
+                <div class="shpen"><div class="shpen-dot" style="width:4px;height:4px;"></div></div>
+                <div class="shpen active"><div class="shpen-dot" style="width:6px;height:6px;"></div></div>
+                <div class="shpen"><div class="shpen-dot" style="width:8px;height:8px;"></div></div>
+                <div class="shpen"><div class="shpen-dot" style="width:10px;height:10px;"></div></div>
+              </div>
             </div>
           </div>
-          <div style="display:flex;flex-direction:column;gap:6px;">
-            <span style="font-size:10px;color:var(--muted);">笔粗（选中态蓝底）</span>
-            <div class="shpens" style="background:#2d2d33;padding:4px 6px;border-radius:6px;border:1px solid #3a3a42;">
-              <div class="shpen"><div class="shpen-dot" style="width:4px;height:4px;"></div></div>
-              <div class="shpen active"><div class="shpen-dot" style="width:6px;height:6px;"></div></div>
-              <div class="shpen"><div class="shpen-dot" style="width:8px;height:8px;"></div></div>
-              <div class="shpen"><div class="shpen-dot" style="width:10px;height:10px;"></div></div>
+          <!-- 文字工具的弹窗：颜色 + 字号 -->
+          <div style="display:flex;flex-direction:column;align-items:center;gap:0;">
+            <span style="font-size:10px;color:var(--muted);margin-bottom:10px;">文字 → 颜色 + 字号（小/中/大）</span>
+            <div style="position:relative;">
+              <div class="shtool active" style="pointer-events:none;">
+                <svg viewBox="0 0 24 24"><path d="M5 5 H19 M12 5 V19 M9 19 H15"/></svg>
+              </div>
+              <div class="shpop open" style="position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);">
+                <div class="shcolor active" style="background:#ef4444"></div>
+                <div class="shcolor" style="background:#f59e0b"></div>
+                <div class="shcolor" style="background:#10b981"></div>
+                <div class="shcolor" style="background:#3b82f6"></div>
+                <div class="shcolor" style="background:#ffffff"></div>
+                <div class="shpop-vsep"></div>
+                <span class="shtext-size" data-size="small">小</span>
+                <span class="shtext-size active" data-size="medium">中</span>
+                <span class="shtext-size" data-size="large">大</span>
+              </div>
             </div>
+          </div>
+          <div style="flex:1;padding-top:24px;">
+            <ul style="margin:0;padding-left:18px;font-size:11px;color:var(--muted);line-height:2;">
+              <li>选中矩形/椭圆/箭头/画笔 → 弹出<b style="color:var(--ink);">颜色 + 笔粗</b></li>
+              <li>选中文字 → 弹出<b style="color:var(--ink);">颜色 + 字号</b>（小/中/大）</li>
+              <li>马赛克无弹窗</li>
+              <li>再点同一工具 = 取消选中，弹窗关闭</li>
+              <li>点击弹窗外任意位置 = 关闭弹窗（工具保持选中）</li>
+            </ul>
           </div>
         </div>
       </div>
@@ -1984,6 +2186,109 @@
       </div>
 
       <div class="note" style="margin-top:0;">窗口定位在主屏右下角（离右边缘和任务栏各 16px），独立于主窗口，关闭按钮在标题行右侧。底部两个按钮：「复制摘要」（绿色，无摘要时灰显）和「重新截图」（灰色，触发新的截图流程）。</div>
+
+    </div>
+  </div>
+
+  <!-- ============ 5. 截图置顶窗口 ============ -->
+  <h2>5. 截图置顶窗口</h2>
+  <div class="note">截图工具条点「图钉」后，选区内容转为独立置顶窗口，浮在所有应用之上，方便对照参考。支持拖拽移动、按比例缩放、双击还原、滚轮缩放。可同时置顶多张截图。</div>
+  <div class="wireframe" style="max-height:none;">
+    <div style="padding:24px;display:flex;flex-direction:column;gap:28px;">
+
+      <!-- 场景 1：置顶窗口浮在桌面上 -->
+      <div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:10px;">置顶效果：窗口浮在其他应用之上（透明标题栏可拖拽）</div>
+        <div class="pinwin-desktop-sim">
+          <div class="fake-code-win"></div>
+          <!-- 置顶窗口（适应模式，图片铺满） -->
+          <div class="pinwin" style="position:absolute;top:30px;right:30px;width:300px;">
+            <div class="pinwin-bar">
+              <div class="pinwin-pin-ico"><svg viewBox="0 0 24 24"><path d="M9 4 h6 v7 l3 3 v1 h-12 v-1 l3 -3 z"/><line x1="12" y1="15" x2="12" y2="20"/></svg></div>
+              <span class="pinwin-title">screenshot_20260711_152032.png</span>
+              <span class="pinwin-scale-tag">100%</span>
+              <div class="pinwin-close"><svg viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></div>
+            </div>
+            <div class="pinwin-canvas fit" style="height:160px;">
+              <div class="pinwin-img" style="width:100%;height:100%;"><span>截图内容（按比例铺满）</span></div>
+            </div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px;">适应模式：图片保持宽高比铺满窗口。拖拽标题栏移动窗口，拖窗口边缘调整大小（图片等比缩放）。</div>
+      </div>
+
+      <!-- 场景 2：滚轮放大后（超过窗口，可滚动） -->
+      <div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:10px;">滚轮缩放：放大后图片超出窗口区域，画布内可拖动平移</div>
+        <div style="display:flex;gap:24px;align-items:flex-start;">
+          <div class="pinwin" style="width:300px;flex-shrink:0;">
+            <div class="pinwin-bar">
+              <div class="pinwin-pin-ico"><svg viewBox="0 0 24 24"><path d="M9 4 h6 v7 l3 3 v1 h-12 v-1 l3 -3 z"/><line x1="12" y1="15" x2="12" y2="20"/></svg></div>
+              <span class="pinwin-title">screenshot_20260711_152032.png</span>
+              <span class="pinwin-scale-tag" style="color:#3b82f6;">220%</span>
+              <div class="pinwin-close"><svg viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></div>
+            </div>
+            <div class="pinwin-canvas" style="height:180px;position:relative;cursor:grab;">
+              <div class="pinwin-img" style="position:absolute;width:160%;height:160%;top:-30%;left:-30%;"><span>放大后的截图内容</span></div>
+            </div>
+          </div>
+          <div style="flex:1;padding-top:8px;">
+            <div style="font-size:13px;color:var(--ink);font-weight:600;margin-bottom:8px;">交互说明</div>
+            <ul style="margin:0;padding-left:18px;font-size:12px;color:var(--muted);line-height:2;">
+              <li><b style="color:var(--ink);">滚轮</b>：以光标位置为锚点缩放（10%~500%）</li>
+              <li><b style="color:var(--ink);">双击</b>：切换适应模式 / 100% 原始尺寸</li>
+              <li><b style="color:var(--ink);">拖拽标题栏</b>：移动窗口</li>
+              <li><b style="color:var(--ink);">拖拽窗口边缘</b>：调整窗口大小（图片等比）</li>
+              <li><b style="color:var(--ink);">放大后拖拽画布</b>：平移查看溢出区域</li>
+              <li><b style="color:var(--ink);">× 或 Esc</b>：关闭置顶窗口</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- 场景 3：多窗口同时置顶 -->
+      <div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:10px;">多图置顶：可同时钉多张截图，各自独立</div>
+        <div class="pinwin-desktop-sim" style="min-height:220px;">
+          <!-- 窗口 1 -->
+          <div class="pinwin" style="position:absolute;top:16px;left:16px;width:220px;">
+            <div class="pinwin-bar">
+              <div class="pinwin-pin-ico"><svg viewBox="0 0 24 24"><path d="M9 4 h6 v7 l3 3 v1 h-12 v-1 l3 -3 z"/><line x1="12" y1="15" x2="12" y2="20"/></svg></div>
+              <span class="pinwin-title">screenshot_001.png</span>
+              <span class="pinwin-scale-tag">100%</span>
+              <div class="pinwin-close"><svg viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></div>
+            </div>
+            <div class="pinwin-canvas fit" style="height:100px;">
+              <div class="pinwin-img" style="width:100%;height:100%;background:linear-gradient(135deg,#1e3a2a,#162b1e);"><span>图 1</span></div>
+            </div>
+          </div>
+          <!-- 窗口 2 -->
+          <div class="pinwin" style="position:absolute;top:40px;right:60px;width:260px;">
+            <div class="pinwin-bar">
+              <div class="pinwin-pin-ico"><svg viewBox="0 0 24 24"><path d="M9 4 h6 v7 l3 3 v1 h-12 v-1 l3 -3 z"/><line x1="12" y1="15" x2="12" y2="20"/></svg></div>
+              <span class="pinwin-title">screenshot_002.png</span>
+              <span class="pinwin-scale-tag">100%</span>
+              <div class="pinwin-close"><svg viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></div>
+            </div>
+            <div class="pinwin-canvas fit" style="height:120px;">
+              <div class="pinwin-img" style="width:100%;height:100%;background:linear-gradient(135deg,#2a1e3a,#1e162b);"><span>图 2</span></div>
+            </div>
+          </div>
+          <!-- 窗口 3 -->
+          <div class="pinwin" style="position:absolute;bottom:16px;left:50%;width:200px;">
+            <div class="pinwin-bar">
+              <div class="pinwin-pin-ico"><svg viewBox="0 0 24 24"><path d="M9 4 h6 v7 l3 3 v1 h-12 v-1 l3 -3 z"/><line x1="12" y1="15" x2="12" y2="20"/></svg></div>
+              <span class="pinwin-title">screenshot_003.png</span>
+              <span class="pinwin-scale-tag">150%</span>
+              <div class="pinwin-close"><svg viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></div>
+            </div>
+            <div class="pinwin-canvas fit" style="height:90px;">
+              <div class="pinwin-img" style="width:100%;height:100%;background:linear-gradient(135deg,#3a2a1e,#2b1e16);"><span>图 3</span></div>
+            </div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px;">每次点图钉创建新窗口，互不影响。适合同时钉多张参考图。</div>
+      </div>
 
     </div>
   </div>
@@ -3209,44 +3514,60 @@
 // ===== 截图工具栏交互 =====
 (function() {
   var stage1Toolbar = document.querySelector('#shotStage1 + .shot-toolbar');
-  if (stage1Toolbar) {
-    var tools = stage1Toolbar.querySelectorAll('.shtool');
-    tools.forEach(function(t) {
-      t.addEventListener('click', function() {
-        if (t.closest('.shcolors') || t.closest('.shpens')) return;
-        tools.forEach(function(tt) {
-          if (!tt.closest('.shcolors') && !tt.closest('.shpens')) tt.classList.remove('active');
-        });
-        t.classList.add('active');
-      });
-    });
-    var colors = stage1Toolbar.querySelectorAll('.shcolor');
-    colors.forEach(function(c) {
-      c.addEventListener('click', function() {
-        colors.forEach(function(cc) { cc.classList.remove('active'); });
-        c.classList.add('active');
-      });
-    });
+  if (!stage1Toolbar) return;
+
+  // 带弹窗的标注工具按钮
+  var toolBtns = stage1Toolbar.querySelectorAll('.shtool[data-tool]');
+
+  function closeAllPops() {
+    stage1Toolbar.querySelectorAll('.shpop').forEach(function(p) { p.classList.remove('open'); });
   }
-  // 图标细节预览的颜色/笔粗互斥
-  document.querySelectorAll('.shcolors').forEach(function(g) {
-    var cs = g.querySelectorAll('.shcolor');
-    cs.forEach(function(c) {
-      c.addEventListener('click', function() {
-        cs.forEach(function(s) { s.classList.remove('active'); });
-        c.classList.add('active');
-      });
+
+  toolBtns.forEach(function(t) {
+    t.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var pop = t.querySelector('.shpop');
+      var wasActive = t.classList.contains('active');
+      // 取消其他工具的 active
+      toolBtns.forEach(function(tt) { tt.classList.remove('active'); });
+      closeAllPops();
+      if (!wasActive) {
+        // 选中此工具
+        t.classList.add('active');
+        if (pop) pop.classList.add('open');
+      }
+      // 再次点击同一个工具 = 取消选中，弹窗关闭
     });
-  });
-  document.querySelectorAll('.shpens').forEach(function(g) {
-    var ps = g.querySelectorAll('.shpen');
-    ps.forEach(function(p) {
-      p.addEventListener('click', function() {
-        ps.forEach(function(s) { s.classList.remove('active'); });
-        p.classList.add('active');
+    // 弹窗内选项点击不冒泡到工具按钮
+    var pop = t.querySelector('.shpop');
+    if (pop) {
+      pop.addEventListener('click', function(ev) { ev.stopPropagation(); });
+      // 颜色互斥
+      pop.querySelectorAll('.shcolor').forEach(function(c) {
+        c.addEventListener('click', function() {
+          pop.querySelectorAll('.shcolor').forEach(function(s) { s.classList.remove('active'); });
+          c.classList.add('active');
+        });
       });
-    });
+      // 笔粗互斥
+      pop.querySelectorAll('.shpen').forEach(function(p) {
+        p.addEventListener('click', function() {
+          pop.querySelectorAll('.shpen').forEach(function(s) { s.classList.remove('active'); });
+          p.classList.add('active');
+        });
+      });
+      // 字号互斥
+      pop.querySelectorAll('.shtext-size').forEach(function(sz) {
+        sz.addEventListener('click', function() {
+          pop.querySelectorAll('.shtext-size').forEach(function(s) { s.classList.remove('active'); });
+          sz.classList.add('active');
+        });
+      });
+    }
   });
+
+  // 点击工具条外关闭弹窗（但不取消工具选中）
+  document.addEventListener('click', function() { closeAllPops(); });
 })();
 
 // ===== 截图分析结果窗口三态切换 =====
