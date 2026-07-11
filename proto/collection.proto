@@ -23,6 +23,9 @@ service CollectionService {
   // 分析指定路径的 PNG 图片（用于"快捷工具-桌面截图"：把用户框选并保存的
   // 区域截图送去 VLM 分析，而非后端重新截图）。VLM 未启用时返回 error。
   rpc AnalyzeImage(AnalyzeImageRequest) returns (VLMSummary);
+  // 重试失败的 VLM 识别任务：把指定时间窗+app 的 permanent_fail 任务重置为 pending，
+  // recognitionLoop 下一轮自动重新识别。用于用户改了配置（如 API key）后手动重试。
+  rpc RetryVLMTasks(RetryVLMTasksRequest) returns (RetryResult);
 }
 
 message PauseRequest {}
@@ -88,4 +91,18 @@ message VLMSummary {
 message AnalyzeImageRequest {
   string path = 1;   // PNG 绝对路径
   string prompt = 2;  // 桌面截图识别独立提示词（空=回落引擎构造时的默认 prompt）
+}
+
+message RetryVLMTasksRequest {
+  int64 start_ts = 1;  // 段起始时间（Unix秒）
+  int64 end_ts = 2;    // 段结束时间（Unix秒）
+  string app_path = 3; // 应用路径（空=不校验 app，查所有）
+}
+
+message RetryResult {
+  bool ok = 1;           // 是否成功执行（图片不存在等致命错误才 false）
+  int32 success_count = 2; // 识别成功的条数
+  int32 fail_count = 3;    // 识别失败的条数
+  int32 not_found_count = 4; // 图片文件不存在的条数（无法重试）
+  string error = 5;      // 失败原因摘要（如有失败）
 }

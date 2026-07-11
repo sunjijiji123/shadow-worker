@@ -10,10 +10,13 @@
 #include <QGrpcCallReply>
 #include <QGrpcStatus>
 #include <QTextStream>
+#include <QUrl>
 #include <algorithm>
 
 using shadowworker::TimelineRequest;
 using shadowworker::TimelineSnapshot;
+using shadowworker::RetryVLMTasksRequest;
+using shadowworker::RetryResult;
 
 // formatDuration 把秒数格式化为智能进位的时长文本。
 //   < 60s       → "45s"
@@ -38,9 +41,11 @@ TimelineViewModel::TimelineViewModel(QObject *parent) : QObject(parent) {
   m_date = QDate::currentDate().toString("yyyy-MM-dd");
 
   // 串接 source → proxy。filterRoleName 指定按哪个 role 等值过滤。
-  // segments 按 category 过滤（catFilter ∈ all/coding/browser/...）。
+  // segments 按 category 过滤（catFilter ∈ all/coding/browser/.../failed）。
+  // specialFilter="failed"：当 catFilter="failed" 时不走等值匹配，改查 failMeta 非空。
   m_segProxy.setSourceModel(&m_segModel);
   m_segProxy.setFilterRoleName("category");
+  m_segProxy.setSpecialFilter("failed");
   // events 按 type 过滤（evFilter ∈ all/voice/screenshot/...）。
   m_evProxy.setSourceModel(&m_evModel);
   m_evProxy.setFilterRoleName("type");
@@ -176,6 +181,76 @@ void TimelineViewModel::refresh() {
                   });
         m_evModel.replaceAll(evs);
       });
+}
+
+void TimelineViewModel::retryVLMFailures(qint64 startTs, qint64 endTs, const QString &appPath) {
+  if (!m_channel) {
+    setError(QStringLiteral("gRPC channel 未初始化"));
+    emit retryFinished(false, QStringLiteral("gRPC channel 未初始化"));
+    return;
+  }
+  // 标记重试中（前端按钮显示 loading）。
+  setRetrying(true);
+
+  RetryVLMTasksRequest req;
+  req.setStartTs(startTs);
+  req.setEndTs(endTs);
+  req.setAppPath(appPath);
+  auto reply = m_client.RetryVLMTasks(req);
+  auto *replyPtr = reply.get();
+  reply.release();
+
+  QObject::connect(replyPtr, &QGrpcCallReply::finished, this,
+                   [this, replyPtr](const QGrpcStatus &status) {
+                     replyPtr->deleteLater();
+                     setRetrying(false);
+                     if (!status.isOk()) {
+                       // gRPC 的 grpc-message trailer 对非 ASCII 做 percent-encoding（%E6%97...）。
+                       // Qt gRPC 的 QGrpcStatus::message() 不自动解码，直接返回编码串。
+                       // 用 QUrl::fromPercentEncoding 解码回 UTF-8 中文。
+                       auto decoded = QUrl::fromPercentEncoding(status.message().toUtf8());
+                       qDebug() << "[retry] gRPC status raw:" << status.message()
+                                << "decoded:" << decoded;
+                       emit retryFinished(false, QStringLiteral("重试失败: ") + decoded);
+                       return;
+                     }
+                     auto opt = replyPtr->read<RetryResult>();
+                     if (!opt.has_value()) {
+                       emit retryFinished(false, QStringLiteral("重试返回空"));
+                       return;
+                     }
+                     // 单条重试结果（success/fail/notFound 各 0 或 1）。
+                     int success = opt->successCount();
+                     int fail = opt->failCount();
+                     int notFound = opt->notFoundCount();
+                     QString msg;
+                     bool ok = false;
+                     if (success > 0) {
+                       msg = QStringLiteral("识别成功，已更新摘要");
+                       ok = true;
+                     } else if (notFound > 0) {
+                       msg = QStringLiteral("截图文件已被清理，无法重试");
+                     } else if (fail > 0) {
+                       msg = QStringLiteral("识别失败");
+                       // 附加错误详情：检测 opt->error() 是否为合法 UTF-8。
+                       // proto string 理论上是 UTF-8，但防御性检查避免乱码进 toast。
+                       auto errBytes = opt->error().toUtf8();
+                       if (!opt->error().isEmpty() && QString::fromUtf8(errBytes) == opt->error()) {
+                         msg += QStringLiteral("：") + opt->error();
+                       }
+                     } else {
+                       msg = QStringLiteral("没有需要重试的任务");
+                     }
+                     emit retryFinished(ok, msg);
+                     // 刷新时间轴——成功的摘要已写入 events。
+                     refresh();
+                   });
+}
+
+void TimelineViewModel::setRetrying(bool v) {
+  if (m_retrying == v) return;
+  m_retrying = v;
+  emit retryingChanged();
 }
 
 void TimelineViewModel::setLoading(bool v) {

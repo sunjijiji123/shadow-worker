@@ -107,7 +107,10 @@ func (s *CollectionServer) QueryTimeline(ctx context.Context, req *TimelineReque
 		// 必然是邻段串扰（边界 event 被错误归属），显示成"摘要与 app 名矛盾"。
 		// 配合 LatestVLMSummary 的半开区间 + app 校验，杜绝相邻段雷同摘要。
 		if seg.Summary == "" && seg.EndTS.Sub(seg.StartTS) >= 10*time.Second {
-			if sum, err := s.db.LatestVLMSummary(seg.StartTS, seg.EndTS, seg.AppPath); err == nil && sum != "" {
+			// 采样多条 vlm_summary 拼接（而非只取最后一条）：
+			// 长段（同一应用工作数小时）期间有多次识别，只取最后一条会丢失前面的工作内容。
+			// SampleVLMSummaries 按时间间隔采样，拼接成 "09:00 重构；09:15 修配置；09:30 测试"。
+			if sum, err := s.db.SampleVLMSummaries(seg.StartTS, seg.EndTS, seg.AppPath); err == nil && sum != "" {
 				seg.Summary = sum
 			}
 		}
@@ -250,4 +253,48 @@ func (s *CollectionServer) AnalyzeImage(ctx context.Context, req *AnalyzeImageRe
 		return nil, fmt.Errorf("VLM 分析失败: %w", err)
 	}
 	return &VLMSummary{Summary: summary, ScreenshotPath: req.Path}, nil
+}
+
+// RetryVLMTasks 同步重试失败的 VLM 识别任务。把指定时间窗+app 的 permanent_fail
+// 任务直接读图→调 VLM→写结果，同步等待返回（不走 recognitionLoop 异步队列）。
+// 用户点击重试后立即知道结果，不用等5分钟扫描。
+// 图片文件不存在时统计 not_found_count（清理过/磁盘问题）。
+func (s *CollectionServer) RetryVLMTasks(ctx context.Context, req *RetryVLMTasksRequest) (*RetryResult, error) {
+	if req.StartTs <= 0 || req.EndTs <= 0 {
+		return nil, fmt.Errorf("时间范围无效")
+	}
+	if s.vlm == nil {
+		return nil, fmt.Errorf("VLM 未启用")
+	}
+	cap := s.vlm.Get()
+	if cap == nil {
+		return nil, fmt.Errorf("VLM 未启用")
+	}
+	start := time.Unix(req.StartTs, 0)
+	end := time.Unix(req.EndTs, 0)
+	success, fail, notFound, errs := cap.RetryTasksInRange(start, end, req.AppPath)
+	// 拼接失败原因（最多前3条，避免太长）。
+	errMsg := ""
+	if len(errs) > 0 {
+		maxShow := 3
+		if len(errs) < maxShow {
+			maxShow = len(errs)
+		}
+		for i := 0; i < maxShow; i++ {
+			if i > 0 {
+				errMsg += "; "
+			}
+			errMsg += errs[i]
+		}
+		if len(errs) > maxShow {
+			errMsg += fmt.Sprintf(" 等 %d 条", len(errs))
+		}
+	}
+	return &RetryResult{
+		Ok:            true,
+		SuccessCount:  int32(success),
+		FailCount:     int32(fail),
+		NotFoundCount: int32(notFound),
+		Error:         errMsg,
+	}, nil
 }

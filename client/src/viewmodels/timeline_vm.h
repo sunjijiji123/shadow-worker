@@ -49,6 +49,8 @@ class TimelineViewModel : public QObject {
   // QML 绑定自动重算（之前用 Q_INVOKABLE 导致只首次求值、数据到了不刷新）。
   Q_PROPERTY(int activeDurationSec READ activeDurationSec NOTIFY activeDurationSecChanged)
   Q_PROPERTY(int activeSegmentCount READ activeSegmentCount NOTIFY activeSegmentCountChanged)
+  // retrying：VLM 重试进行中（前端按钮显示 loading 状态）。
+  Q_PROPERTY(bool retrying READ retrying NOTIFY retryingChanged)
 
  public:
   explicit TimelineViewModel(QObject *parent = nullptr);
@@ -84,6 +86,12 @@ class TimelineViewModel : public QObject {
   int activeSegmentCount() const { return m_segModel.activeSegmentCount(); }
 
   Q_INVOKABLE void refresh();
+  // retryVLMFailures 同步重试段内失败的 VLM 识别任务（直接读图→调 VLM→等结果）。
+  // 结果通过 retryFinished 信号通知前端。retrying 属性标记进行中（按钮 loading）。
+  Q_INVOKABLE void retryVLMFailures(qint64 startTs, qint64 endTs, const QString &appPath);
+
+  bool retrying() const { return m_retrying; }
+  void setRetrying(bool v);
 
  signals:
   void dateChanged();
@@ -95,6 +103,9 @@ class TimelineViewModel : public QObject {
   void windowEndTsChanged();
   void activeDurationSecChanged();
   void activeSegmentCountChanged();
+  void retryingChanged();
+  // retryFinished：重试完成后通知前端（ok=是否全部成功，message=结果描述）。
+  void retryFinished(bool ok, const QString &message);
 
  private:
   void setLoading(bool v);
@@ -115,6 +126,7 @@ class TimelineViewModel : public QObject {
   // 时间轴可视窗口（unix sec）。默认 0，首次 refresh 后由后端填入。
   qint64 m_windowStartTs = 0;
   qint64 m_windowEndTs = 0;
+  bool m_retrying = false;  // VLM 重试进行中
 
   // 周期刷新定时器：timeline 页面停留在当天时，自动拉取最新采集数据。
   QTimer m_pollTimer;
