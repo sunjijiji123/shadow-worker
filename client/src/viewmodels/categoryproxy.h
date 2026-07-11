@@ -44,6 +44,12 @@ class RoleFilterProxyModel : public QSortFilterProxyModel {
   QString specialFilter() const { return m_special; }
   void setSpecialFilter(const QString &v);
 
+  // rowOfStartTs：在 proxy 可见行里按 startTs role 查找，返回 proxy 行号；找不到返回 -1。
+  // 供 QML 点击时间轴段后定位工作日志行（startTs 是段的稳定 key，与 SegmentListModel
+  // 的 diff key 一致）。proxy 行号可直接给 ListView.currentIndex / positionViewAtIndex。
+  // QML 无法调 QAbstractItemModel::data/index（非 Q_INVOKABLE），故在 C++ 侧查。
+  Q_INVOKABLE int rowOfStartTs(qint64 ts) const;
+
  signals:
   void filterRoleNameChanged();
   void filterValueChanged();

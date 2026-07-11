@@ -27,6 +27,70 @@ Item {
     // 暴露重试等待弹窗给 main.qml（onRetryFinished 里关闭它）。
     property alias retryDialog: retryProgressDialog
 
+    // 时间轴→工作日志联动：点击轨道段后，工作日志定位到对应段并高亮（闪 1.5s）。
+    // highlightStartTs 记录当前要高亮的段 startTs，0 表示无高亮。
+    // locateSegment 在 proxy 重过滤后用 Qt.callLater 延迟定位（locateSegment 内部判断）。
+    property int highlightStartTs: 0
+    property int pendingLocateTs: 0  // catFilter 重置后待定位的 startTs
+
+    // 高亮 Timer：启动后 1.5s 自动清除高亮（highlightStartTs 归零）。
+    // restart() 让连续点击同一段能重新计时（重新闪烁）。
+    Timer {
+        id: highlightTimer
+        interval: 1500
+        onTriggered: root.highlightStartTs = 0
+    }
+
+    // locateSegment：把工作日志列表滚动定位到 startTs===targetTs 的行并高亮。
+    //   1. 若不在 worklog tab，切过去
+    //   2. 若该段被 catFilter 排除（proxy 里找不到），重置 catFilter="all"，延迟重试
+    //   3. 遍历 proxy 找匹配行 → currentIndex + positionViewAtIndex 滚动 + 高亮
+    //   4. 没找到 → 静默（数据边界，不报错）
+    function locateSegment(targetTs) {
+        if (!viewModel || !worklogList.model || targetTs === 0) return
+
+        // 不在 worklog tab 时先切过去，再延迟定位（切 tab 是同步的，但保险用 callLater）。
+        if (activeListTab !== "worklog") {
+            activeListTab = "worklog"
+            pendingLocateTs = targetTs
+            Qt.callLater(function() { root.locateSegment(targetTs) })
+            return
+        }
+
+        // 先尝试在当前 proxy 结果里找（rowOfStartTs 是 proxy 的 Q_INVOKABLE 方法，
+        // 在 C++ 侧遍历 proxy 行 + mapToSource 读 startTs，返回 proxy 行号）。
+        var idx = worklogList.model.rowOfStartTs(targetTs)
+        if (idx >= 0) {
+            pendingLocateTs = 0
+            doHighlight(idx, targetTs)
+            return
+        }
+
+        // proxy 里没找到：可能是被 catFilter 排除了。
+        // 重置为 all，等 proxy 重过滤后（QSortFilterProxyModel 增量更新，
+        // 用 callLater 推迟到下一事件循环确保 rowCount 已更新）再定位。
+        var filter = viewModel.catFilter || "all"
+        if (filter !== "all" && filter.length > 0) {
+            viewModel.catFilter = "all"
+            pendingLocateTs = targetTs
+            Qt.callLater(function() { root.locateSegment(targetTs) })
+            return
+        }
+
+        // catFilter 已经是 all 还找不到——静默（数据边界）。
+        pendingLocateTs = 0
+    }
+
+    // 滚动 worklogList 到指定行 + 触发高亮。
+    function doHighlight(row, targetTs) {
+        worklogList.currentIndex = row
+        worklogList.positionViewAtIndex(row, ListView.Contain)
+        // 连续点击同一段：先置 0 让下面的赋值一定触发 changed（QML 属性赋同值不通知）。
+        if (root.highlightStartTs === targetTs) root.highlightStartTs = 0
+        root.highlightStartTs = targetTs
+        highlightTimer.restart()
+    }
+
     // badge bg color for a category (translucent like HTML)
     function catBadgeBg(cat) {
         var c = Theme.colorOf(cat)
@@ -170,6 +234,9 @@ Item {
                 segments: viewModel ? viewModel.allSegments : null
                 windowStartTs: viewModel ? viewModel.windowStartTs : 0
                 windowEndTs: viewModel ? viewModel.windowEndTs : 0
+                onSegmentClicked: function(startTs, endTs, appName) {
+                    root.locateSegment(startTs)
+                }
             }
 
             // legend
@@ -300,14 +367,16 @@ Item {
                             font.pixelSize: 13
                         }
 
-                        delegate: ColumnLayout {
+                        delegate: Item {
                             // seg-row: 匹配线框稿 .seg-row（padding:10px 0 + border-bottom）。
                             // 用 required property 声明 roles（Qt6 推荐范式）。
                             //
-                            // ListView 高度坑：delegate 根项的 Layout.topMargin/bottomMargin
-                            // 在 ListView 里不生效（ListView 用 implicitHeight，忽略 Layout
-                            // margin）。行距改用 ListView.spacing 控制（在 worklogList 上设）。
-                            // 这里只控制 delegate 内部内容的垂直间距。
+                            // delegate 根用 Item（非 ColumnLayout）：① 高亮背景 Rectangle 用
+                            // anchors.fill 铺满，不参与布局、不影响高度；② 内容 ColumnLayout 也
+                            // anchors.fill，靠 implicitHeight 撑起 delegate 高度。
+                            // ListView 用 delegate 根的 implicitHeight 定位行，故 Item 里内容
+                            // 的 implicitHeight 会自然透传。
+                            id: segDelegate
                             required property string startTime
                             required property string endTime
                             required property string appName
@@ -323,7 +392,26 @@ Item {
                             required property int endTs
 
                             width: worklogList.width
-                            spacing: 10
+                            // 高度由内容 ColumnLayout 的 implicitHeight 决定。
+                            // Item 自身无 implicitHeight，需显式绑定子布局的高度，否则高度为 0。
+                            implicitHeight: segContent.implicitHeight
+
+                            // 时间轴→工作日志联动高亮：该段 startTs === root.highlightStartTs
+                            // 时显示 accent 背景闪现（1.5s 后由 highlightTimer 清除）。
+                            // 放在 Item 下、内容 ColumnLayout 之前（z 默认更低），不遮挡文字/按钮。
+                            // 用 anchors.fill 铺满 delegate，visible 切换不影响布局（Item 里
+                            // anchors 定位的子项不参与 Layout 堆叠，高度恒定）。
+                            Rectangle {
+                                anchors.fill: parent
+                                color: Theme.accentBg2
+                                radius: 6
+                                visible: segDelegate.startTs === root.highlightStartTs
+                            }
+
+                            ColumnLayout {
+                                id: segContent
+                                anchors.fill: parent
+                                spacing: 10
 
                             // seg-header: [time] [app-icon+name(flex)] [cat-badge] [duration]
                             // 与线框稿 .seg-header 一致：display:flex; gap:10px。
@@ -568,7 +656,8 @@ Item {
                                 height: 1
                                 color: Theme.rule
                             }
-                        }
+                            }  // 闭合 segContent ColumnLayout
+                        }  // 闭合 delegate Item
                     }
                 }
 

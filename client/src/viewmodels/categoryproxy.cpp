@@ -73,3 +73,26 @@ bool RoleFilterProxyModel::filterAcceptsRow(
   if (role < 0) return true;  // role 未配置，放行
   return sourceModel()->data(idx, role).toString() == m_value;
 }
+
+int RoleFilterProxyModel::rowOfStartTs(qint64 ts) const {
+  if (!sourceModel() || ts == 0) return -1;
+  // 解析 startTs role id（与 failMeta 一样用 roleNames 反查，避免硬编码 role 数值）。
+  const auto names = sourceModel()->roleNames();
+  int startRole = -1;
+  static const char *startTsName = "startTs";
+  for (auto it = names.begin(); it != names.end(); ++it) {
+    if (it.value() == startTsName) {
+      startRole = it.key();
+      break;
+    }
+  }
+  if (startRole < 0) return -1;
+  // 遍历 proxy 可见行（rowCount() 返回过滤后的行数），用 mapToSource 读 source 的 startTs。
+  for (int i = 0; i < rowCount(); ++i) {
+    QModelIndex proxyIdx = index(i, 0);
+    QModelIndex srcIdx = mapToSource(proxyIdx);
+    if (!srcIdx.isValid()) continue;
+    if (sourceModel()->data(srcIdx, startRole).toLongLong() == ts) return i;
+  }
+  return -1;
+}

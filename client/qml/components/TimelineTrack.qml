@@ -25,6 +25,10 @@ Item {
 
     readonly property int windowSecs: windowEndTs - windowStartTs
 
+    // 点击轨道上的某段时发出，携带该段的 (startTs, endTs, appName)。
+    // TimelinePage 监听此信号，把工作日志列表滚动定位到对应段并高亮。
+    signal segmentClicked(int startTs, int endTs, string appName)
+
     implicitHeight: 90   // ruler + track + legend
 
     // 绝对时间 → x 坐标。窗口外 clamp 到边界。
@@ -179,6 +183,7 @@ Item {
                     id: trackHover
                     anchors.fill: parent
                     hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
                     onPositionChanged: function(mouse) {
                         var hit = root.segmentAtX(mouse.x)
                         // get() 越界/无段返回空对象（startTs undefined），判 undefined 而非 null。
@@ -197,6 +202,11 @@ Item {
                                  + "  " + hit.appName
                                  + "  [" + cat + "/" + stateTag + "]  " + mins + "min"
                         tip.show(txt, mouse.x, mouse.y)
+                    }
+                    onClicked: function(mouse) {
+                        var hit = root.segmentAtX(mouse.x)
+                        if (!hit || hit.startTs === undefined) return
+                        root.segmentClicked(hit.startTs, hit.endTs, hit.appName)
                     }
                     onExited: tip.hide()
                 }
