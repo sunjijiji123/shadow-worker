@@ -3,6 +3,7 @@ package collector
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -110,12 +111,20 @@ func (v *VLMCapturer) Start() {
 			// 整屏模式无"活跃窗口"概念，on_demand 无触发源，不启动。
 			// 正常不会走到这（VLMHolder.Rebuild 会降级），此处为防御兜底。
 			v.logger.Warn("VLM on_demand 模式不支持整屏截图，不启动采集")
-			return
+		} else {
+			go v.onDemandLoop()
+			v.logger.Info("VLM 按需截图已启动",
+				"switch_gap_s", v.cfg.OnDemandSwitchGapS, "motion_gap_s", v.cfg.OnDemandMotionGapS)
 		}
-		go v.onDemandLoop()
-		v.logger.Info("VLM 按需截图已启动",
-			"switch_gap_s", v.cfg.OnDemandSwitchGapS, "motion_gap_s", v.cfg.OnDemandMotionGapS)
 	}
+	// 识别 worker：所有模式都启（采集与识别解耦，识别由独立 worker 按间隔扫描 pending）。
+	// 即使 VLM mode=off 不走这（Start 只在 mode 非 off 时由 VLMHolder 调用）。
+	go v.recognitionLoop()
+	intervalS := v.cfg.RecognitionIntervalS
+	if intervalS <= 0 {
+		intervalS = 300
+	}
+	v.logger.Info("VLM 识别 worker 已启动", "scan_interval_s", intervalS)
 }
 
 // Stop 停止采集。幂等：VLMHolder.Rebuild 重建时可能对旧实例重复调用。
@@ -167,6 +176,50 @@ func (v *VLMCapturer) Trigger(ctx context.Context) (string, error) {
 		return "", nil
 	}
 	return v.analyze(ctx, app, png, shotPath, time.Now().UTC())
+}
+
+// pendingScreenshotDir 返回待识别截图目录（screenshots/pending/）绝对路径。
+// 由 enqueueTask 写入、recognitionLoop 读取、识别成功后删除。
+func pendingScreenshotDir() (string, error) {
+	cfgDir, err := os.UserConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("获取配置目录失败: %w", err)
+	}
+	dir := filepath.Join(cfgDir, "shadow-worker", "screenshots", "pending")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", fmt.Errorf("创建待识别截图目录失败: %w", err)
+	}
+	return dir, nil
+}
+
+// enqueueTask 是采集与识别解耦的入库入口：截图落盘 + 写 vlm_tasks(pending)。
+// OnActivity（on_demand）和 runOnce（scheduled）截图后调此方法，不再立即识别。
+// 识别由 recognitionLoop worker 每5分钟扫描 pending 消费。
+// 失败（落盘失败/DB写失败）只打 Warn 日志——采集本身轻量，单次失败不影响后续。
+func (v *VLMCapturer) enqueueTask(app App, png []byte, ts time.Time) {
+	dir, err := pendingScreenshotDir()
+	if err != nil {
+		v.logger.Warn("待识别截图目录不可用", "err", err)
+		return
+	}
+	// 先 INSERT 拿 task_id，再写文件 <task_id>.png，再 UPDATE image_path。
+	// 这样文件名与 DB 行一一对应，不会因文件名冲突导致混乱。
+	id, err := v.db.InsertVLMTask(app.Path, app.Name, "", ts)
+	if err != nil {
+		v.logger.Warn("写入 VLM 任务失败", "err", err)
+		return
+	}
+	imagePath := filepath.Join(dir, fmt.Sprintf("%d.png", id))
+	if err := os.WriteFile(imagePath, png, 0o644); err != nil {
+		v.logger.Warn("待识别截图落盘失败", "id", id, "err", err)
+		// 文件写失败，删 DB 行避免留下无图 task。
+		_ = v.db.DeleteVLMTask(id)
+		return
+	}
+	if err := v.db.UpdateVLMTaskImage(id, imagePath); err != nil {
+		v.logger.Warn("回填图片路径失败", "id", id, "err", err)
+	}
+	v.logger.Debug("VLM 任务已入队", "id", id, "app", app.Name, "png_bytes", len(png))
 }
 
 // capture 是截图阶段：取前台（或整屏）+ 白名单过滤 + 截图 + debug 落盘。
@@ -328,16 +381,17 @@ func (v *VLMCapturer) OnActivity(reason string, app App, at time.Time) {
 	v.logger.Debug("冷却通过，入队（含截图）",
 		"reason", reason, "app", app.Name, "gap_s", gapS,
 		"since_last_s", sinceLast.Seconds(), "png_bytes", len(png))
-	ev := snapshotEvent{App: app, PNG: png, TS: at, Reason: reason}
-	select {
-	case v.triggerCh <- ev:
-		appPath := app.Path
-		v.lastEnqueueApp.Store(&appPath)
-		v.lastEnqueueUnix.Store(at.UnixNano())
-	default:
-		// 队列满：丢最新（保留已积压的历史快照，它们更早更该被处理）。
-		v.logger.Debug("VLM 队列已满，丢弃本次快照", "app", app.Name, "reason", reason)
-	}
+
+	// 采集与识别解耦：截图落盘 + 写 vlm_tasks(pending)，不再推内存 channel。
+	// 识别由 recognitionLoop worker 每5分钟扫描 pending 消费。
+	v.enqueueTask(app, png, at)
+
+	// 更新冷却 + 入队去重时间戳（语义不变：无论"入队"现在是入库，
+	// 防冷却/去重逻辑仍需这两个时间戳工作）。
+	v.lastCaptureUnix.Store(at.UnixNano())
+	appPath := app.Path
+	v.lastEnqueueApp.Store(&appPath)
+	v.lastEnqueueUnix.Store(at.UnixNano())
 }
 
 // onDemandLoop 是 on_demand 模式的消费 goroutine。
@@ -416,11 +470,219 @@ func (v *VLMCapturer) loop() {
 }
 
 func (v *VLMCapturer) runOnce() {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
+	// scheduled 定时采集：截图 → 入库 pending（不再立即识别，由 recognitionLoop 消费）。
+	app, png, _, err := v.capture()
+	if err != nil {
+		v.recordVLMFailure(app, time.Now().UTC(), err)
+		v.logger.Warn("VLM 定时截图失败", "err", err)
+		return
+	}
+	if png == nil {
+		return // 静默跳过（前台不在白名单）
+	}
+	v.enqueueTask(app, png, time.Now().UTC())
+}
 
-	if _, err := v.Trigger(ctx); err != nil {
-		v.logger.Warn("VLM 定时任务失败", "err", err)
+// recognitionLoop 是识别消费 worker：每5分钟扫描 pending 任务 → 识别 → 成功清理/失败分类。
+// 与采集（OnActivity/runOnce）完全解耦：采集只负责截图+落盘+写 pending，
+// 本 worker 负责慢慢消费，不阻塞采集。识别失败按错误类型决定是否可重试：
+//   - 429/5xx/网络：可重试，保持 pending，等下一轮扫描
+//   - 鉴权/解析/截图：不可重试，标记 permanent_fail，保留数据等手动重试
+func (v *VLMCapturer) recognitionLoop() {
+	// 扫描间隔由 config.yaml 的 vlm.recognition_interval_s 配置，≤0 兜底 300（5分钟）。
+	intervalS := v.cfg.RecognitionIntervalS
+	if intervalS <= 0 {
+		intervalS = 300
+	}
+	scanInterval := time.Duration(intervalS) * time.Second
+	const batchSize = 10               // 每轮最多处理10条，避免长时间占用
+	retryMinAge := scanInterval        // 失败任务至少等一个扫描周期再重试
+
+	ticker := time.NewTicker(scanInterval)
+	defer ticker.Stop()
+
+	// 启动后立即扫一轮（不等5分钟），让积压的 pending 尽快处理。
+	v.processPendingBatch(batchSize, retryMinAge)
+	v.cleanupTasks()
+
+	for {
+		select {
+		case <-v.stopCh:
+			return
+		case <-ticker.C:
+			v.processPendingBatch(batchSize, retryMinAge)
+			v.cleanupTasks()
+		}
+	}
+}
+
+// processPendingBatch 扫描一批 pending 任务并逐条识别。
+func (v *VLMCapturer) processPendingBatch(limit int, retryMinAge time.Duration) {
+	tasks, err := v.db.ListPendingVLMTasks(limit, retryMinAge)
+	if err != nil {
+		v.logger.Warn("查询待识别 VLM 任务失败", "err", err)
+		return
+	}
+	for _, t := range tasks {
+		v.processTask(t)
+	}
+	if len(tasks) > 0 {
+		v.logger.Info("VLM 识别批次完成", "processed", len(tasks))
+	}
+}
+
+// processTask 处理单条任务：读图 → 识别 → 更新结果。
+func (v *VLMCapturer) processTask(t storage.VLMTask) {
+	png, err := os.ReadFile(t.ImagePath)
+	if err != nil {
+		// 图片文件丢失（被手动删/磁盘问题）：标记 permanent_fail，不再重试。
+		v.db.UpdateVLMTaskResult(t.ID, storage.VLMTaskStatusPermanentFail, t.Attempts+1,
+			"capture_failed", "截图文件丢失: "+err.Error())
+		v.logger.Warn("VLM 任务图片丢失", "id", t.ID, "path", t.ImagePath)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	summary, err := v.engine.Describe(ctx, png)
+	cancel()
+
+	if err == nil {
+		// 成功：写 vlm_summary event + 删图片 + 删 task 行。
+		v.recordVLMSuccess(t, summary)
+		_ = os.Remove(t.ImagePath)
+		_ = v.db.DeleteVLMTask(t.ID)
+		v.logger.Info("VLM 摘要已生成(异步)", "id", t.ID, "app", t.AppName, "summary", summary)
+		return
+	}
+
+	// 失败：按错误类型分类，决定是否可重试。
+	kind, _ := classifyVLMError(err)
+	retryable := isRetryableKind(kind)
+	status := storage.VLMTaskStatusPermanentFail
+	if retryable {
+		status = storage.VLMTaskStatusPending // 保持 pending，等下一轮扫描重试
+	}
+	v.db.UpdateVLMTaskResult(t.ID, status, t.Attempts+1, kind, err.Error())
+	v.logger.Warn("VLM 识别失败",
+		"id", t.ID, "app", t.AppName, "kind", kind,
+		"retryable", retryable, "attempts", t.Attempts+1, "err", err)
+}
+
+// RetryTaskSync 同步识别一条任务（用于用户手动重试）。
+// 与 processTask（异步 worker 用）的区别：
+//   - 本方法返回结果（success/fail/not_found），调用方据此给用户即时反馈
+//   - 不改 task 状态为 pending（不依赖 recognitionLoop 异步扫描）
+//   - 直接调 engine.Describe 同步等待结果
+//
+// 返回值：summary（成功时）、err（失败时，含分类信息）。
+// 图片文件不存在时返回特殊错误（调用方统计 not_found_count）。
+var errImageNotFound = fmt.Errorf("截图文件不存在，无法重试")
+
+func (v *VLMCapturer) RetryTaskSync(t storage.VLMTask) (string, error) {
+	png, err := os.ReadFile(t.ImagePath)
+	if err != nil {
+		// 图片丢失：标记 permanent_fail（如果还没有的话），返回特殊错误。
+		v.db.UpdateVLMTaskResult(t.ID, storage.VLMTaskStatusPermanentFail, t.Attempts+1,
+			"capture_failed", "截图文件丢失: "+err.Error())
+		return "", errImageNotFound
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	summary, err := v.engine.Describe(ctx, png)
+	cancel()
+
+	if err == nil {
+		v.recordVLMSuccess(t, summary)
+		_ = os.Remove(t.ImagePath)
+		_ = v.db.DeleteVLMTask(t.ID)
+		v.logger.Info("VLM 手动重试成功", "id", t.ID, "app", t.AppName, "summary", summary)
+		return summary, nil
+	}
+
+	// 失败：保持 permanent_fail，记录错误。
+	// 返回干净中文 message（不传原始 err.Error()——可能含 GBK 解码后的响应体，
+	// 经 gRPC protobuf 传输到前端会变成乱码）。原始 err 仍写入 DB 供日志排查。
+	kind, message := classifyVLMError(err)
+	v.db.UpdateVLMTaskResult(t.ID, storage.VLMTaskStatusPermanentFail, t.Attempts+1, kind, err.Error())
+	v.logger.Warn("VLM 手动重试失败", "id", t.ID, "kind", kind, "err", err)
+	return "", errors.New(message)
+}
+
+// RetryTasksInRange 同步重试时间窗内最新一条 permanent_fail 任务。
+// 点一次重试只处理最新的一条——多条失败时用户可多次点重试。
+// 返回成功数(0或1)、失败数(0或1)、图片不存在数(0或1)、失败原因列表。
+func (v *VLMCapturer) RetryTasksInRange(start, end time.Time, appPath string) (success, fail, notFound int, errList []string) {
+	t, err := v.db.LatestPermanentFailInRange(start, end, appPath)
+	if err != nil {
+		errList = append(errList, "查询失败任务出错: "+err.Error())
+		return 0, 0, 0, errList
+	}
+	if t == nil {
+		// 该范围内无 permanent_fail 任务（可能已被重试成功/清理）。
+		return 0, 0, 0, nil
+	}
+	_, err = v.RetryTaskSync(*t)
+	if err == nil {
+		success = 1
+	} else if err == errImageNotFound {
+		notFound = 1
+	} else {
+		fail = 1
+		errList = append(errList, err.Error())
+	}
+	return success, fail, notFound, errList
+}
+
+// recordVLMSuccess 把异步识别成功的摘要写入 events 表（与 analyze 成功路径一致）。
+func (v *VLMCapturer) recordVLMSuccess(t storage.VLMTask, summary string) {
+	if _, err := v.db.InsertEvent(storage.Event{
+		TS:      t.CreatedTS, // 用采集时刻（而非识别时刻），保证时间轴段关联正确
+		Type:    storage.EventTypeVLMSummary,
+		AppPath: t.AppPath,
+		AppName: t.AppName,
+		Content: summary,
+	}); err != nil {
+		v.logger.Warn("写入 VLM 摘要事件失败", "id", t.ID, "err", err)
+	}
+}
+
+// isRetryableKind 判断错误类型是否可自动重试。
+// 429/5xx/网络瞬时故障可重试（服务可能恢复）；鉴权/解析/截图失败不可重试（重试也无用）。
+func isRetryableKind(kind string) bool {
+	switch kind {
+	case "rate_limit", "request_failed":
+		return true
+	default:
+		return false // auth_error / parse_error / capture_failed / unknown
+	}
+}
+
+// cleanupTasks 阈值清理：pending + permanent_fail 合计超过 maxTasks 条时，
+// 删最旧的 permanent_fail 项（含 task 行 + 图片文件），释放空间。
+// permanent_fail 保留是为了让用户手动重试，但积累太多会占磁盘，需兜底清理。
+func (v *VLMCapturer) cleanupTasks() {
+	const maxTasks = 100
+	count, err := v.db.CountAllVLMTasks()
+	if err != nil {
+		v.logger.Warn("统计 VLM 任务失败，跳过清理", "err", err)
+		return
+	}
+	if count <= maxTasks {
+		return
+	}
+	// 删最旧的 permanent_fail（pending 不删——那是还没识别完的）。
+	toDelete := count - maxTasks
+	fails, err := v.db.ListOldPermanentFails(toDelete)
+	if err != nil {
+		v.logger.Warn("查询永久失败任务失败，跳过清理", "err", err)
+		return
+	}
+	for _, f := range fails {
+		_ = os.Remove(f.ImagePath)
+		_ = v.db.DeleteVLMTask(f.ID)
+	}
+	if len(fails) > 0 {
+		v.logger.Info("VLM 任务清理", "deleted", len(fails), "reason", "超过阈值", "max", maxTasks)
 	}
 }
 

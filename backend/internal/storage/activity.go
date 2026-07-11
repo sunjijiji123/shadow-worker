@@ -2,6 +2,7 @@ package storage
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -108,6 +109,111 @@ func (db *DB) LatestVLMSummary(start, end time.Time, appPath string) (string, er
 		return "", fmt.Errorf("查询 VLM 摘要失败: %w", err)
 	}
 	return content.String, nil
+}
+
+// SampleVLMSummaries 查询时间窗口 [start, end) 内的 vlm_summary 事件，按时间间隔采样后
+// 拼接成一行返回（如 "09:00 重构ASR；09:15 修配置；09:30 测试"）。
+//
+// 背景：工作日志的段按"同一应用不切换"聚合（坑 #31），一个段可能跨数小时，
+// 期间有多次 VLM 识别产生多条摘要。LatestVLMSummary 只取最后一条（LIMIT 1），
+// 前面的摘要全部丢失。本方法改为采样多条，让用户看到工作内容的演变。
+//
+// 采样策略（避免长段拼接太多条）：
+//   - 段时长 <15min：取全部摘要（短段条数少，不用采样）
+//   - 段时长 15~60min：按时间排序，取首条 + 每隔 max(1, 条数/4) 条取一条（约采样4条）
+//   - 段时长 >60min：最多采样6条（均匀分布）
+// 每条摘要带 HH:mm 时间戳前缀，用 "；" 分隔。
+//
+// 判据与 LatestVLMSummary 一致：半开区间 ts>=? AND ts<? + app_path 校验。
+func (db *DB) SampleVLMSummaries(start, end time.Time, appPath string) (string, error) {
+	// 先查出该时间段内所有 vlm_summary（ts 升序），用于采样。
+	const baseQuery = `SELECT ts, content FROM events
+		WHERE type = ? AND ts >= ? AND ts < ?`
+	const appFilter = ` AND (app_path = ? OR app_path = '')`
+
+	var rows *sql.Rows
+	var err error
+	if appPath == "" {
+		rows, err = db.Query(baseQuery+" ORDER BY ts ASC", string(EventTypeVLMSummary), toUnix(start), toUnix(end))
+	} else {
+		rows, err = db.Query(baseQuery+appFilter+" ORDER BY ts ASC", string(EventTypeVLMSummary), toUnix(start), toUnix(end), appPath)
+	}
+	if err != nil {
+		return "", fmt.Errorf("查询 VLM 摘要列表失败: %w", err)
+	}
+	defer rows.Close()
+
+	var all []vlmSummaryEntry
+	for rows.Next() {
+		var ts int64
+		var content sql.NullString
+		if err := rows.Scan(&ts, &content); err != nil {
+			return "", fmt.Errorf("扫描 VLM 摘要失败: %w", err)
+		}
+		if content.String == "" {
+			continue
+		}
+		all = append(all, vlmSummaryEntry{ts: fromUnix(ts), content: content.String})
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	if len(all) == 0 {
+		return "", nil
+	}
+
+	// 采样：根据段时长和条数决定保留哪些。
+	dur := end.Sub(start)
+	var picked []vlmSummaryEntry
+	switch {
+	case dur < 15*time.Minute || len(all) <= 4:
+		picked = all // 短段或条数少：全部保留
+	case dur <= time.Hour:
+		picked = sampleEvenly(all, 4) // 中段：采样4条
+	default:
+		picked = sampleEvenly(all, 6) // 长段：采样6条
+	}
+
+	// 返回 JSON 数组，前端用 Repeater 逐行渲染（每行独立 Text，统一 leftMargin 对齐，
+	// 不依赖字符宽度——└ 不是等宽字符，用空格对齐永远有偏差）。
+	// 格式：[{"time":"09:00","text":"摘要"},...]
+	type entry struct {
+		Time string `json:"time"`
+		Text string `json:"text"`
+	}
+	entries := make([]entry, len(picked))
+	for i, e := range picked {
+		entries[i] = entry{Time: e.ts.Format("15:04"), Text: e.content}
+	}
+	data, err := json.Marshal(entries)
+	if err != nil {
+		return "", fmt.Errorf("序列化摘要失败: %w", err)
+	}
+	return string(data), nil
+}
+
+// vlmSummaryEntry 是 SampleVLMSummaries 内部用的摘要条目（时间戳+内容）。
+type vlmSummaryEntry struct {
+	ts      time.Time
+	content string
+}
+
+// sampleEvenly 从 entries 中均匀采样 n 条（保留首尾）。
+// entries 须按时间升序。n >= len 时返回全部。
+func sampleEvenly(entries []vlmSummaryEntry, n int) []vlmSummaryEntry {
+	if n >= len(entries) || n <= 0 {
+		return entries
+	}
+	step := float64(len(entries)-1) / float64(n-1)
+	picked := make([]vlmSummaryEntry, 0, n)
+	for i := 0; i < n; i++ {
+		idx := int(float64(i) * step)
+		if idx >= len(entries) {
+			idx = len(entries) - 1
+		}
+		picked = append(picked, entries[idx])
+	}
+	return picked
 }
 
 // LatestVLMFailMeta 查询时间段内最近一条 vlm_summary_fail 事件的 meta。

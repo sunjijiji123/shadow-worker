@@ -107,6 +107,22 @@ func (db *DB) migrate() error {
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);`,
 		`CREATE INDEX IF NOT EXISTS idx_events_type_ts ON events(type, ts);`,
+		// vlm_tasks: VLM 识别任务队列。采集与识别解耦——截图落盘+写 pending，
+		// recognitionLoop worker 每5分钟扫描 pending → 识别 → 成功清理/失败分类。
+		// status: pending(待识别/可重试) | done(成功,清理删行) | permanent_fail(不可重试,保留)
+		`CREATE TABLE IF NOT EXISTS vlm_tasks (
+			id           INTEGER PRIMARY KEY AUTOINCREMENT,
+			created_ts   INTEGER NOT NULL,
+			app_path     TEXT,
+			app_name     TEXT,
+			image_path   TEXT NOT NULL,
+			status       TEXT NOT NULL DEFAULT 'pending',
+			attempts     INTEGER NOT NULL DEFAULT 0,
+			error_kind   TEXT,
+			error_detail TEXT,
+			updated_ts   INTEGER NOT NULL DEFAULT 0
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_vlm_tasks_status ON vlm_tasks(status, updated_ts);`,
 		// 清理历史脏数据：旧版 voice_server 写入的 event 未带 TS（零值），
 		// 被存为 ts=0，永远无法被时间窗查询命中（ListEvents 用 ts >= start），
 		// 且无任何列可推断真实时间。直接删除这些孤儿行。

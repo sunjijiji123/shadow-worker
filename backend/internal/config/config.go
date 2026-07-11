@@ -112,6 +112,12 @@ type VLMConfig struct {
 	// Prompt 是送给 VLM 的提示词（所有 provider 共用一份，与 LLMConfig.Prompt 对称）。
 	// 不可为空：空时 Describe 返回错误、保存时 UI 拦截。Default 为 DefaultVLMPrompt。
 	Prompt string `yaml:"prompt"`
+	// RecognitionIntervalS 是识别 worker 扫描 pending 任务队列的间隔（秒）。
+	// 采集与识别解耦后，识别由独立 worker 按此间隔扫描 screenshots/pending/ 里的
+	// 待识别截图，逐条调 VLM。≤0 时用默认 300（5分钟）。
+	// 调小可加快积压任务消化，但会增加 API 调用频率（可能加剧 429）。
+	// 仅 yaml 配置，不进设置页/proto/前端（高级参数）。
+	RecognitionIntervalS int `yaml:"recognition_interval_s"`
 	// SaveScreenshots 由 main.go 从 cfg.Debug.SaveVLMScreenshots 注入（非 yaml 字段）。
 	// true 时送去 VLM 分析的截图落盘到 screenshots/ 目录供调试（文件名无 -mv- 前缀）。
 	SaveScreenshots bool `yaml:"-"`
@@ -271,6 +277,8 @@ func Default() *Config {
 			// on_demand 默认冷却：切窗口 20s（过滤 Alt+Tab 抖动），活跃点 60s。
 			OnDemandSwitchGapS: 20,
 			OnDemandMotionGapS: 60,
+			// 识别 worker 默认5分钟扫一次 pending 队列。
+			RecognitionIntervalS: 300,
 			// 默认提示词，用户可改但不可清空（空时引擎拒绝分析）。
 			Prompt: DefaultVLMPrompt,
 			// 初始无 provider，用户通过 Add Model 添加。

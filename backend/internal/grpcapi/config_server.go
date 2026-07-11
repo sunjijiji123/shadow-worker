@@ -271,10 +271,12 @@ func protoToConfig(data *ConfigData) *config.Config {
 	} else {
 		cfg.VLM.CaptureRange = "active"
 	}
-	// on_demand gap 兼容旧配置：≤0 回落默认（switch 20 / motion 60）。
-	// 不用 config.Default() 的零值，因为 proto int32 零值 = 未设置。
-	cfg.VLM.OnDemandSwitchGapS = normalizeGap(data.VlmOnDemandSwitchGapS, 20)
-	cfg.VLM.OnDemandMotionGapS = normalizeGap(data.VlmOnDemandMotionGapS, 60)
+	// on_demand gap：≤0 回落默认，超出范围 clamp 到边界（防配置异常导致识别问题）。
+	// switch 5~600s（5秒~10分钟），motion 10~3600s（10秒~1小时）。
+	// switch < motion 是常见场景（切窗口该快采，同窗口活跃该慢采），但二者
+	// 独立配置不强制大小关系——用户可按需调。
+	cfg.VLM.OnDemandSwitchGapS = clampGap(data.VlmOnDemandSwitchGapS, 5, 600, 20)
+	cfg.VLM.OnDemandMotionGapS = clampGap(data.VlmOnDemandMotionGapS, 10, 3600, 60)
 	// prompt 不可为空：旧配置/异常数据缺该字段或被清空时回落默认，避免引擎拒绝分析。
 	cfg.VLM.Prompt = data.VlmPrompt
 	if strings.TrimSpace(cfg.VLM.Prompt) == "" {
@@ -368,11 +370,20 @@ func protoToConfig(data *ConfigData) *config.Config {
 	return cfg
 }
 
-// normalizeGap 把 proto 回来的 on_demand gap 字段规范化：≤0（未设置/非法）
-// 回落到 def 默认值。与 capture_range 的兼容处理同理。
-func normalizeGap(v int32, def int) int {
+// clampGap 把 proto 回来的 on_demand gap 字段规范化并限定范围：
+//   - ≤0（未设置/非法）回落到 def 默认值
+//   - < min 或 > max 则 clamp 到边界，防止配置出问题导致识别异常
+//     （如 switch_gap=0 会让每次切窗口都触发截图，瞬间打满 API 配额）
+func clampGap(v int32, min, max, def int) int {
 	if v <= 0 {
 		return def
 	}
-	return int(v)
+	n := int(v)
+	if n < min {
+		return min
+	}
+	if n > max {
+		return max
+	}
+	return n
 }
