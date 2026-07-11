@@ -531,7 +531,6 @@ Item {
         if (movementSampleField) movementSampleField.text = movementSampleMs
         if (movementIdleField) movementIdleField.text = movementIdleS
         if (movementPrecisionBox) movementPrecisionBox.currentIndex = precisionToIndex(movementPrecision)
-        if (pauseOnLockSwitch) pauseOnLockSwitch.checked = pauseOnLock
         if (idleInput) idleInput.text = idleTimeoutMin
     }
 
