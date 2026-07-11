@@ -1,5 +1,9 @@
 // Shadow Worker Qt 客户端入口。
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 #include <QAbstractGrpcChannel>
 #include <QApplication>
 #include <QDir>
@@ -10,7 +14,11 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QFile>
+#include <QMessageLogContext>
 #include <QQuickStyle>
+#include <QStandardPaths>
+#include <QTextStream>
+#include <QDateTime>
 
 #include "asr/asrclient.h"
 #include "asr/voiceclient.h"
@@ -33,21 +41,84 @@
 #include "window/textinjector.h"
 #include "audio/audiodevicemanager.h"
 
+#include <chrono>
+#include <ctime>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 
 static std::ofstream g_log;
 
+// client 日志目录：与后端日志统一放在 %APPDATA%/shadow-worker/logs/。
+// 文件名 client-YYYY-MM-DD.log，按天滚动（追加模式）。
+// 修复坑 #34：GUI 程序无控制台，qDebug/qWarning 全部丢弃，QML 运行时错误
+// 无从排查。此处用 qInstallMessageHandler 拦截所有 Qt 消息（含 QML 绑定错误、
+// 类型错误等），统一落盘。与后端 logging.go 范式一致（同一目录、按天文件）。
+static QString clientLogPath() {
+  // 直接读 APPDATA 环境变量（与后端 Go 的 os.UserConfigDir() 完全一致），
+  // 不用 QStandardPaths——它受 OrganizationName/ApplicationName 影响，
+  // 而 logMsg 在 setOrganizationName 之前就被调用了，路径可能拼错。
+  QString base;
+#ifdef _WIN32
+  wchar_t buf[MAX_PATH];
+  DWORD len = GetEnvironmentVariableW(L"APPDATA", buf, MAX_PATH);
+  if (len > 0 && len < MAX_PATH) {
+    base = QString::fromWCharArray(buf);
+  }
+#endif
+  if (base.isEmpty()) {
+    // 非Windows或读不到APPDATA时，回退到 QStandardPaths。
+    base = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+  }
+  QString dir = base + "/shadow-worker/logs";
+  QDir().mkpath(dir);
+  return dir + "/client-" + QDate::currentDate().toString("yyyy-MM-dd") + ".log";
+}
+
 static void logMsg(const std::string &msg) {
   if (!g_log.is_open()) {
-    // write to %TEMP% for portability (old hardcoded path no longer exists)
-    const char *tmp = std::getenv("TEMP");
-    std::string path = tmp ? tmp : ".";
-    path += "\\shadow-worker-client.log";
-    g_log.open(path, std::ios::app);
+    g_log.open(clientLogPath().toStdString(), std::ios::app);
   }
-  g_log << msg << std::endl;
+  // 加时间戳前缀，方便对照后端日志。
+  auto now = std::chrono::system_clock::now();
+  auto t = std::chrono::system_clock::to_time_t(now);
+  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now.time_since_epoch()) % 1000;
+  std::tm tm{};
+#ifdef _WIN32
+  localtime_s(&tm, &t);
+#else
+  localtime_r(&t, &tm);
+#endif
+  char ts[24];
+  std::strftime(ts, sizeof(ts), "%H:%M:%S", &tm);
+  g_log << ts << "." << std::setfill('0') << std::setw(3) << ms.count()
+        << " " << msg << std::endl;
   g_log.flush();
+}
+
+// qtMessageHandler 拦截所有 qDebug/qWarning/qCritical/qFatal 输出（含 QML 引擎
+// 产生的绑定错误、类型错误等），统一写入客户端日志文件。
+// 格式：[level] message (file:line)
+static void qtMessageHandler(QtMsgType type, const QMessageLogContext &ctx,
+                             const QString &msg) {
+  const char *levelStr = "DEBUG";
+  switch (type) {
+    case QtWarningMsg:     levelStr = "WARN";  break;
+    case QtCriticalMsg:    levelStr = "ERROR"; break;
+    case QtFatalMsg:       levelStr = "FATAL"; break;
+    case QtInfoMsg:        levelStr = "INFO";  break;
+    default:               levelStr = "DEBUG"; break;
+  }
+  std::string line = std::string("[") + levelStr + "] " + msg.toStdString();
+  // 附带 file:line（QML 错误的关键定位信息），过滤空的。
+  if (ctx.file && ctx.file[0] != '\0') {
+    line += " (" + std::string(ctx.file);
+    if (ctx.line > 0) line += ":" + std::to_string(ctx.line);
+    line += ")";
+  }
+  logMsg(line);
+  // Fatal 消息 Qt 默认会 abort，确保日志刷盘（logMsg 已 flush）。
 }
 
 int main(int argc, char *argv[]) {
@@ -60,6 +131,11 @@ int main(int argc, char *argv[]) {
     logMsg("[main] before QApplication");
     QApplication app(argc, argv);
     logMsg("[main] after QApplication");
+
+    // 装 Qt 消息处理器：拦截所有 qDebug/qWarning/qCritical（含 QML 运行时错误），
+    // 统一写入客户端日志文件。修复坑 #34（GUI 程序无控制台，Qt 消息全部丢弃）。
+    qInstallMessageHandler(qtMessageHandler);
+    logMsg("[main] Qt message handler installed (client log -> logs/client-*.log)");
 
     QApplication::setApplicationName("Shadow Worker");
     QApplication::setOrganizationName("ShadowWorker");

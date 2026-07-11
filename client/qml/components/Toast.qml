@@ -11,6 +11,13 @@ Rectangle {
     property string message: ""
     property string toastType: "success"   // success | error | warning
 
+    // 堆叠模式：动态创建后自动显示，淡出后自动销毁。
+    // 调用方只需 createObject(parent, {message: ..., toastType: ...})，
+    // Toast 自己管生命周期（show → 定时 → 淡出 → destroy）。
+    Component.onCompleted: {
+        if (message.length > 0) show(message, toastType)
+    }
+
     function show(text, type) {
         message = text
         if (type !== undefined) toastType = type
@@ -71,11 +78,10 @@ Rectangle {
         onTriggered: hideAnim.restart()
     }
 
-    NumberAnimation {
+    SequentialAnimation {
         id: hideAnim
-        target: root
-        property: "opacity"
-        to: 0
-        duration: 250
+        NumberAnimation { target: root; property: "opacity"; to: 0; duration: 250 }
+        // 淡出完成后销毁自身——堆叠容器（Column）自动让后面的消息上移。
+        ScriptAction { script: root.destroy() }
     }
 }

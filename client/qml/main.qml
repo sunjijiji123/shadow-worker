@@ -239,6 +239,7 @@ import ShadowWorker
                     }
                 }
                 TimelinePage {
+                    id: timelinePage
                     viewModel: timelineVm
                 }
                 SettingsPage {
@@ -250,13 +251,16 @@ import ShadowWorker
                 SystemPage {}
             }
 
-            // global toast (top-right)
-            Toast {
-                id: globalToast
+            // global toast 堆叠容器（右上角，多条消息从上往下堆叠）。
+            // 用 Column：子元素 destroy 后后面自动上移，无需手动算坐标。
+            Column {
+                id: toastStack
                 anchors.top: parent.top
                 anchors.right: parent.right
                 anchors.topMargin: 16
                 anchors.rightMargin: 16
+                spacing: 8
+                z: 1000
             }
         }
     }
@@ -264,8 +268,20 @@ import ShadowWorker
 
     // global toast helper for child pages
     // type: optional, "success" (default) | "error" | "warning"
+    // 每次调用动态创建一个 Toast，加入 toastStack（自动堆叠），淡出后自销毁。
+    // 最大 5 条：超过时删最旧的。
     function toast(text, type) {
-        globalToast.show(text, type)
+        // 限制最大条数：删最旧的（toastStack.children[0]）
+        while (toastStack.children.length > 4) {
+            toastStack.children[0].destroy()
+        }
+        var comp = Qt.createComponent("qrc:/qt/qml/ShadowWorker/qml/components/Toast.qml")
+        if (comp.status === Component.Ready) {
+            comp.createObject(toastStack, {
+                "message": text,
+                "toastType": type || "success"
+            })
+        }
     }
 
     // ================================================================
@@ -574,6 +590,16 @@ import ShadowWorker
             } else {
                 toast(qsTr("Save failed: ") + error, "error")
             }
+        }
+    }
+
+    // VLM 重试结果反馈（坑 #15：信号必须放全局 Connections）。
+    // 重试完成 → 关闭等待弹窗 + toast 结果。
+    Connections {
+        target: timelineVm
+        function onRetryFinished(ok, message) {
+            timelinePage.retryDialog.close()
+            toast(message, ok ? "success" : "error")
         }
     }
 
