@@ -471,6 +471,9 @@ import ShadowWorker
         }
         function onRecognized(path) {
             // ✦识别 按钮：截图已落盘 + 写剪贴板，强制触发 VLM 分析。
+            // 必须清 screenshotInFlight（与 onFinished 对齐），否则下次热键
+            // 被 startScreenshot() 的防重入挡掉，截图永久失效。
+            screenshotInFlight = false
             toast(qsTr("Screenshot saved"), "success")
             showScreenshotAnalysis(path)
         }
