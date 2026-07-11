@@ -24,6 +24,8 @@ Item {
 
     property var viewModel: null
     property string activeListTab: "worklog"
+    // 暴露重试等待弹窗给 main.qml（onRetryFinished 里关闭它）。
+    property alias retryDialog: retryProgressDialog
 
     // badge bg color for a category (translucent like HTML)
     function catBadgeBg(cat) {
@@ -258,12 +260,14 @@ Item {
                                 {v: "coding",  label: qsTr("Coding")},
                                 {v: "browser", label: qsTr("Browser")},
                                 {v: "chat",    label: qsTr("Chat")},
-                                {v: "office",  label: qsTr("Office")}
+                                {v: "office",  label: qsTr("Office")},
+                                {v: "failed",  label: qsTr("Failed")}
                             ]
                             delegate: Chip {
                                 text: modelData.label
                                 checked: (viewModel && viewModel.catFilter || "all") === modelData.v
-                                dotColor: modelData.v === "all" ? "transparent" : Theme.colorOf(modelData.v)
+                                dotColor: modelData.v === "all" ? "transparent"
+                                         : (modelData.v === "failed" ? Theme.muted : Theme.colorOf(modelData.v))
                                 onClicked: if (viewModel) viewModel.catFilter = modelData.v
                             }
                         }
@@ -312,6 +316,11 @@ Item {
                             required property string summary
                             required property string durationText
                             required property string failMeta
+                            // startTs/endTs 用于"重试失败 VLM"——传给 retryVLMFailures。
+                            // 用 required property int 绑定 model 的 startTs/endTs role。
+                            // （之前 qint64 会报 "not a type" 崩溃，但 int 是 QML 基本类型没问题。）
+                            required property int startTs
+                            required property int endTs
 
                             width: worklogList.width
                             spacing: 10
@@ -391,88 +400,168 @@ Item {
                                     Layout.alignment: Qt.AlignVCenter
                                 }
                             }
-                            // seg-summary: 缩进 + └ 前缀（线框稿 margin-left:30px, ::before content:'└'）
-                            // 有摘要时显示；VLM 识别失败时（failMeta 非空）改显失败提示 + 灰色感叹号。
-                            // failMeta 是 JSON {"kind","detail"}，解析后 hover 显示详情。
-                            // 灰色空心圆感叹号，与 muted 正文同色系，克制不抢眼（对齐 HTML .seg-summary.fail）。
-                            RowLayout {
-                                // summary 行始终显示：有摘要显示摘要，有失败显示失败，
-                                // 都没有（如冷却间隔内未采集）显示中性"未采集画面"提示。
+                            // seg-summary: 缩进 + └ 前缀（线框稿 margin-left:30px）。
+                            // 三种状态：
+                            //   正常（summary 非空）：└ + 多条摘要（每条换行带时间戳）
+                            //   失败（failMeta 非空）：└ ○! 未识别画面内容 + 重试按钮
+                            //   未采集（都空）：└ 未采集画面（中性，无感叹号无按钮）
+                            ColumnLayout {
                                 Layout.leftMargin: 30
                                 Layout.fillWidth: true
-                                spacing: 6
+                                spacing: 4
 
-                                // 失败标记：灰色空心圆 + 感叹号（仅 failMeta 非空时）。
-                                Item {
-                                    visible: failMeta.length > 0
-                                    width: 14; height: 14
-                                    Layout.alignment: Qt.AlignVCenter
-
-                                    Rectangle {
-                                        anchors.fill: parent
-                                        color: "transparent"
-                                        border.width: 1.5
-                                        border.color: Theme.muted
-                                        radius: width / 2
-                                    }
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "!"
-                                        color: Theme.muted
-                                        font.pixelSize: 10
-                                        font.bold: true
-                                    }
-                                }
-
-                                Text {
-                                    // 三种状态：
-                                    //   失败（failMeta 非空）：显示失败提示 + 左侧感叹号
-                                    //   正常（summary 非空）：显示 └ + VLM 摘要
-                                    //   未采集（都空）：中性提示"未采集画面"（无感叹号，不是错误）
-                                    text: failMeta.length > 0
-                                          ? root.failKindFromMeta(failMeta)
-                                          : (summary.length > 0
-                                             ? ("└ " + summary)
-                                             : ("└ " + qsTr("未采集画面")))
-                                    color: Theme.muted
-                                    font.pixelSize: 12
+                                // 摘要/失败/未采集 文本。
+                                // 正常：后端已含 └ 前缀 + 后续行空格对齐，直接显示。
+                                // 失败：感叹号+└+失败提示 放一行（感叹号在 └ 右边、文本左边）。
+                                // 未采集：└ 未采集画面。
+                                RowLayout {
                                     Layout.fillWidth: true
-                                    elide: Text.ElideRight
-                                }
+                                    spacing: 6
 
-                                // 失败行 hover 显示错误详情气泡。
-                                MouseArea {
-                                    id: failHover
-                                    anchors.fill: parent
-                                    enabled: failMeta.length > 0
-                                    hoverEnabled: true
-                                    cursorShape: enabled && containsMouse ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                    // 行首图标：
+                                    //   失败（failMeta 非空）：警告图标（Canvas 空心圆+感叹号），替代 └
+                                    //   正常/未采集：└ 前缀含在 Text 里
+                                    Item {
+                                        visible: failMeta.length > 0
+                                        Layout.preferredWidth: 16
+                                        Layout.preferredHeight: 16
+                                        Layout.alignment: Qt.AlignVCenter
 
-                                    onContainsMouseChanged: {
-                                        if (containsMouse && failMeta.length > 0) {
-                                            var parsed = JSON.parse(failMeta)
-                                            failTip.title = root.failKindFromMeta(failMeta)
-                                            failTip.text = parsed.detail || ""
-                                            failTip.show()
-                                        } else {
-                                            failTip.hide()
+                                        Canvas {
+                                            anchors.fill: parent
+                                            onPaint: {
+                                                var ctx = getContext("2d")
+                                                ctx.reset()
+                                                ctx.strokeStyle = Theme.muted
+                                                ctx.fillStyle = Theme.muted
+                                                ctx.lineWidth = 1.5
+                                                ctx.beginPath()
+                                                ctx.arc(8, 8, 6.5, 0, 2 * Math.PI)
+                                                ctx.stroke()
+                                                ctx.beginPath()
+                                                ctx.moveTo(8, 4.5)
+                                                ctx.lineTo(8, 9)
+                                                ctx.stroke()
+                                                ctx.beginPath()
+                                                ctx.arc(8, 11, 0.8, 0, 2 * Math.PI)
+                                                ctx.fill()
+                                            }
+                                        }
+
+                                        // hover 仅覆盖警告图标区域。
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.WhatsThisCursor
+                                            onContainsMouseChanged: {
+                                                if (containsMouse && failMeta.length > 0) {
+                                                    var detail = ""
+                                                    try { detail = JSON.parse(failMeta).detail || "" } catch(e) {}
+                                                    failDetailTip.tipText = detail.length > 0
+                                                        ? (root.failKindFromMeta(failMeta) + "\n" + detail)
+                                                        : root.failKindFromMeta(failMeta)
+                                                    var pos = mapToItem(root, width/2, height)
+                                                    failDetailTip.showAt(pos.x, pos.y)
+                                                } else {
+                                                    failDetailTip.hide()
+                                                }
+                                            }
                                         }
                                     }
 
-                                    // ToolTip 内置跟随鼠标定位（x/y 基于鼠标坐标），
-                                    // delay 0 立即显示，timeout -1 持续到鼠标移开 hide()。
-                                    ToolTip {
-                                        id: failTip
-                                        parent: failHover
-                                        delay: 0
-                                        timeout: -1
-                                        // 定位到鼠标右下方（避开遮挡文字）。
-                                        x: failHover.mouseX + 12
-                                        y: failHover.mouseY + 12
-                                        width: 300
+                                    // 文本区域：
+                                    //   失败（failMeta 非空）：失败提示 + 重试按钮
+                                    //   正常（summary 非空）：多条摘要用 Repeater 逐行渲染（每行独立 Text，精确对齐）
+                                    //   未采集：└ 冷却间隔内未采集
+                                    // summary 可能是 JSON 数组 [{"time":"09:00","text":"..."}] 或旧格式纯文本。
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 2
+
+                                        // 失败提示（单行）
+                                        Text {
+                                            visible: failMeta.length > 0
+                                            text: root.failKindFromMeta(failMeta)
+                                            color: Theme.muted
+                                            font.pixelSize: 12
+                                            Layout.fillWidth: true
+                                        }
+
+                                        // 正常摘要：解析 summary JSON 数组，逐行渲染。
+                                        // 每行格式 "└ HH:mm 摘要内容"，统一 leftMargin 无需空格对齐。
+                                        Repeater {
+                                            // 解析 summary：JSON 数组 → 列表；纯文本 → 单条。
+                                            model: {
+                                                if (failMeta.length > 0 || summary.length === 0) return []
+                                                try {
+                                                    var parsed = JSON.parse(summary)
+                                                    if (Array.isArray(parsed)) {
+                                                        return parsed.map(function(e) {
+                                                            return "└ " + e.time + " " + e.text
+                                                        })
+                                                    }
+                                                } catch(e) {}
+                                                // 旧格式纯文本：按行分割。
+                                                return summary.split("\n").filter(function(l) { return l.length > 0 })
+                                            }
+                                            delegate: Text {
+                                                text: modelData
+                                                color: Theme.muted
+                                                font.pixelSize: 12
+                                                Layout.fillWidth: true
+                                                wrapMode: Text.WordWrap
+                                            }
+                                        }
+
+                                        // 未采集（summary 空 + failMeta 空）
+                                        Text {
+                                            visible: failMeta.length === 0 && summary.length === 0
+                                            text: "└ " + qsTr("冷却间隔内未采集")
+                                            color: Theme.muted
+                                            font.pixelSize: 12
+                                            Layout.fillWidth: true
+                                        }
+                                    }
+
+                                    // 失败行的「重试」按钮：文本右侧。
+                                    // 重试中显示"识别中..."并禁用（viewModel.retrying）。
+                                    Rectangle {
+                                        visible: failMeta.length > 0
+                                        Layout.alignment: Qt.AlignVCenter
+                                        width: retryBtn.implicitWidth + 16
+                                        height: 22
+                                        radius: 4
+                                        color: retryMa.containsMouse && !retryMa.disabled ? Theme.accentBg2 : "transparent"
+                                        border.width: 1
+                                        border.color: Theme.rule
+                                        opacity: viewModel && viewModel.retrying ? 0.5 : 1.0
+
+                                        Text {
+                                            id: retryBtn
+                                            anchors.centerIn: parent
+                                            text: (viewModel && viewModel.retrying)
+                                                  ? qsTr("识别中...")
+                                                  : qsTr("重试")
+                                            color: Theme.muted
+                                            font.pixelSize: 11
+                                        }
+                                        MouseArea {
+                                            id: retryMa
+                                            property bool disabled: viewModel && viewModel.retrying
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: disabled ? Qt.WaitCursor : Qt.PointingHandCursor
+                                            enabled: !disabled
+                                            onClicked: {
+                                                retryConfirm.startTs = startTs
+                                                retryConfirm.endTs = endTs
+                                                retryConfirm.open()
+                                            }
+                                        }
                                     }
                                 }
                             }
+
                             // 分割线（线框稿 .seg-row border-bottom）
                             Rectangle {
                                 Layout.fillWidth: true
@@ -576,6 +665,86 @@ Item {
                     }
                 }
             }
+        }
+    }
+
+    // 自定义错误详情气泡（替代系统 ToolTip，样式对齐 Theme）。
+    // hover 感叹号时调 showAt(x,y) 定位显示，x/y 是 root 坐标系。
+    Item {
+        id: failDetailTip
+        property string tipText: ""
+        property real tipX: 0
+        property real tipY: 0
+        visible: false
+        z: 1000
+        width: 300
+        height: failTipCol.implicitHeight + 20
+
+        function showAt(mx, my) {
+            tipX = mx
+            tipY = my
+            visible = true
+        }
+        function hide() { visible = false }
+
+        // 定位在指定坐标下方；靠右边界时翻到左侧。
+        x: tipX + 300 + 20 > root.width ? tipX - 300 - 12 : tipX - 8
+        y: tipY + 8
+
+        Rectangle {
+            anchors.fill: parent
+            color: Theme.bg3
+            border.width: 1
+            border.color: Theme.rule
+            radius: 6
+
+            ColumnLayout {
+                id: failTipCol
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 2
+
+                Text {
+                    Layout.fillWidth: true
+                    text: failDetailTip.tipText
+                    color: Theme.muted
+                    font.pixelSize: 11
+                    wrapMode: Text.WordWrap
+                }
+            }
+        }
+        // 点击关闭。
+        MouseArea {
+            anchors.fill: parent
+            onClicked: failDetailTip.hide()
+        }
+    }
+
+    // 重试确认弹窗：点击段内「重试」按钮时弹出，二次确认避免误触。
+    ConfirmDialog {
+        id: retryConfirm
+        parent: Overlay.overlay
+        property int startTs: 0
+        property int endTs: 0
+        heading: qsTr("重新识别")
+        message: qsTr("将重新识别该截图，可能需要等待几秒。是否继续？")
+        confirmText: qsTr("重试")
+        onConfirmed: {
+            if (viewModel) {
+                viewModel.retryVLMFailures(retryConfirm.startTs, retryConfirm.endTs, "")
+                retryProgressDialog.open()
+            }
+        }
+    }
+
+    // 重试等待弹窗（模态转圈+超时保护）。
+    // retryFinished 信号在 main.qml 全局监听（坑 #15），关闭此弹窗 + toast 结果。
+    RetryProgressDialog {
+        id: retryProgressDialog
+        parent: Overlay.overlay
+        onTimeout: {
+            var win = ApplicationWindow.window
+            if (win && win.toast) win.toast(qsTr("识别超时，请稍后刷新查看结果"), "warning")
         }
     }
 }

@@ -277,6 +277,7 @@ qt_add_qml_module(shadow-worker-client
         qml/components/ResultBubble.qml
         qml/components/UpdateBadge.qml
         qml/components/UpdateDialog.qml
+        qml/components/RetryProgressDialog.qml
         qml/RecordingWindow.qml
         qml/ScreenshotResultWindow.qml
         # pages
@@ -354,6 +355,7 @@ qt_add_translations(shadow-worker-client
         ${CMAKE_SOURCE_DIR}/qml/components/ResultBubble.qml
         ${CMAKE_SOURCE_DIR}/qml/components/UpdateBadge.qml
         ${CMAKE_SOURCE_DIR}/qml/components/UpdateDialog.qml
+        ${CMAKE_SOURCE_DIR}/qml/components/RetryProgressDialog.qml
         ${CMAKE_SOURCE_DIR}/qml/pages/OverviewPage.qml
         ${CMAKE_SOURCE_DIR}/qml/pages/TimelinePage.qml
         ${CMAKE_SOURCE_DIR}/qml/pages/SettingsPage.qml

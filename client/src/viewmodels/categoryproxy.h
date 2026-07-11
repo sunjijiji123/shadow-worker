@@ -26,6 +26,11 @@ class RoleFilterProxyModel : public QSortFilterProxyModel {
   // filterValue 是期望的等值（如 "coding"）。空串或 "all" 表示不过滤。
   Q_PROPERTY(
       QString filterValue READ filterValue WRITE setFilterValue NOTIFY filterValueChanged)
+  // specialFilter：特殊过滤模式（"failed" = failMeta 非空的行）。
+  // 当 filterValue == specialFilter 时，不走等值匹配，改走 specialAcceptsRow。
+  // 用于"分析失败"筛选：在 category 维度旁边加一个特殊选项，筛出有 VLM 失败的段。
+  Q_PROPERTY(QString specialFilter READ specialFilter WRITE setSpecialFilter
+                 NOTIFY specialFilterChanged)
 
  public:
   explicit RoleFilterProxyModel(QObject *parent = nullptr);
@@ -36,9 +41,13 @@ class RoleFilterProxyModel : public QSortFilterProxyModel {
   QString filterValue() const { return m_value; }
   void setFilterValue(const QString &value);
 
+  QString specialFilter() const { return m_special; }
+  void setSpecialFilter(const QString &v);
+
  signals:
   void filterRoleNameChanged();
   void filterValueChanged();
+  void specialFilterChanged();
 
  protected:
   bool filterAcceptsRow(int sourceRow,
@@ -50,6 +59,7 @@ class RoleFilterProxyModel : public QSortFilterProxyModel {
 
   QString m_roleName;
   QString m_value;
+  QString m_special;  // 特殊过滤值（如 "failed"），匹配时走 specialAcceptsRow
   // mutable：resolveRole 在 const filterAcceptsRow 里做懒解析缓存。
   mutable int m_roleId = -1;
   mutable bool m_roleResolved = false;
