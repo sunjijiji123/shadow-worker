@@ -48,7 +48,7 @@
     h2 { font-size: 20px; margin-top: 48px; margin-bottom: 16px; border-left: 4px solid var(--accent); padding-left: 12px; }
     .note { color: var(--muted); font-size: 14px; margin-bottom: 16px; }
 
-    .wireframe { background: var(--bg2); border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; margin-bottom: 32px; display: flex; flex-direction: column; max-height: 65vh; }
+    .wireframe { background: var(--bg2); border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; margin-bottom: 32px; display: flex; flex-direction: column; }
     .window-titlebar { height: 36px; background: var(--bg3); display: flex; align-items: center; padding: 0 12px; gap: 8px; }
     .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--rule); }
     .dot.red { background: #ef4444; }
@@ -579,6 +579,73 @@
     }
     .demo-hint b { color: var(--accent); }
 
+    /* ===== 截图工具栏 ===== */
+    .shot-preview { background: #1a1a1e; border: 1px solid var(--rule); border-radius: 12px; margin-top: 16px; overflow: hidden; }
+    .shot-preview-label { font-size: 12px; color: var(--muted); padding: 10px 16px 0; }
+    .shot-stage { position: relative; height: 340px; background: linear-gradient(135deg, #2d2d35 0%, #1e1e24 100%); margin: 12px 16px 0; border-radius: 8px; overflow: hidden; }
+    .shot-stage .fake-win { position: absolute; background: #25252b; border: 1px solid #3a3a42; border-radius: 6px; font-size: 11px; color: var(--muted); display: flex; align-items: center; justify-content: center; }
+    .shot-stage .fw1 { top: 20px; left: 24px; width: 180px; height: 110px; }
+    .shot-stage .fw2 { top: 20px; right: 24px; width: 200px; height: 80px; }
+    .shot-stage .fw3 { bottom: 30px; left: 60px; width: 220px; height: 90px; }
+    .shot-mask { position: absolute; inset: 0; background: rgba(0,0,0,0.45); }
+    .shot-sel { position: absolute; border: 2px solid #3b82f6; box-shadow: 0 0 0 1px rgba(0,0,0,0.3); }
+    .shot-sel .corner-tl, .shot-sel .corner-tr, .shot-sel .corner-bl, .shot-sel .corner-br { content: ''; position: absolute; width: 14px; height: 14px; border: 3px solid #3b82f6; }
+    .shot-sel .corner-tl { top: -2px; left: -2px; border-right: none; border-bottom: none; }
+    .shot-sel .corner-tr { top: -2px; right: -2px; border-left: none; border-bottom: none; }
+    .shot-sel .corner-bl { bottom: -2px; left: -2px; border-right: none; border-top: none; }
+    .shot-sel .corner-br { bottom: -2px; right: -2px; border-left: none; border-top: none; }
+    .shot-size-tag { position: absolute; top: -28px; left: 0; background: #3b82f6; color: #fff; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 3px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .shot-toolbar { display: flex; align-items: center; gap: 2px; background: #2d2d33; border: 1px solid #3a3a42; border-radius: 8px; padding: 5px 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.4); width: fit-content; }
+    .shtool { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 5px; cursor: pointer; color: #c0c0c8; transition: background .12s, color .12s; position: relative; flex-shrink: 0; }
+    .shtool:hover { background: rgba(255,255,255,0.08); color: #fff; }
+    .shtool.active { background: #3b82f6; color: #fff; }
+    .shtool:disabled, .shtool.disabled { color: #555; cursor: default; }
+    .shtool:disabled:hover, .shtool.disabled:hover { background: none; color: #555; }
+    .shtool svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .shtool-sep { width: 1px; height: 20px; background: #3a3a42; margin: 0 3px; flex-shrink: 0; }
+    .shcolors { display: flex; gap: 4px; align-items: center; padding: 0 2px; }
+    .shcolor { width: 18px; height: 18px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; flex-shrink: 0; transition: transform .12s; }
+    .shcolor:hover { transform: scale(1.15); }
+    .shcolor.active { border-color: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,0.3); }
+    .shpens { display: flex; gap: 2px; align-items: center; padding: 0 2px; }
+    .shpen { width: 28px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 5px; cursor: pointer; flex-shrink: 0; transition: background .12s; }
+    .shpen:hover { background: rgba(255,255,255,0.08); }
+    .shpen.active { background: rgba(59,130,246,0.25); }
+    .shpen-dot { border-radius: 50%; background: #c0c0c8; }
+    .shpen.active .shpen-dot { background: #3b82f6; }
+    .shaction { display: inline-flex; align-items: center; gap: 4px; height: 30px; padding: 0 12px; border-radius: 5px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0; transition: opacity .12s; }
+    .shaction svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .shaction-confirm { background: #10b981; color: #000; }
+    .shaction-cancel { background: #ef4444; color: #fff; }
+    .shaction-vlm { background: #3b82f6; color: #fff; }
+    .shot-anno-demo { position: absolute; pointer-events: none; }
+
+    /* ===== 截图分析结果窗口 ===== */
+    .shot-result { width: 420px; background: var(--bg3); border: 1px solid var(--rule); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+    .shot-result-header { display: flex; justify-content: space-between; align-items: center; }
+    .shot-result-title { font-size: 14px; font-weight: 700; cursor: move; }
+    .shot-result-close { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: var(--muted); cursor: pointer; transition: .12s; }
+    .shot-result-close:hover { background: rgba(239,68,68,0.15); color: var(--danger); }
+    .shot-result-close svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+    .shot-result-thumb { height: 104px; background: var(--bg); border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+    .shot-result-thumb-placeholder { width: 100%; height: 100%; background: linear-gradient(135deg, #2d2d35 0%, #1e1e24 100%); display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--muted); }
+    .shot-result-body { background: var(--bg2); border-radius: 6px; padding: 12px; flex: 1; min-height: 80px; display: flex; flex-direction: column; gap: 8px; }
+    .shot-result-loading { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+    .shot-result-loading .dots { display: flex; gap: 4px; }
+    .shot-result-loading .dots span { width: 6px; height: 6px; border-radius: 50%; background: #3b82f6; animation: bounceDot 0.55s ease-in-out infinite alternate; }
+    .shot-result-loading .dots span:nth-child(2) { animation-delay: 0.12s; }
+    .shot-result-loading .dots span:nth-child(3) { animation-delay: 0.24s; }
+    .shot-result-error { font-size: 13px; color: var(--danger); }
+    .shot-result-summary { font-size: 12px; color: var(--ink); line-height: 1.6; max-height: 120px; overflow-y: auto; }
+    .shot-result-actions { display: flex; gap: 8px; }
+    .shot-result-btn { flex: 1; height: 32px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px; transition: opacity .12s; }
+    .shot-result-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .shot-result-btn-copy { background: var(--accent); color: #000; }
+    .shot-result-btn-copy:hover { background: var(--accent-dim); }
+    .shot-result-btn-copy.disabled { opacity: 0.4; cursor: default; }
+    .shot-result-btn-retake { background: var(--rule); color: var(--ink); }
+    .shot-result-btn-retake:hover { background: var(--bg2); }
+
     @media (max-width: 768px) {
       .app-body { flex-direction: column; }
       .sidebar { width: 100%; display: flex; overflow-x: auto; border-right: none; border-bottom: 1px solid var(--rule); }
@@ -1101,8 +1168,8 @@
           <div class="tab-strip" id="settings-tabs">
             <div class="tab active" data-tab="voice">语音输入</div>
             <div class="tab" data-tab="apps">行为采集</div>
-            <div class="tab" data-tab="vision">图像识别</div>
-            <div class="tab" data-tab="polish">文字润色</div>
+            <div class="tab" data-tab="vision">视觉</div>
+            <div class="tab" data-tab="polish">文本润色</div>
             <div class="tab" data-tab="personal">个人提示词</div>
             <div class="tab" data-tab="tools">快捷工具</div>
           </div>
@@ -1111,13 +1178,13 @@
           <div class="section" data-tab="apps">
             <div class="card">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                <div class="card-title">采集应用</div>
+                <div class="card-title">跟踪应用</div>
                 <div style="display:flex;gap:8px;">
                   <span class="btn btn-ghost btn-sm" id="scan-apps-btn">扫描应用</span>
                   <span class="btn btn-ghost btn-sm" id="add-whitelist-app">+ 添加</span>
                 </div>
               </div>
-              <div class="card-desc">只有这里的应用才会被记录到时间轴；VLM 在活动窗口模式下也只采集这些应用的窗口。添加时进入“选窗口”遮罩，按进程路径识别，保存到 Go 管理的 config.yaml。</div>
+              <div class=”card-desc”>只有此处列出的应用会被记录到时间轴；在活动窗口模式下，VLM 也只截取这些应用的窗口。添加时会进入窗口选择器，按进程路径识别，保存到 Go 管理的 config.yaml。</div>
               <div id="whitelist-list" style="display:flex;flex-direction:column;gap:10px;margin-top:12px;">
                 <div class="whitelist-app-row" data-app="cursor">
                   <div class="app-icon" style="background:#3B82F6;">Cr</div>
@@ -1165,18 +1232,18 @@
             </div>
 
             <div class="card">
-              <div class="card-title">采集规则</div>
+              <div class="card-title">截图规则</div>
               <div class="quick-switch">
                 <div>
                   <div style="font-size:13px;">锁屏时暂停采集</div>
-                  <div style="font-size:12px;color:var(--muted);">锁屏后自动停止记录，解锁后继续</div>
+                  <div style="font-size:12px;color:var(--muted);">锁屏自动停止录音，解锁自动恢复</div>
                 </div>
                 <div class="toggle on" data-toggle></div>
               </div>
               <div class="quick-switch">
                 <div>
                   <div style="font-size:13px;">空闲超时阈值</div>
-                  <div style="font-size:12px;color:var(--muted);">超过设定时间无键盘鼠标操作则标记为离开</div>
+                  <div style="font-size:12px;color:var(--muted);">超过此时间无键鼠活动则标记为离开</div>
                 </div>
                 <div style="display:flex;align-items:center;gap:8px;">
                   <input class="input" value="5" style="width:50px;text-align:center;">
@@ -1192,14 +1259,14 @@
               <div style="display:flex;justify-content:space-between;align-items:center;">
                 <div>
                   <div class="card-title">录音热键</div>
-                  <div class="card-desc">开启后，可通过全局热键触发语音输入；热键冲突时会自动检测并提示。</div>
+                  <div class="card-desc">启用全局热键触发语音输入。自动检测冲突。</div>
                 </div>
                 <div class="toggle on" data-toggle id="recording-master-toggle"></div>
               </div>
               <div id="recording-mode-area" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--rule);">
                 <div class="radio-group" style="margin-bottom:16px;">
-                  <label class="radio selected" data-mode="hold"><span class="radio-dot"></span> 长按录音</label>
-                  <label class="radio" data-mode="press"><span class="radio-dot"></span> 按一次录音</label>
+                  <label class="radio selected" data-mode="hold"><span class="radio-dot"></span> 按住录音</label>
+                  <label class="radio" data-mode="press"><span class="radio-dot"></span> 按下录音</label>
                 </div>
                 <div class="form-row" style="align-items:flex-end;">
                   <div class="field" style="flex:1;"><div class="label">修饰键</div><div class="select-wrap" data-options="无,Ctrl,Alt,Win,Ctrl + Shift"><div class="select">Ctrl + Shift</div></div></div>
@@ -1286,24 +1353,24 @@
               </div>
             </div>
 
-            <!-- 识别结果输出方式 -->
+            <!-- 识别结果输出 -->
             <div class="card">
-              <div class="card-title">识别结果输出方式</div>
-              <div class="card-desc">语音识别完成（若开启润色则为润色后结果）后，结果如何呈现。</div>
+              <div class="card-title">识别结果输出</div>
+              <div class="card-desc">最终文本（ASR 结果，或启用润色后的润色结果）的交付方式。</div>
               <div class="radio-group" style="margin-top:12px;">
-                <label class="radio selected" data-mode="preview"><span class="radio-dot"></span> 预览模式 · 弹出气泡，手动复制粘贴</label>
-                <label class="radio" data-mode="inject"><span class="radio-dot"></span> 直接注入模式 · 自动写入当前焦点输入框</label>
+                <label class="radio selected" data-mode="preview"><span class="radio-dot"></span> 预览 · 显示气泡，手动复制</label>
+                <label class="radio" data-mode="inject"><span class="radio-dot"></span> 直接注入 · 自动输入到焦点输入框</label>
               </div>
             </div>
           </div>
 
-          <!-- 图像识别 -->
+          <!-- 视觉 -->
           <div class="section" data-tab="vision">
             <div class="card vlm-master-card">
               <div style="display:flex;justify-content:space-between;align-items:center;">
                 <div>
                   <div class="card-title">VLM 屏幕理解</div>
-                  <div class="card-desc">开启后，可定时或按热键调用 VLM 理解当前屏幕内容，并写入时间轴。</div>
+                  <div class="card-desc">启用后，VLM 会按计划或热键调用，理解当前屏幕并写入时间轴。</div>
                 </div>
                 <div class="toggle on" data-toggle id="vlm-master-toggle"></div>
               </div>
@@ -1318,9 +1385,10 @@
                   </div>
                 </div>
                 <div id="vlm-ondemand-config" style="display:none;">
-                  <div class="form-row" style="align-items:flex-end;">
-                    <div class="field" style="flex:0.6"><div class="label">修饰键</div><div class="select-wrap" data-options="无,Ctrl,Alt,Win,Ctrl + Shift"><div class="select">Ctrl + Shift</div></div></div>
-                    <div class="field"><div class="label">按键</div><input class="input" value="V"></div>
+                  <div class="card-desc" style="margin-bottom:12px;">切换窗口或活跃工作时按需截图。设置冷却以避免频繁截图。</div>
+                  <div class="form-row">
+                    <div class="field"><div class="label">窗口切换冷却 (秒)</div><input class="input" value="30"></div>
+                    <div class="field"><div class="label">活动冷却 (秒)</div><input class="input" value="60"></div>
                   </div>
                 </div>
               </div>
@@ -1366,17 +1434,23 @@
             </div>
 
             <div class="card">
-              <div class="card-title">画面采集范围</div>
-              <div class="card-desc">VLM 截图与行为采集时采集的画面范围。</div>
+              <div class="card-title">截图范围</div>
+              <div class="card-desc">VLM 截图和行为采集时捕获的屏幕区域。</div>
               <div class="radio-group" style="margin-top:12px;">
-                <label class="radio"><span class="radio-dot"></span> 整个屏幕（所有显示器）</label>
-                <label class="radio selected"><span class="radio-dot"></span> 仅当前活动窗口</label>
+                <label class="radio"><span class="radio-dot"></span> 整屏（所有显示器）</label>
+                <label class="radio selected"><span class="radio-dot"></span> 仅活动窗口</label>
               </div>
-              <div class="card-desc" style="margin-top:12px;color:var(--accent);">提示：仅当前活动窗口模式下，VLM 只采集「行为采集」白名单中的应用窗口。</div>
+              <div class="card-desc" style="margin-top:12px;color:var(--accent);">提示：在活动窗口模式下，VLM 只截取行为采集白名单中列出的应用窗口。</div>
             </div>
 
             <div class="card">
-              <div class="card-title">采集参数</div>
+              <div class="card-title">VLM 提示词</div>
+              <div class="card-desc">分析截图时发给视觉模型的提示词。所有模型共用，不能为空。</div>
+              <textarea class="textarea" style="margin-top:8px;" placeholder="请用一句话描述用户在这张截图里正在做什么..."></textarea>
+            </div>
+
+            <div class="card">
+              <div class="card-title">截图参数</div>
               <div class="form-row" style="margin-top:12px;">
                 <div class="field"><div class="label">采样间隔 (ms)</div><input class="input" value="300"></div>
                 <div class="field"><div class="label">空闲超时 (s)</div><input class="input" value="10"></div>
@@ -1385,14 +1459,14 @@
             </div>
           </div>
 
-          <!-- 文字润色 -->
+          <!-- 文本润色 -->
           <div class="section" data-tab="polish">
             <div class="card">
               <div style="display:flex;justify-content:space-between;align-items:center;">
                 <div class="card-title">自动润色</div>
                 <div class="toggle on" data-toggle></div>
               </div>
-              <div class="card-desc">开启后，ASR 识别结果会先经过 LLM 润色再显示/注入。</div>
+              <div class="card-desc">启用后，ASR 结果会在显示/注入前经过 LLM 润色。</div>
             </div>
 
             <div class="card llm-card llm-service-card" data-kind="llm">
@@ -1436,7 +1510,7 @@
 
             <div class="card">
               <div class="card-title">润色提示词</div>
-              <div class="card-desc">系统默认提示词 + 用户自定义内容，保存到 Go 管理的 config.yaml。</div>
+              <div class="card-desc">用于润色 ASR 结果的系统提示词。默认使用内置提示词；可编辑自定义。</div>
               <textarea class="textarea">你是中文口语润色专家。将语音识别文本整理为自然流畅的文字，要求：
 1. 保留说话人的语气、情绪和表达风格
 2. 去除无意义的口语填充词（嗯、啊、呃、那个、就是说、然后呢）
@@ -1454,7 +1528,7 @@
                 <div class="card-title">快捷提示词注入</div>
                 <div class="toggle on" data-toggle></div>
               </div>
-              <div class="card-desc">开启后，前缀键 + 自定义字母/数字可把对应提示词注入到 ASR 结果前。</div>
+              <div class="card-desc">启用后，前缀键 + 自定义字母/数字会在 ASR 结果前注入对应的提示词。</div>
               <div class="form-row" style="margin-top:14px;">
                 <div class="field" style="max-width:200px;"><div class="label">提示词前缀键</div><div class="select-wrap" id="prompt-prefix" data-options="Ctrl,Alt,Win"><div class="select">Ctrl</div></div></div>
               </div>
@@ -1465,7 +1539,7 @@
                 <div class="card-title">个人提示词列表</div>
                 <span class="btn btn-primary btn-sm" id="add-personal-prompt">+ 添加</span>
               </div>
-              <div class="card-desc">每条提示词对应一个快捷键，注入时会替换为完整提示词内容。</div>
+              <div class="card-desc">每个提示词对应一个快捷键。注入时会替换为完整的提示词内容。</div>
               <div id="personal-prompt-list">
                 <div class="prompt-item">
                   <div class="prompt-header">
@@ -1516,35 +1590,35 @@
           <!-- 快捷工具 -->
           <div class="section" data-tab="tools">
             <div class="card">
-              <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
-                <div>
-                  <div class="card-title">桌面截图</div>
-                  <div class="card-desc">按热键拖拽框选屏幕区域，截图保存并复制到剪贴板。</div>
-                </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                <div style="font-size:14px;">启用截图快捷键</div>
                 <div class="toggle on" data-toggle></div>
               </div>
-              <div class="form-row">
+              <div class="card-desc">按下快捷键拖拽框选屏幕区域。裁剪后的图片会保存并复制到剪贴板。</div>
+              <div class="form-row" style="margin-top:12px;">
                 <div class="field" style="flex:0.6"><div class="label">修饰键</div><div class="select-wrap" data-options="Ctrl + Shift,Ctrl + Alt,Alt + Shift"><div class="select">Ctrl + Shift</div></div></div>
                 <div class="field"><div class="label">按键</div><input class="input" value="S"></div>
               </div>
-              <div class="field" style="margin-top:12px;">
-                <div class="label">保存位置</div>
-                <input class="input" value="%APPDATA%\shadow-worker\screenshots" readonly>
-              </div>
+              <div style="margin-top:12px;font-size:11px;color:var(--muted);">保存位置: %APPDATA%\shadow-worker\screenshots</div>
               <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:14px;border-top:1px solid var(--rule);">
                 <div>
                   <div style="font-size:14px;">截图后自动 VLM 分析</div>
-                  <div class="card-desc" style="margin:2px 0 0;">截图后自动调用已配置的 VLM 理解画面内容（需先在「图像识别」配置 VLM 模型）。</div>
+                  <div class="card-desc" style="margin:2px 0 0;">截图后自动调用已配置的 VLM 理解画面内容（需先在「视觉」配置 VLM 模型）。</div>
                 </div>
                 <div class="toggle" data-toggle></div>
+              </div>
+              <div class="field" style="margin-top:14px;">
+                <div class="label" style="font-size:13px;color:var(--ink);">截图识别提示词</div>
+                <textarea class="textarea" placeholder="详细描述这张截图的内容..." style="margin-top:6px;"></textarea>
               </div>
               <div style="margin-top:16px;"><span class="btn btn-primary">立即截图</span></div>
             </div>
             <div class="card">
               <div class="card-title">数据管理</div>
+              <div class="card-desc">本地 SQLite 数据库和截图缓存。</div>
               <div style="display:flex;gap:12px;margin-top:12px;">
                 <span class="btn btn-ghost">打开数据目录</span>
-                <span class="btn btn-danger">清空数据</span>
+                <span class="btn btn-danger">清除数据</span>
               </div>
             </div>
           </div>
@@ -1774,7 +1848,145 @@
     <div class="note" style="margin-top:12px;">结果气泡位于录音条正上方；实时识别时文字在浮窗上方从右往左滚动；润色中替换为蓝色跳动点。</div>
   </div>
 
-</div>
+  <!-- ============ 3. 截图工具栏 ============ -->
+  <h2>3. 截图工具栏</h2>
+  <div class="note">按热键触发截图，拖拽框选区域后进入标注模式。工具栏位于选区下方，仿微信截图风格。点击下方工具图标可预览选中态。</div>
+  <div class="wireframe" style="max-height:none;">
+    <div style="padding:24px;display:flex;flex-direction:column;gap:24px;">
+
+      <!-- 完整截图场景 -->
+      <div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:10px;">完整截图场景：桌面遮罩 + 选区挖洞 + 标注预览 + 工具栏</div>
+        <div class="shot-stage" id="shotStage1">
+          <div class="fake-win fw1">VS Code</div>
+          <div class="fake-win fw2">浏览器</div>
+          <div class="fake-win fw3">终端</div>
+          <div class="shot-mask"></div>
+          <div class="shot-sel" style="top: 30px; left: 40px; width: 280px; height: 200px;">
+            <span class="corner-tl"></span><span class="corner-tr"></span>
+            <span class="corner-bl"></span><span class="corner-br"></span>
+            <span class="shot-size-tag">280 × 200</span>
+            <svg class="shot-anno-demo" style="top:30px;left:20px;width:120px;height:60px;" viewBox="0 0 120 60">
+              <rect x="2" y="2" width="116" height="56" rx="2" fill="none" stroke="#ef4444" stroke-width="2"/>
+            </svg>
+            <svg class="shot-anno-demo" style="top:100px;left:150px;width:80px;height:50px;" viewBox="0 0 80 50">
+              <line x1="5" y1="10" x2="70" y2="40" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round"/>
+              <polygon points="70,40 60,35 63,45" fill="#f59e0b"/>
+            </svg>
+            <div class="shot-anno-demo" style="top:150px;left:30px;font-size:13px;color:#ef4444;font-weight:600;text-shadow:0 0 3px rgba(0,0,0,0.6);">注意这里</div>
+          </div>
+        </div>
+        <div class="shot-toolbar" style="margin:8px 0 0;">
+          <div class="shcolors">
+            <div class="shcolor active" style="background:#ef4444"></div>
+            <div class="shcolor" style="background:#f59e0b"></div>
+            <div class="shcolor" style="background:#10b981"></div>
+            <div class="shcolor" style="background:#3b82f6"></div>
+            <div class="shcolor" style="background:#ffffff"></div>
+          </div>
+          <div class="shtool-sep"></div>
+          <div class="shtool" title="矩形框"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="1.5"/></svg></div>
+          <div class="shtool" title="椭圆"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8" ry="6.5"/></svg></div>
+          <div class="shtool active" title="箭头"><svg viewBox="0 0 24 24"><line x1="5" y1="19" x2="17" y2="7"/><polyline points="11,7 17,7 17,13"/></svg></div>
+          <div class="shtool" title="画笔"><svg viewBox="0 0 24 24"><path d="M4 20 L14 10 L18 6 a2 2 0 0 1 2 0 a2 2 0 0 1 0 2 L16 10 L6 20 Z"/><line x1="4" y1="20" x2="6" y2="18"/></svg></div>
+          <div class="shtool" title="马赛克"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="5" height="5"/><rect x="10" y="4" width="5" height="5" fill="currentColor" opacity="0.4"/><rect x="16" y="4" width="4" height="5"/><rect x="4" y="10" width="5" height="5" fill="currentColor" opacity="0.4"/><rect x="10" y="10" width="5" height="5"/><rect x="16" y="10" width="4" height="5" fill="currentColor" opacity="0.4"/><rect x="4" y="16" width="5" height="4" fill="currentColor" opacity="0.4"/><rect x="10" y="16" width="5" height="4"/><rect x="16" y="16" width="4" height="4" fill="currentColor" opacity="0.4"/></svg></div>
+          <div class="shtool" title="文字"><svg viewBox="0 0 24 24"><path d="M5 5 H19 M12 5 V19 M9 19 H15"/></svg></div>
+          <div class="shtool-sep"></div>
+          <div class="shtool" title="撤销 (Ctrl+Z)"><svg viewBox="0 0 24 24"><path d="M8 8 H16 a4 4 0 0 1 0 8 H10"/><polyline points="6,8 8,8 8,6"/><line x1="6" y1="8" x2="8" y2="10"/></svg></div>
+          <div class="shtool-sep"></div>
+          <div class="shaction shaction-vlm"><svg viewBox="0 0 24 24"><polygon points="12,3 14,9 20,9 15,13 17,19 12,15 7,19 9,13 4,9 10,9"/></svg>识别</div>
+          <div class="shaction shaction-cancel"><svg viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>取消</div>
+          <div class="shaction shaction-confirm"><svg viewBox="0 0 24 24"><polyline points="5,12 10,17 19,7"/></svg>完成</div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px;">布局：颜色(5) | 矩形·椭圆·箭头·画笔·马赛克·文字 | 撤销 | 识别·取消·完成</div>
+      </div>
+
+      <!-- 工具图标细节 -->
+      <div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:10px;">工具图标细节（32×32 按钮，18×18 SVG 矢量图标）</div>
+        <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;background:#1a1a1e;border:1px solid var(--rule);border-radius:8px;padding:16px;">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px;"><div class="shtool" style="background:rgba(255,255,255,0.05);"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="1.5"/></svg></div><span style="font-size:10px;color:var(--muted);">矩形</span></div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px;"><div class="shtool" style="background:rgba(255,255,255,0.05);"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8" ry="6.5"/></svg></div><span style="font-size:10px;color:var(--muted);">椭圆</span></div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px;"><div class="shtool" style="background:rgba(255,255,255,0.05);"><svg viewBox="0 0 24 24"><line x1="5" y1="19" x2="17" y2="7"/><polyline points="11,7 17,7 17,13"/></svg></div><span style="font-size:10px;color:var(--muted);">箭头</span></div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px;"><div class="shtool" style="background:rgba(255,255,255,0.05);"><svg viewBox="0 0 24 24"><path d="M4 20 L14 10 L18 6 a2 2 0 0 1 2 0 a2 2 0 0 1 0 2 L16 10 L6 20 Z"/><line x1="4" y1="20" x2="6" y2="18"/></svg></div><span style="font-size:10px;color:var(--muted);">画笔</span></div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px;"><div class="shtool" style="background:rgba(255,255,255,0.05);"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="5" height="5"/><rect x="10" y="4" width="5" height="5" fill="currentColor" opacity="0.4"/><rect x="16" y="4" width="4" height="5"/><rect x="4" y="10" width="5" height="5" fill="currentColor" opacity="0.4"/><rect x="10" y="10" width="5" height="5"/><rect x="16" y="10" width="4" height="5" fill="currentColor" opacity="0.4"/><rect x="4" y="16" width="5" height="4" fill="currentColor" opacity="0.4"/><rect x="10" y="16" width="5" height="4"/><rect x="16" y="16" width="4" height="4" fill="currentColor" opacity="0.4"/></svg></div><span style="font-size:10px;color:var(--muted);">马赛克</span></div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px;"><div class="shtool" style="background:rgba(255,255,255,0.05);"><svg viewBox="0 0 24 24"><path d="M5 5 H19 M12 5 V19 M9 19 H15"/></svg></div><span style="font-size:10px;color:var(--muted);">文字</span></div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px;"><div class="shtool" style="background:rgba(255,255,255,0.05);"><svg viewBox="0 0 24 24"><path d="M8 8 H16 a4 4 0 0 1 0 8 H10"/><polyline points="6,8 8,8 8,6"/><line x1="6" y1="8" x2="8" y2="10"/></svg></div><span style="font-size:10px;color:var(--muted);">撤销</span></div>
+        </div>
+      </div>
+
+      <!-- 颜色与笔粗 -->
+      <div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:10px;">颜色与笔粗选择器</div>
+        <div style="display:flex;gap:24px;align-items:flex-start;background:#1a1a1e;border:1px solid var(--rule);border-radius:8px;padding:16px;">
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <span style="font-size:10px;color:var(--muted);">颜色（选中态白圈）</span>
+            <div class="shcolors" style="background:#2d2d33;padding:6px 8px;border-radius:6px;border:1px solid #3a3a42;">
+              <div class="shcolor active" style="background:#ef4444"></div>
+              <div class="shcolor" style="background:#f59e0b"></div>
+              <div class="shcolor" style="background:#10b981"></div>
+              <div class="shcolor" style="background:#3b82f6"></div>
+              <div class="shcolor" style="background:#ffffff"></div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <span style="font-size:10px;color:var(--muted);">笔粗（选中态蓝底）</span>
+            <div class="shpens" style="background:#2d2d33;padding:4px 6px;border-radius:6px;border:1px solid #3a3a42;">
+              <div class="shpen"><div class="shpen-dot" style="width:4px;height:4px;"></div></div>
+              <div class="shpen active"><div class="shpen-dot" style="width:6px;height:6px;"></div></div>
+              <div class="shpen"><div class="shpen-dot" style="width:8px;height:8px;"></div></div>
+              <div class="shpen"><div class="shpen-dot" style="width:10px;height:10px;"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ 4. 截图分析结果窗口 ============ -->
+  <h2>4. 截图分析结果窗口</h2>
+  <div class="note">截图完成后（手动点「识别」或开启自动 VLM 分析），在屏幕右下角弹出此独立置顶窗口。显示截图缩略图 + VLM 分析摘要。点击下方按钮可切换三种状态预览。</div>
+  <div class="wireframe" style="max-height:none;">
+    <div style="padding:24px;display:flex;flex-direction:column;gap:24px;">
+
+      <div class="state-btns" style="margin-top:0;">
+        <span class="btn btn-ghost" id="shot-result-state-loading">加载中</span>
+        <span class="btn btn-ghost" id="shot-result-state-error">错误</span>
+        <span class="btn btn-primary" id="shot-result-state-success">结果</span>
+      </div>
+
+      <div id="shot-result-demo" class="shot-result">
+        <div class="shot-result-header">
+          <span class="shot-result-title">截图分析</span>
+          <div class="shot-result-close">
+            <svg viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+          </div>
+        </div>
+        <div class="shot-result-thumb">
+          <div class="shot-result-thumb-placeholder">截图缩略图（380 × 104）</div>
+        </div>
+        <div class="shot-result-body" id="shot-result-body">
+          <div class="shot-result-summary" id="shot-result-summary">
+            用户正在 VS Code 中编辑 screenshotwindow.cpp 文件，当前光标位于 drawToolIcon 函数内。屏幕左侧是代码编辑器，右侧可以看到文件大纲。底部状态栏显示当前分支为 master，行号约 620 行。看起来正在实现截图工具栏的矢量图标绘制功能。
+          </div>
+        </div>
+        <div class="shot-result-actions">
+          <div class="shot-result-btn shot-result-btn-copy" id="shot-result-copy">
+            <svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M9 5V3h8a2 2 0 0 1 2 2v8h-2"/></svg>
+            复制摘要
+          </div>
+          <div class="shot-result-btn shot-result-btn-retake" id="shot-result-retake">
+            <svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 14-5l2-2"/><polyline points="20,2 20,7 15,7"/><path d="M20 12a8 8 0 0 1-14 5l-2 2"/><polyline points="4,22 4,17 9,17"/></svg>
+            重新截图
+          </div>
+        </div>
+      </div>
+
+      <div class="note" style="margin-top:0;">窗口定位在主屏右下角（离右边缘和任务栏各 16px），独立于主窗口，关闭按钮在标题行右侧。底部两个按钮：「复制摘要」（绿色，无摘要时灰显）和「重新截图」（灰色，触发新的截图流程）。</div>
+
+    </div>
+  </div>
 
 <div id="heat-tooltip"></div>
 
@@ -2992,6 +3204,84 @@
       }, 2000);
     });
   });
+})();
+
+// ===== 截图工具栏交互 =====
+(function() {
+  var stage1Toolbar = document.querySelector('#shotStage1 + .shot-toolbar');
+  if (stage1Toolbar) {
+    var tools = stage1Toolbar.querySelectorAll('.shtool');
+    tools.forEach(function(t) {
+      t.addEventListener('click', function() {
+        if (t.closest('.shcolors') || t.closest('.shpens')) return;
+        tools.forEach(function(tt) {
+          if (!tt.closest('.shcolors') && !tt.closest('.shpens')) tt.classList.remove('active');
+        });
+        t.classList.add('active');
+      });
+    });
+    var colors = stage1Toolbar.querySelectorAll('.shcolor');
+    colors.forEach(function(c) {
+      c.addEventListener('click', function() {
+        colors.forEach(function(cc) { cc.classList.remove('active'); });
+        c.classList.add('active');
+      });
+    });
+  }
+  // 图标细节预览的颜色/笔粗互斥
+  document.querySelectorAll('.shcolors').forEach(function(g) {
+    var cs = g.querySelectorAll('.shcolor');
+    cs.forEach(function(c) {
+      c.addEventListener('click', function() {
+        cs.forEach(function(s) { s.classList.remove('active'); });
+        c.classList.add('active');
+      });
+    });
+  });
+  document.querySelectorAll('.shpens').forEach(function(g) {
+    var ps = g.querySelectorAll('.shpen');
+    ps.forEach(function(p) {
+      p.addEventListener('click', function() {
+        ps.forEach(function(s) { s.classList.remove('active'); });
+        p.classList.add('active');
+      });
+    });
+  });
+})();
+
+// ===== 截图分析结果窗口三态切换 =====
+(function() {
+  var btnLoading = document.getElementById('shot-result-state-loading');
+  var btnError = document.getElementById('shot-result-state-error');
+  var btnSuccess = document.getElementById('shot-result-state-success');
+  var body = document.getElementById('shot-result-body');
+  var copyBtn = document.getElementById('shot-result-copy');
+  if (!body) return;
+
+  var summaryText = '用户正在 VS Code 中编辑 screenshotwindow.cpp 文件，当前光标位于 drawToolIcon 函数内。屏幕左侧是代码编辑器，右侧可以看到文件大纲。底部状态栏显示当前分支为 master，行号约 620 行。看起来正在实现截图工具栏的矢量图标绘制功能。';
+
+  function setState(state) {
+    [btnLoading, btnError, btnSuccess].forEach(function(b) {
+      if (b) { b.classList.remove('btn-primary'); b.classList.add('btn-ghost'); }
+    });
+    var activeBtn = state === 'loading' ? btnLoading : state === 'error' ? btnError : btnSuccess;
+    if (activeBtn) { activeBtn.classList.remove('btn-ghost'); activeBtn.classList.add('btn-primary'); }
+
+    if (state === 'loading') {
+      body.innerHTML = '<div class="shot-result-loading"><div class="dots"><span></span><span></span><span></span></div> VLM 识别中...</div>';
+      copyBtn.classList.add('disabled');
+    } else if (state === 'error') {
+      body.innerHTML = '<div class="shot-result-error">分析失败：VLM 服务连接超时，请检查网络或模型配置。</div>';
+      copyBtn.classList.add('disabled');
+    } else {
+      body.innerHTML = '<div class="shot-result-summary">' + summaryText + '</div>';
+      copyBtn.classList.remove('disabled');
+    }
+  }
+
+  if (btnLoading) btnLoading.addEventListener('click', function() { setState('loading'); });
+  if (btnError) btnError.addEventListener('click', function() { setState('error'); });
+  if (btnSuccess) btnSuccess.addEventListener('click', function() { setState('success'); });
 })();
 </script>
   <!-- 选窗口遮罩演示 -->
