@@ -265,12 +265,12 @@
     <message>
         <location filename="../qml/pages/OverviewPage.qml" line="232"/>
         <source>Less</source>
-        <translation>收起</translation>
+        <translation>较少</translation>
     </message>
     <message>
         <location filename="../qml/pages/OverviewPage.qml" line="248"/>
         <source>More</source>
-        <translation>展开</translation>
+        <translation>较多</translation>
     </message>
     <message>
         <location filename="../qml/pages/OverviewPage.qml" line="271"/>
