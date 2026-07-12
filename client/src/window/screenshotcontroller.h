@@ -32,6 +32,8 @@ class ScreenshotController : public QObject {
   void finished(const QString &path);
   // 用户 ✦ 识别，PNG 已落盘 + 已写剪贴板。上层据此强制触发 VLM 分析。
   void recognized(const QString &path);
+  // 用户 📌 置顶，PNG 已落盘 + 已写剪贴板。上层据此创建 PinWindow。
+  void pinned(const QString &path);
   // 用户 ESC / 右键 / ✗ 取消。
   void cancelled();
 

@@ -53,6 +53,7 @@ find_package(Qt6 REQUIRED COMPONENTS
     Protobuf         # protobuf 消息
     ProtobufTools    # qt_add_protobuf 函数
     LinguistTools    # qt_add_translations / lupdate / lrelease
+    Svg              # QSvgRenderer（截图工具栏图标）
 )
 
 qt_standard_project_setup(REQUIRES 6.5)
@@ -205,6 +206,7 @@ target_link_libraries(shadow-worker-client PRIVATE
     Qt6::Multimedia
     Qt6::Network
     Qt6::Grpc
+    Qt6::Svg
     overview_proto
     overview_grpc
     whitelist_proto
@@ -280,6 +282,7 @@ qt_add_qml_module(shadow-worker-client
         qml/components/RetryProgressDialog.qml
         qml/RecordingWindow.qml
         qml/ScreenshotResultWindow.qml
+        qml/PinWindow.qml
         # pages
         qml/main.qml
         qml/pages/OverviewPage.qml
@@ -304,6 +307,21 @@ qt_add_qml_module(shadow-worker-client
         assets/app.ico
 )
 
+# 截图工具栏 SVG 图标（QSvgRenderer 从 qrc 加载，非 QML 资源）
+# PREFIX "/" + 文件从 client/ 的相对路径 → qrc 路径为 ":/qml/icons/screenshot/xxx.svg"
+qt_add_resources(shadow-worker-client "screenshot_icons"
+    PREFIX "/"
+    FILES
+        qml/icons/screenshot/rect.svg
+        qml/icons/screenshot/ellipse.svg
+        qml/icons/screenshot/arrow.svg
+        qml/icons/screenshot/pen.svg
+        qml/icons/screenshot/mosaic.svg
+        qml/icons/screenshot/text.svg
+        qml/icons/screenshot/undo.svg
+        qml/icons/screenshot/pin.svg
+)
+
 # ============================================================
 # i18n: translations (.ts source -> .qm compiled, embedded in qrc)
 # ============================================================
@@ -323,6 +341,7 @@ qt_add_translations(shadow-worker-client
         ${CMAKE_SOURCE_DIR}/qml/main.qml
         ${CMAKE_SOURCE_DIR}/qml/RecordingWindow.qml
         ${CMAKE_SOURCE_DIR}/qml/ScreenshotResultWindow.qml
+        ${CMAKE_SOURCE_DIR}/qml/PinWindow.qml
         ${CMAKE_SOURCE_DIR}/qml/theme/Theme.qml
         ${CMAKE_SOURCE_DIR}/qml/components/Card.qml
         ${CMAKE_SOURCE_DIR}/qml/components/Toggle.qml

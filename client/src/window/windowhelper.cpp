@@ -107,3 +107,16 @@ bool WindowHelper::startDrag(QQuickWindow *window) {
   // immediately on mouse press (before any movement) to take effect.
   return window->startSystemMove();
 }
+
+bool WindowHelper::startResize(QQuickWindow *window, int edges) {
+  if (!window) return false;
+  // startSystemResize() hands the resize to the OS window manager.
+  // edges is a bitmask of Qt::Edge: Top=1, Left=2, Right=4, Bottom=8.
+  Qt::Edges e;
+  if (edges & 1) e |= Qt::TopEdge;
+  if (edges & 2) e |= Qt::LeftEdge;
+  if (edges & 4) e |= Qt::RightEdge;
+  if (edges & 8) e |= Qt::BottomEdge;
+  if (e == 0) return false;
+  return window->startSystemResize(e);
+}

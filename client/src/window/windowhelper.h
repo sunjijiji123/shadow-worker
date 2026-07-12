@@ -52,4 +52,8 @@ public:
   // Begin a native OS window drag (frameless drag). MUST be called on press.
   // Returns true if the drag was handed to the OS.
   Q_INVOKABLE bool startDrag(QQuickWindow *window);
+
+  // Begin a native OS window resize from the given edges.
+  // edges is a bitmask of Qt::Edge values (1=Top,2=Left,4=Right,8=Bottom).
+  Q_INVOKABLE bool startResize(QQuickWindow *window, int edges);
 };

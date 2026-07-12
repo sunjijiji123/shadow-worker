@@ -35,6 +35,11 @@ void ScreenshotController::capture(const QString &saveDir,
             m_window = nullptr;
             emit recognized(path);
           });
+  connect(m_window, &ScreenShotWindow::pinned, this,
+          [this](const QString &path) {
+            m_window = nullptr;
+            emit pinned(path);
+          });
   connect(m_window, &ScreenShotWindow::cancelled, this, [this]() {
     m_window = nullptr;
     emit cancelled();

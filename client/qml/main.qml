@@ -115,6 +115,13 @@ import ShadowWorker
         collectionClient.analyzeImage(path, prompt)
     }
 
+    // 置顶截图：显示 PinWindow（照搬 ScreenshotResultWindow 范式——
+    // 直接声明实例 + show()，不做动态创建）。
+    function pinScreenshot(path) {
+        pinWindow.imagePath = "file:///" + path
+        pinWindow.show()
+    }
+
     // 截图完成/取消回调。放在 target:screenshotController 的 Connections 里
     // （下方），用本地 state 触发。
 
@@ -301,6 +308,109 @@ import ShadowWorker
         id: screenshotResult
     }
 
+    // 截图置顶窗口（独立置顶窗口，显示截图供对照参考）。
+    // 照搬 ScreenshotResultWindow 范式：声明实例 + show()。
+    // 拖拽用 windowHelper.startDrag（原生 startSystemMove，流畅无抖动）。
+    // 缩放用 windowHelper.startResize（原生 startSystemResize，8 方向边缘手柄）。
+    Window {
+        id: pinWindow
+        visible: false
+        flags: Qt.FramelessWindowHint | Qt.Tool | Qt.WindowStaysOnTopHint
+        color: "transparent"
+        width: 400
+        height: 300
+        minimumWidth: 150
+        minimumHeight: 120
+
+        property string imagePath: ""
+
+        Component.onCompleted: { pinWindow.transientParent = null }
+        onVisibleChanged: {
+            pinWindow.transientParent = null
+            if (visible) { pinWindow.raise(); pinWindow.requestActivate() }
+        }
+
+        // 外框
+        Rectangle {
+            anchors.fill: parent
+            color: "#2c2c31"
+            border.color: "#3f3f46"
+            border.width: 1
+            radius: 8
+            clip: true
+
+            Column {
+                anchors.fill: parent
+                spacing: 0
+
+                // 标题栏（拖拽移动）
+                Rectangle {
+                    width: parent.width
+                    height: 32
+                    color: "#232327"
+                    Text {
+                        anchors.centerIn: parent
+                        text: "\uD83D\uDCCC 置顶截图"
+                        color: "#9ca3af"
+                        font.pixelSize: 12
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        anchors.rightMargin: 30
+                        cursorShape: Qt.SizeAllCursor
+                        onPressed: { if (windowHelper) windowHelper.startDrag(pinWindow) }
+                    }
+                    Rectangle {
+                        width: 24; height: 24
+                        anchors.right: parent.right; anchors.rightMargin: 4
+                        anchors.verticalCenter: parent.verticalCenter
+                        color: closePin.containsMouse ? "#ef4444" : "transparent"
+                        radius: 5
+                        Text { anchors.centerIn: parent; text: "\u00d7"; color: closePin.containsMouse ? "#fff" : "#9ca3af"; font.pixelSize: 16; font.bold: true }
+                        MouseArea { id: closePin; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: pinWindow.hide() }
+                    }
+                }
+
+                // 图片
+                Image {
+                    width: parent.width
+                    height: parent.height - 32
+                    source: pinWindow.imagePath
+                    fillMode: Image.PreserveAspectFit
+                    sourceSize.width: width
+                    sourceSize.height: height
+                }
+            }
+        }
+
+        // 8 方向 resize 手柄（原生 startSystemResize）
+        // edges bitmask: Top=1, Left=2, Right=4, Bottom=8
+        Repeater {
+            model: [
+                { edge: 2, cx: 0,   cy: 0.5, w: 5,  h: 0,   cursor: Qt.SizeHorCursor },
+                { edge: 4, cx: 1,   cy: 0.5, w: 5,  h: 0,   cursor: Qt.SizeHorCursor },
+                { edge: 1, cx: 0.5, cy: 0,   w: 0,  h: 5,   cursor: Qt.SizeVerCursor },
+                { edge: 8, cx: 0.5, cy: 1,   w: 0,  h: 5,   cursor: Qt.SizeVerCursor },
+                { edge: 3, cx: 0,   cy: 0,   w: 12, h: 12,  cursor: Qt.SizeFDiagCursor },
+                { edge: 5, cx: 1,   cy: 0,   w: 12, h: 12,  cursor: Qt.SizeBDiagCursor },
+                { edge: 10, cx: 0,  cy: 1,   w: 12, h: 12,  cursor: Qt.SizeBDiagCursor },
+                { edge: 12, cx: 1,  cy: 1,   w: 12, h: 12,  cursor: Qt.SizeFDiagCursor }
+            ]
+            Item {
+                property var info: modelData
+                x: info.cx === 0 ? 0 : (info.cx === 1 ? pinWindow.width - info.w : pinWindow.width/2 - info.w/2)
+                y: info.cy === 0 ? 0 : (info.cy === 1 ? pinWindow.height - info.h : pinWindow.height/2 - info.h/2)
+                width: info.w === 0 ? pinWindow.width : info.w
+                height: info.h === 0 ? pinWindow.height : info.h
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: info.cursor
+                    onPressed: { if (windowHelper) windowHelper.startResize(pinWindow, info.edge) }
+                }
+            }
+        }
+    }
+
     // 更新详情弹窗（全局，挂在顶层避开 StackLayout 可见性坑）。
     // 由标题栏 UpdateBadge 点击 / 发现新版本时打开。
     // Dialog 默认会自动挂到窗口的 Overlay，无需手动设 parent。
@@ -476,6 +586,12 @@ import ShadowWorker
             screenshotInFlight = false
             toast(qsTr("Screenshot saved"), "success")
             showScreenshotAnalysis(path)
+        }
+        function onPinned(path) {
+            // 📌置顶 按钮：截图已落盘 + 写剪贴板，创建独立置顶窗口显示。
+            screenshotInFlight = false
+            toast(qsTr("Screenshot pinned"), "success")
+            pinScreenshot(path)
         }
         function onCancelled() {
             screenshotInFlight = false
