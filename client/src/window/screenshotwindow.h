@@ -9,6 +9,8 @@
 #include <QString>
 #include <QWidget>
 
+class QLineEdit;
+
 // ScreenShotWindow: 全屏透明覆盖层，鼠标拖拽框选区域 → 裁剪落盘 + 写剪贴板。
 //
 // 交互流程：
@@ -16,16 +18,13 @@
 //              按下拖拽=自由矩形框选。
 //   Confirm 阶段：选区已确定，可同时做"调整选区"和"画标注"：
 //     - m_currentTool == None 时：8 手柄缩放、选区内拖动移动选区。
-//     - m_currentTool != None 时：在选区内画对应标注（矩形/箭头/画笔/马赛克）。
-//     两者无缝切换——点工具条工具按钮选中工具，再点一次或按 ESC 取消选中
-//     回到调选区模式。标注和选区调整在同一个阶段共存，不互相锁定。
+//     - m_currentTool != None 时：在选区内画对应标注。
+//     选中矩形/椭圆/箭头/画笔时，工具按钮下方弹出颜色+笔窗弹窗；
+//     选中文字时弹出颜色+字号弹窗；马赛克无弹窗。
 //   ESC / 右键 / ✗ 取消。
 //
-// 构造时抓取所有显示器（虚拟屏并集）的当前画面存到 m_fullPixmap，
-// 落盘时按选区在物理像素坐标裁剪（逻辑坐标 × dpr），保证高 DPI 清晰。
-//
-// 工具条按钮（Confirm 阶段，统一布局）：
-//   [颜色×5] [□框][→箭头][✎笔][▦马赛克] | [↶撤销] [✦识别?] [✓完成] [✗取消]
+// 工具条布局（Confirm 阶段）：
+//   [矩形][椭圆][箭头][画笔][马赛克][文字] | [撤销][置顶] | [✦识别?] [✗取消] [✓完成]
 class ScreenShotWindow : public QWidget {
   Q_OBJECT
  public:
@@ -34,11 +33,9 @@ class ScreenShotWindow : public QWidget {
                             QWidget *parent = nullptr);
 
  signals:
-  // 用户点 ✓ 完成，PNG 已落盘 + 已写剪贴板。path 为绝对路径。
   void finished(const QString &path);
-  // 用户点 ✦ 识别，PNG 已落盘 + 已写剪贴板。上层据此强制触发 VLM 分析。
   void recognized(const QString &path);
-  // 用户 ESC / 右键 / ✗ 取消。
+  void pinned(const QString &path);
   void cancelled();
 
  protected:
@@ -47,72 +44,79 @@ class ScreenShotWindow : public QWidget {
   void mouseMoveEvent(QMouseEvent *event) override;
   void mouseReleaseEvent(QMouseEvent *event) override;
   void keyPressEvent(QKeyEvent *event) override;
+  void wheelEvent(QWheelEvent *event) override;
+  void focusOutEvent(QFocusEvent *event) override;
 
  private:
-  // ---- 阶段 ----
   enum Phase { Drag, Confirm };
-  // 8 个调整手柄位置（Confirm 阶段，m_currentTool==None 时用）
   enum HandlePos {
-    TopLeft,
-    Top,
-    TopRight,
-    Right,
-    BottomRight,
-    Bottom,
-    BottomLeft,
-    Left
+    TopLeft, Top, TopRight, Right, BottomRight, Bottom, BottomLeft, Left
   };
-  // 标注工具
-  enum Tool { None, Rect, Arrow, Pen, Mosaic };
+  enum Tool { None, Rect, Ellipse, Arrow, Pen, Mosaic, Text };
   static constexpr int kHandleSize = 6;
 
-  // 一条标注。坐标存储为选区相对坐标（减 m_selection.topLeft()），
-  // 绘制/落盘时加回选区左上角。这样标注语义绑定到选区内容。
   struct Annotation {
     Tool tool = None;
     QColor color;
-    QList<QPoint> points;  // Pen=轨迹点; Rect/Arrow=[start,end]; Mosaic=覆盖区域点集
+    QList<QPoint> points;
     int penWidth = 3;
+    int fontSize = 16;
+    QString text;
   };
 
-  // ---- 截图/选区 ----
+  // 截图/选区
   void initFullscreenPixmap();
   bool saveSelection(QString &outPath);
 
-  // ---- 手柄/工具条几何 ----
+  // 手柄/工具条几何
   QRect handleRect(HandlePos pos) const;
   HandlePos handleAt(QPoint globalPos) const;
   void setCursorForPos(QPoint globalPos);
-  // 工具条总矩形。
   QRect toolbarRect() const;
-  // 标注工具按钮。
   QRect toolBtnRect(Tool tool) const;
-  // 颜色圆点。
-  QRect colorDotRect(int index) const;
-  // 撤销按钮。
   QRect undoBtnRect() const;
-  // 识别/完成/取消按钮。
+  QRect pinBtnRect() const;
   QRect recognizeBtnRect() const;
-  QRect confirmBtnRect() const;
   QRect cancelBtnRect() const;
+  QRect confirmBtnRect() const;
+  // 弹窗几何（在当前选中工具按钮下方）
+  QRect popupRect() const;
+  QRect popupColorDotRect(int index) const;
+  QRect popupPenRect(int index) const;    // 笔粗档位 0..3
+  QRect popupSizeRect(int index) const;   // 字号档位 0..2
+  QRect popupVsepRect() const;
 
-  // ---- 窗口智能预选（Drag 阶段）----
+  // 窗口预选
   void detectHoverWindow(QPoint globalPos);
   void drawHoverHighlight(QPainter &p, QPoint origin) const;
 
-  // ---- 标注 ----
+  // 标注
   void drawAnnotation(QPainter &p, const Annotation &a,
                       QPoint selOrigin) const;
   void paintAnnotationsOnPixmap(QPixmap &pixmap, qreal dpr) const;
   void drawMosaic(QPainter &p, const Annotation &a, const QPixmap &srcPixmap,
                   QPoint selOrigin, qreal dpr) const;
 
-  // ---- 工具条图标矢量绘制 ----
-  // 在 rect 内用 QPainter 矢量绘制标注工具图标。color=图标颜色。
+  // 工具图标
   void drawToolIcon(QPainter &p, Tool tool, const QRect &r,
                     const QColor &color) const;
 
-  // ---- 数据 ----
+  // 文字输入
+  void startTextInput(QPoint globalPos);
+  void commitTextInput();
+
+  // 选区视觉
+  void drawSelectionBorder(QPainter &p, QPoint localTopLeft) const;
+
+  // 工具条按钮命中检测（返回命中按钮的 rect 是否包含 lpos）
+  bool handleToolButtonClick(QPoint lpos, QPoint gpos);
+  void handlePopupClick(QPoint lpos);
+
+  QColor annotationColor(int index) const;
+  int penWidthForIndex(int index) const;   // 0→2, 1→3, 2→5, 3→8
+  int fontSizeForIndex(int index) const;   // 0→12(小), 1→16(中), 2→22(大)
+
+  // 数据
   QString m_saveDir;
   bool m_showRecognizeBtn;
   Phase m_phase;
@@ -121,25 +125,35 @@ class ScreenShotWindow : public QWidget {
   QPoint m_startPoint;
   QPoint m_dragOffset;
   QPoint m_resizeAnchor;
-  bool m_dragging;       // 选区拖动/缩放中
-  bool m_movingSelection;  // true=整体移动选区（区别于手柄缩放）
+  bool m_dragging;
+  bool m_movingSelection;  // true=整体移动选区
   int m_activeHandle;
 
-  // ---- 窗口智能预选 ----
+  // 窗口预选
   QRect m_hoverRect;
   QString m_hoverTitle;
   bool m_hoverValid;
   static constexpr int kDragThreshold = 4;
 
-  // ---- 标注 ----
+  // 标注
   Tool m_currentTool;
   QColor m_drawColor;
+  int m_penWidth;        // 当前笔粗（像素）
+  int m_textFontSize;    // 当前字号
   QList<Annotation> m_annotations;
-  bool m_drawingActive;  // 正在绘制标注（区别于选区拖动）
+  bool m_drawingActive;
   Annotation m_drawingAnno;
 
-  static constexpr int kColorCount = 5;
-  QColor annotationColor(int index) const;
+  // 文字输入
+  QLineEdit *m_textInput;       // 非空=正在输入文字
+  QPoint m_textPos;             // 文字输入位置（选区相对）
+
+  // 弹窗（由 m_currentTool 控制：Rect/Ellipse/Arrow/Pen→颜色+笔粗,
+  //  Text→颜色+字号, Mosaic/None→无弹窗）
+  bool m_popupVisible;
+
+  // hover 状态：工具条按钮 hover 高亮（-1=无 hover）
+  int m_hoveredBtn;  // 0..5=工具按钮, 6=撤销, 7=置顶, 8=识别, 9=取消, 10=完成
 };
 
 #endif  // SCREENSHOTWINDOW_H
