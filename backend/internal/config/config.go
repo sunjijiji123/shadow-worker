@@ -101,13 +101,14 @@ type VLMConfig struct {
 	//   active = 当前前台窗口（默认，与白名单配合聚焦正在做的事）
 	//   screen = 整个虚拟屏幕（含所有显示器，适合多屏工作流）
 	CaptureRange string `yaml:"capture_range"`
-	// OnDemandSwitchGapS 仅 on_demand 模式：切换到新活跃窗口后，距上次采集
-	// 超过该秒数才触发一次截图。用于过滤 Alt+Tab 抖动（人在两窗口间来回切）。
-	// 默认 20s。
+	// OnDemandSwitchGapS 仅 on_demand 模式：切换到新活跃窗口后，距上次 switch
+	// 采集超过该秒数才触发一次截图。用于过滤 Alt+Tab 抖动（人在两窗口间来回切）。
+	// 冷却与 motion 独立计时（各看各的"上次采集时刻"）。默认 20s。
 	OnDemandSwitchGapS int `yaml:"on_demand_switch_gap_s"`
 	// OnDemandMotionGapS 仅 on_demand 模式：当前窗口出现活跃信号（画面运动/
-	// 键鼠输入/标题变化）后，距上次采集超过该秒数才触发一次截图。同一场景内
-	// 不频繁采集，避免资源损耗。默认 60s。与 SwitchGap 共用"上次采集时刻"。
+	// 键鼠输入/标题变化）后，距上次 motion 采集超过该秒数才触发一次截图。同一场景内
+	// 不频繁采集，避免资源损耗。冷却与 switch 独立计时；切换应用（switch 冷却通过）
+	// 后会重置为切换时刻，即从现在起算满该秒数才采新应用的活动态截图。默认 60s。
 	OnDemandMotionGapS int `yaml:"on_demand_motion_gap_s"`
 	// Prompt 是送给 VLM 的提示词（所有 provider 共用一份，与 LLMConfig.Prompt 对称）。
 	// 不可为空：空时 Describe 返回错误、保存时 UI 拦截。Default 为 DefaultVLMPrompt。

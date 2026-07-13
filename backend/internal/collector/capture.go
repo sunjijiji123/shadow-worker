@@ -19,7 +19,7 @@ const (
 )
 
 // captureMu 是所有截图函数共用的全局互斥锁。
-// movement loop(每 300ms 截帧差图)和 vlm onDemandLoop(触发时截识别图)是两个
+// movement loop(每 300ms 截帧差图)和 vlm OnActivity(触发时截识别图)是两个
 // 独立 goroutine，会并发对同一 HWND 调用 PrintWindow。GDI 层面线程安全，但两个
 // PrintWindow 同时让目标窗口 UI 线程做合成重绘会让卡顿叠加（尤其 Electron 应用）。
 // 串行化后最坏情况是截图排队等一拍，但 ticker 节流，下一个 tick 补上，不影响正确性，

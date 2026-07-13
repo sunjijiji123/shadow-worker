@@ -9,7 +9,7 @@
 //     bytes.NewReader(capturedBytes)，不重复序列化。
 //   - 只重试 HTTP 层失败（网络/状态码）。业务层失败（200 但 choices 为空）
 //     不在此重试 —— 那是模型/逻辑问题，重试也是同样结果，交给调用方判定。
-//   - 退避期间监听 ctx.Done()，保证 onDemandLoop 停止 / 用户取消时立即退出。
+//   - 退避期间监听 ctx.Done()，保证采集停止 / 用户取消时立即退出。
 package httputil
 
 import (
@@ -67,7 +67,7 @@ func DoWithRetry(ctx context.Context, client *http.Client, reqBuilder func() (*h
 	}
 
 	for attempt := 0; ; attempt++ {
-		// 每次迭代开头检查 ctx：用户取消 / onDemandLoop 停止时立即退出。
+		// 每次迭代开头检查 ctx：用户取消 / 采集停止时立即退出。
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
