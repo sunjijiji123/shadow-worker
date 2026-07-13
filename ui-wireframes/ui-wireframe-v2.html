@@ -366,17 +366,44 @@
     .pick-window-header { display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid var(--rule); }
     .pick-window-body { padding:20px; overflow:auto; }
     .pick-window-body .hint { color:var(--muted); font-size:13px; margin-bottom:16px; }
-    .fake-desktop { background:linear-gradient(135deg, #1f2937 0%, #111827 100%); border:1px solid var(--rule); border-radius:10px; height:280px; position:relative; overflow:hidden; }
-    .fake-window { position:absolute; background:var(--bg3); border:1px solid var(--rule); border-radius:8px; box-shadow:0 4px 6px rgba(0,0,0,0.3); cursor:pointer; transition:all .15s; display:flex; flex-direction:column; overflow:hidden; }
-    .fake-window:hover { border-color:var(--accent); box-shadow:0 0 0 2px rgba(16,185,129,0.3); transform:scale(1.02); }
-    .fake-window.selected { border-color:var(--accent); box-shadow:0 0 0 3px rgba(16,185,129,0.5); }
-    .fake-window-bar { height:22px; background:var(--bg); display:flex; align-items:center; gap:6px; padding:0 10px; }
-    .fake-window-dot { width:8px; height:8px; border-radius:50%; background:var(--rule); }
-    .fake-window-content { flex:1; padding:10px; font-size:12px; color:var(--muted); }
-    .pick-result { margin-top:16px; padding:16px; background:var(--bg); border:1px solid var(--rule); border-radius:10px; display:none; }
-    .pick-result.open { display:block; }
-    .pick-result-row { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
     .modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:16px; }
+
+    /* ===== 添加应用：截图缩略图网格（替代旧的 fake-desktop 点选）===== */
+    .thumb-searchbar { display:flex; gap:10px; margin-bottom:16px; }
+    .thumb-searchbar .input { flex:1; height:36px; padding:0 12px; background:var(--bg); border:1px solid var(--rule); border-radius:6px; color:var(--ink); font-size:13px; outline:none; }
+    .thumb-searchbar .input:focus { border-color:var(--accent); }
+    .thumb-searchbar .input::placeholder { color:var(--muted); }
+    .thumb-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; }
+    .thumb-card { background:var(--bg3); border:1px solid var(--rule); border-radius:10px; overflow:hidden; cursor:pointer; transition:border-color .15s, box-shadow .15s; position:relative; }
+    .thumb-card:hover { border-color:var(--accent); box-shadow:0 0 0 2px rgba(16,185,129,0.3); }
+    .thumb-card.selected { border-color:var(--accent); box-shadow:0 0 0 3px rgba(16,185,129,0.5); }
+    /* 截图区 16:9 —— 用 CSS 模拟应用窗口缩略图（断网可预览，不依赖外部图）*/
+    .thumb-shot { width:100%; aspect-ratio:16/9; background:linear-gradient(135deg, #1f1f24 0%, #141417 100%); position:relative; overflow:hidden; border-bottom:1px solid var(--rule); }
+    .thumb-shot-bar { height:14px; background:rgba(0,0,0,0.4); display:flex; align-items:center; gap:4px; padding:0 8px; }
+    .thumb-shot-bar span { width:5px; height:5px; border-radius:50%; background:var(--rule); }
+    .thumb-shot-content { padding:8px 10px; display:flex; flex-direction:column; gap:5px; }
+    .thumb-shot-line { height:5px; border-radius:2px; background:rgba(255,255,255,0.08); }
+    .thumb-shot-line.short { width:55%; }
+    .thumb-shot-line.mid { width:75%; }
+    /* 加载中骨架（shimmer）—— 演示懒加载：卡片骨架先出，截图渐进冒出 */
+    .thumb-shot.loading { background:linear-gradient(100deg, #1a1a1e 30%, #2a2a2e 50%, #1a1a1e 70%); background-size:200% 100%; animation:thumb-shimmer 1.2s linear infinite; }
+    .thumb-shot.loading .thumb-shot-bar, .thumb-shot.loading .thumb-shot-content { display:none; }
+    @keyframes thumb-shimmer { 0% { background-position:200% 0; } 100% { background-position:-200% 0; } }
+    /* 选中对勾 */
+    .thumb-check { position:absolute; top:6px; right:6px; width:20px; height:20px; border-radius:50%; background:var(--accent); display:none; align-items:center; justify-content:center; z-index:2; }
+    .thumb-check svg { width:12px; height:12px; }
+    .thumb-card.selected .thumb-check { display:flex; }
+    /* 卡片信息区 */
+    .thumb-info { padding:8px 10px 10px; }
+    .thumb-name { font-size:13px; font-weight:600; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:flex; align-items:center; gap:6px; }
+    .thumb-name .app-icon-mini { width:14px; height:14px; border-radius:3px; display:inline-flex; align-items:center; justify-content:center; font-size:8px; font-weight:700; color:#fff; flex-shrink:0; }
+    .thumb-title { font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
+    /* 底部栏：已选择提示 + 取消/添加 */
+    .thumb-footer { display:flex; align-items:center; justify-content:space-between; margin-top:16px; padding-top:14px; border-top:1px solid var(--rule); }
+    .thumb-footer .selected-hint { font-size:12px; color:var(--accent); }
+    .thumb-footer .actions { display:flex; gap:10px; }
+    .thumb-empty { text-align:center; padding:48px 0; color:var(--muted); font-size:13px; }
+
     .stat-header { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
     .stat-value { font-size: 32px; font-weight: 700; line-height: 1; }
     .stat-sub { font-size: 12px; color: var(--muted); margin-top: 6px; }
@@ -2322,6 +2349,185 @@
     </div>
   </div>
 
+  <!-- 选窗口遮罩演示（截图缩略图网格版）。必须在 script 标签之前，
+       否则脚本执行时 getElementById 取不到本元素（openPickWindow 里
+       pickOverlay 为 null，弹窗永不显示）。-->
+  <div class="modal-overlay" id="pick-window-overlay">
+    <div class="pick-window-modal">
+      <div class="pick-window-header">
+        <div class="card-title">选择要采集的应用窗口</div>
+        <span class="btn btn-ghost btn-sm" id="close-pick-window">关闭</span>
+      </div>
+      <div class="pick-window-body">
+        <!-- 搜索 + 刷新 -->
+        <div class="thumb-searchbar">
+          <input class="input" id="thumb-search" placeholder="按应用名或窗口标题过滤" />
+          <span class="btn btn-ghost btn-sm" id="thumb-refresh">↻ 刷新</span>
+        </div>
+
+        <!-- 网格：9 张卡片，3 列。data-* 沿用旧 fake-window 契约供 JS 读取 -->
+        <div class="thumb-grid" id="thumb-grid">
+          <!-- 卡片 1：Cursor（普通态）-->
+          <div class="thumb-card" data-name="Cursor" data-path="C:\Users\Admin\AppData\Local\Programs\cursor\Cursor.exe" data-cat="coding" data-title="main.go — shadow-worker">
+            <div class="thumb-shot">
+              <div class="thumb-check"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div>
+              <div class="thumb-shot-bar"><span style="background:#ef4444;"></span><span style="background:#f59e0b;"></span><span style="background:#10b981;"></span></div>
+              <div class="thumb-shot-content">
+                <div class="thumb-shot-line short"></div>
+                <div class="thumb-shot-line mid"></div>
+                <div class="thumb-shot-line"></div>
+                <div class="thumb-shot-line short"></div>
+              </div>
+            </div>
+            <div class="thumb-info">
+              <div class="thumb-name"><span class="app-icon-mini" style="background:#3B82F6;">Cu</span>Cursor</div>
+              <div class="thumb-title">main.go — shadow-worker</div>
+            </div>
+          </div>
+
+          <!-- 卡片 2：Chrome（选中态，演示）-->
+          <div class="thumb-card selected" data-name="Chrome" data-path="C:\Program Files\Google\Chrome\Application\chrome.exe" data-cat="browser" data-title="GitHub · Issues">
+            <div class="thumb-shot">
+              <div class="thumb-check"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div>
+              <div class="thumb-shot-bar"><span style="background:#ef4444;"></span><span style="background:#f59e0b;"></span><span style="background:#10b981;"></span></div>
+              <div class="thumb-shot-content">
+                <div class="thumb-shot-line"></div>
+                <div class="thumb-shot-line short"></div>
+                <div class="thumb-shot-line mid"></div>
+                <div class="thumb-shot-line short"></div>
+              </div>
+            </div>
+            <div class="thumb-info">
+              <div class="thumb-name"><span class="app-icon-mini" style="background:#F59E0B;">Ch</span>Chrome</div>
+              <div class="thumb-title">GitHub · Issues</div>
+            </div>
+          </div>
+
+          <!-- 卡片 3：Slack -->
+          <div class="thumb-card" data-name="Slack" data-path="C:\Users\Admin\AppData\Local\Programs\slack\slack.exe" data-cat="chat" data-title="#engineering — Shadow Worker">
+            <div class="thumb-shot">
+              <div class="thumb-check"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div>
+              <div class="thumb-shot-bar"><span style="background:#ef4444;"></span><span style="background:#f59e0b;"></span><span style="background:#10b981;"></span></div>
+              <div class="thumb-shot-content">
+                <div class="thumb-shot-line mid"></div>
+                <div class="thumb-shot-line short"></div>
+                <div class="thumb-shot-line"></div>
+              </div>
+            </div>
+            <div class="thumb-info">
+              <div class="thumb-name"><span class="app-icon-mini" style="background:#10B981;">Sl</span>Slack</div>
+              <div class="thumb-title">#engineering — Shadow Worker</div>
+            </div>
+          </div>
+
+          <!-- 卡片 4：Word（加载中态，shimmer）-->
+          <div class="thumb-card" data-name="Word" data-path="C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE" data-cat="office" data-title="周报-2026W28.docx">
+            <div class="thumb-shot loading">
+              <div class="thumb-check"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div>
+            </div>
+            <div class="thumb-info">
+              <div class="thumb-name"><span class="app-icon-mini" style="background:#8B5CF6;">Wo</span>Word</div>
+              <div class="thumb-title">周报-2026W28.docx</div>
+            </div>
+          </div>
+
+          <!-- 卡片 5：Discord -->
+          <div class="thumb-card" data-name="Discord" data-path="C:\Users\Admin\AppData\Local\Discord\app.exe" data-cat="chat" data-title="general">
+            <div class="thumb-shot">
+              <div class="thumb-check"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div>
+              <div class="thumb-shot-bar"><span style="background:#ef4444;"></span><span style="background:#f59e0b;"></span><span style="background:#10b981;"></span></div>
+              <div class="thumb-shot-content">
+                <div class="thumb-shot-line short"></div>
+                <div class="thumb-shot-line mid"></div>
+                <div class="thumb-shot-line"></div>
+              </div>
+            </div>
+            <div class="thumb-info">
+              <div class="thumb-name"><span class="app-icon-mini" style="background:#10B981;">Di</span>Discord</div>
+              <div class="thumb-title">general</div>
+            </div>
+          </div>
+
+          <!-- 卡片 6：ZCode -->
+          <div class="thumb-card" data-name="ZCode" data-path="C:\Users\Admin\AppData\Local\Programs\zcode\ZCode.exe" data-cat="coding" data-title="AddAppDialog.qml — shadow-worker">
+            <div class="thumb-shot">
+              <div class="thumb-check"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div>
+              <div class="thumb-shot-bar"><span style="background:#ef4444;"></span><span style="background:#f59e0b;"></span><span style="background:#10b981;"></span></div>
+              <div class="thumb-shot-content">
+                <div class="thumb-shot-line"></div>
+                <div class="thumb-shot-line mid"></div>
+                <div class="thumb-shot-line short"></div>
+                <div class="thumb-shot-line"></div>
+              </div>
+            </div>
+            <div class="thumb-info">
+              <div class="thumb-name"><span class="app-icon-mini" style="background:#3B82F6;">ZC</span>ZCode</div>
+              <div class="thumb-title">AddAppDialog.qml — shadow-worker</div>
+            </div>
+          </div>
+
+          <!-- 卡片 7：Notepad -->
+          <div class="thumb-card" data-name="Notepad" data-path="C:\Windows\System32\notepad.exe" data-cat="other" data-title="todo.txt">
+            <div class="thumb-shot">
+              <div class="thumb-check"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div>
+              <div class="thumb-shot-bar"><span style="background:#ef4444;"></span><span style="background:#f59e0b;"></span><span style="background:#10b981;"></span></div>
+              <div class="thumb-shot-content">
+                <div class="thumb-shot-line mid"></div>
+                <div class="thumb-shot-line short"></div>
+                <div class="thumb-shot-line mid"></div>
+              </div>
+            </div>
+            <div class="thumb-info">
+              <div class="thumb-name"><span class="app-icon-mini" style="background:#6B7280;">Np</span>Notepad</div>
+              <div class="thumb-title">todo.txt</div>
+            </div>
+          </div>
+
+          <!-- 卡片 8：WeChat -->
+          <div class="thumb-card" data-name="WeChat" data-path="C:\Program Files\Tencent\WeChat\WeChat.exe" data-cat="chat" data-title="文件传输助手">
+            <div class="thumb-shot">
+              <div class="thumb-check"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div>
+              <div class="thumb-shot-bar"><span style="background:#ef4444;"></span><span style="background:#f59e0b;"></span><span style="background:#10b981;"></span></div>
+              <div class="thumb-shot-content">
+                <div class="thumb-shot-line short"></div>
+                <div class="thumb-shot-line"></div>
+                <div class="thumb-shot-line mid"></div>
+              </div>
+            </div>
+            <div class="thumb-info">
+              <div class="thumb-name"><span class="app-icon-mini" style="background:#10B981;">We</span>WeChat</div>
+              <div class="thumb-title">文件传输助手</div>
+            </div>
+          </div>
+
+          <!-- 卡片 9：Excel（加载中态，shimmer）-->
+          <div class="thumb-card" data-name="Excel" data-path="C:\Program Files\Microsoft Office\root\Office16\EXCEL.EXE" data-cat="office" data-title="财务报表-2026Q2.xlsx">
+            <div class="thumb-shot loading">
+              <div class="thumb-check"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div>
+            </div>
+            <div class="thumb-info">
+              <div class="thumb-name"><span class="app-icon-mini" style="background:#8B5CF6;">Ex</span>Excel</div>
+              <div class="thumb-title">财务报表-2026Q2.xlsx</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 空态（搜索无结果时 JS 切换）-->
+        <div class="thumb-empty" id="thumb-empty" style="display:none;">没有匹配的窗口</div>
+
+        <!-- 底部栏：已选择提示 + 取消/添加 -->
+        <div class="thumb-footer">
+          <div class="selected-hint" id="thumb-selected-hint">已选择：Chrome</div>
+          <div class="actions">
+            <span class="btn btn-ghost btn-sm" id="pick-cancel">取消</span>
+            <span class="btn btn-primary btn-sm" id="pick-confirm">添加</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
 <script>
 (function() {
   // main nav
@@ -3171,16 +3377,15 @@
     });
   }
 
-  // 选窗口遮罩演示
+  // 选窗口遮罩演示（截图缩略图网格版）
   const pickOverlay = document.getElementById('pick-window-overlay');
   const closePickBtn = document.getElementById('close-pick-window');
   const addWhitelistBtn = document.getElementById('add-whitelist-app');
-  const fakeWindows = document.querySelectorAll('.fake-window');
-  const pickResult = document.getElementById('pick-result');
-  const pickName = document.getElementById('pick-name');
-  const pickPath = document.getElementById('pick-path');
-  const pickIcon = document.getElementById('pick-icon');
-  const pickCats = document.getElementById('pick-cats');
+  const thumbCards = document.querySelectorAll('.thumb-card');
+  const thumbSearch = document.getElementById('thumb-search');
+  const thumbRefresh = document.getElementById('thumb-refresh');
+  const thumbEmpty = document.getElementById('thumb-empty');
+  const selectedHint = document.getElementById('thumb-selected-hint');
   const pickCancel = document.getElementById('pick-cancel');
   const pickConfirm = document.getElementById('pick-confirm');
   let selectedApp = null;
@@ -3188,8 +3393,11 @@
   function openPickWindow() {
     if (!pickOverlay) return;
     pickOverlay.classList.add('open');
-    pickResult.classList.remove('open');
-    fakeWindows.forEach(w => w.classList.remove('selected'));
+    thumbCards.forEach(w => w.classList.remove('selected'));
+    if (thumbSearch) thumbSearch.value = '';
+    filterThumbCards('');
+    // 默认不选中，清空底部提示
+    if (selectedHint) selectedHint.textContent = '';
     selectedApp = null;
   }
   function closePickWindow() {
@@ -3205,35 +3413,43 @@
     });
   }
 
-  fakeWindows.forEach(win => {
-    win.addEventListener('click', () => {
-      fakeWindows.forEach(w => w.classList.remove('selected'));
-      win.classList.add('selected');
+  // 卡片点击：单选 + 更新底部提示 + 记录 selectedApp
+  thumbCards.forEach(card => {
+    card.addEventListener('click', () => {
+      thumbCards.forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
       selectedApp = {
-        name: win.dataset.name,
-        path: win.dataset.path,
-        cat: win.dataset.cat,
-        initial: win.dataset.name.slice(0, 2)
+        name: card.dataset.name,
+        path: card.dataset.path,
+        cat: card.dataset.cat || 'other',
+        title: card.dataset.title || '',
+        initial: card.dataset.name.slice(0, 2)
       };
-      pickName.textContent = selectedApp.name;
-      pickPath.textContent = selectedApp.path;
-      pickIcon.textContent = selectedApp.initial;
-      pickIcon.style.background = getAppColor(selectedApp.cat);
-      pickCats.querySelectorAll('.chip').forEach(c => {
-        c.classList.toggle('active', c.dataset.val === selectedApp.cat);
-      });
-      pickResult.classList.add('open');
+      if (selectedHint) selectedHint.textContent = '已选择：' + selectedApp.name;
     });
   });
 
-  if (pickCats) {
-    pickCats.addEventListener('click', e => {
-      const chip = e.target.closest('.chip');
-      if (!chip || !selectedApp) return;
-      selectedApp.cat = chip.dataset.val;
-      pickCats.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
-      pickIcon.style.background = getAppColor(selectedApp.cat);
+  // 搜索过滤：按 name / title 子串匹配，不匹配的隐藏
+  function filterThumbCards(key) {
+    const k = (key || '').toLowerCase();
+    let visible = 0;
+    thumbCards.forEach(card => {
+      const n = (card.dataset.name || '').toLowerCase();
+      const t = (card.dataset.title || '').toLowerCase();
+      const match = k === '' || n.indexOf(k) >= 0 || t.indexOf(k) >= 0;
+      card.style.display = match ? '' : 'none';
+      if (match) visible++;
+    });
+    if (thumbEmpty) thumbEmpty.style.display = visible === 0 ? 'block' : 'none';
+  }
+  if (thumbSearch) {
+    thumbSearch.addEventListener('input', e => filterThumbCards(e.target.value));
+  }
+  // 刷新：重新过滤一次（实装里会重新枚举窗口，设计稿只重置搜索）
+  if (thumbRefresh) {
+    thumbRefresh.addEventListener('click', () => {
+      if (thumbSearch) { thumbSearch.value = ''; }
+      filterThumbCards('');
     });
   }
 
@@ -3605,54 +3821,6 @@
   if (btnSuccess) btnSuccess.addEventListener('click', function() { setState('success'); });
 })();
 </script>
-  <!-- 选窗口遮罩演示 -->
-  <div class="modal-overlay" id="pick-window-overlay">
-    <div class="pick-window-modal">
-      <div class="pick-window-header">
-        <div class="card-title">选择要采集的应用窗口</div>
-        <span class="btn btn-ghost btn-sm" id="close-pick-window">关闭</span>
-      </div>
-      <div class="pick-window-body">
-        <div class="hint">移动鼠标到窗口上，目标窗口会高亮；点击即可选中该应用加入白名单。</div>
-        <div class="fake-desktop" id="fake-desktop">
-          <div class="fake-window" data-name="Cursor" data-path="C:\\Users\\Admin\\AppData\\Local\\Programs\\cursor\\Cursor.exe" data-cat="coding" style="left:8%;top:10%;width:45%;height:55%;">
-            <div class="fake-window-bar"><span class="fake-window-dot" style="background:#ef4444;"></span><span class="fake-window-dot" style="background:#f59e0b;"></span><span class="fake-window-dot" style="background:#10b981;"></span></div>
-            <div class="fake-window-content">Cursor<br>main.go · shadow-worker</div>
-          </div>
-          <div class="fake-window" data-name="Chrome" data-path="C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" data-cat="browser" style="left:56%;top:12%;width:36%;height:42%;">
-            <div class="fake-window-bar"><span class="fake-window-dot" style="background:#ef4444;"></span><span class="fake-window-dot" style="background:#f59e0b;"></span><span class="fake-window-dot" style="background:#10b981;"></span></div>
-            <div class="fake-window-content">Chrome<br>GitHub · Issues</div>
-          </div>
-          <div class="fake-window" data-name="WeChat" data-path="C:\\Program Files\\Tencent\\WeChat\\WeChat.exe" data-cat="chat" style="left:20%;top:68%;width:28%;height:26%;">
-            <div class="fake-window-bar"><span class="fake-window-dot" style="background:#ef4444;"></span><span class="fake-window-dot" style="background:#f59e0b;"></span><span class="fake-window-dot" style="background:#10b981;"></span></div>
-            <div class="fake-window-content">WeChat<br>文件传输助手</div>
-          </div>
-        </div>
-        <div class="pick-result" id="pick-result">
-          <div class="pick-result-row">
-            <div class="app-icon" id="pick-icon" style="background:#3B82F6;">Ap</div>
-            <div>
-              <div style="font-size:14px;font-weight:600;" id="pick-name">应用名</div>
-              <div style="font-size:12px;color:var(--muted);" id="pick-path">进程路径</div>
-            </div>
-          </div>
-          <div style="font-size:13px;margin-bottom:8px;">选择分类：</div>
-          <div class="chip-group" id="pick-cats">
-            <span class="chip" data-val="coding">coding</span>
-            <span class="chip" data-val="browser">browser</span>
-            <span class="chip" data-val="chat">chat</span>
-            <span class="chip" data-val="office">office</span>
-            <span class="chip" data-val="other">other</span>
-          </div>
-          <div class="modal-actions">
-            <span class="btn btn-ghost btn-sm" id="pick-cancel">取消</span>
-            <span class="btn btn-primary btn-sm" id="pick-confirm">确认添加</span>
-          </div>
-        </div>
-      </div>
-
-    </div>
-  </div>
 
   <div class="settings-save-bar" id="settings-save-bar" style="display:none;">
     <span class="btn btn-primary" id="settings-save-btn">保存设置</span>
