@@ -127,6 +127,22 @@ func (v *VLMCapturer) Start() {
 	v.logger.Info("VLM 识别 worker 已启动", "scan_interval_s", intervalS)
 }
 
+// buildPromptWithApp 在基础 prompt 前拼接当前应用上下文，帮助 VLM 准确识别应用、
+// 减少把 A 应用误判成 B 应用的错误。纯内部增强：
+//   - 不改变用户在设置页配置的 prompt 文本（不落 UI、不进 DB）
+//   - appName 来自前台应用进程名（App.Name / VLMTask.AppName），三个调用点一致
+//   - appName 为空（理论上不会发生）或 basePrompt 为空时原样返回，不掩盖配置问题
+func (v *VLMCapturer) buildPromptWithApp(basePrompt, appName string) string {
+	if strings.TrimSpace(basePrompt) == "" {
+		return basePrompt // 空，让引擎报错提示用户配置，不绕过
+	}
+	appName = strings.TrimSpace(appName)
+	if appName == "" {
+		return basePrompt
+	}
+	return "当前用户正在使用的应用是 " + appName + "。" + basePrompt
+}
+
 // Stop 停止采集。幂等：VLMHolder.Rebuild 重建时可能对旧实例重复调用。
 // 只关 stopCh 停 goroutine，不强杀正在跑的 in-flight Trigger（它持有 db 引用，
 // 跑完会落库；这是热重载时序上可接受的行为）。
@@ -269,7 +285,7 @@ func (v *VLMCapturer) capture() (app App, png []byte, shotPath string, err error
 // app/png/shotPath 全部来自 capture 阶段，本阶段不重新截图、不读盘（坑 #46 方向① + 坑 #48）。
 // ts 是事件落库时间（on_demand 用入队时刻，scheduled/Trigger 用当前时刻）。
 func (v *VLMCapturer) analyze(ctx context.Context, app App, png []byte, shotPath string, ts time.Time) (string, error) {
-	summary, err := v.engine.Describe(ctx, png)
+	summary, err := v.engine.DescribeWith(ctx, png, v.buildPromptWithApp(v.cfg.Prompt, app.Name))
 	if err != nil {
 		// 失败也落一条事件，让时间轴事件列表能标记（灰色空心圆感叹号 + hover 看详情）。
 		// 分类错误（限流/鉴权/解析/网络）写入 Content（简短）和 Meta（JSON 含 detail）。
@@ -543,7 +559,7 @@ func (v *VLMCapturer) processTask(t storage.VLMTask) {
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	summary, err := v.engine.Describe(ctx, png)
+	summary, err := v.engine.DescribeWith(ctx, png, v.buildPromptWithApp(v.cfg.Prompt, t.AppName))
 	cancel()
 
 	if err == nil {
@@ -588,7 +604,7 @@ func (v *VLMCapturer) RetryTaskSync(t storage.VLMTask) (string, error) {
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	summary, err := v.engine.Describe(ctx, png)
+	summary, err := v.engine.DescribeWith(ctx, png, v.buildPromptWithApp(v.cfg.Prompt, t.AppName))
 	cancel()
 
 	if err == nil {
