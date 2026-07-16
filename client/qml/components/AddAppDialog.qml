@@ -1,6 +1,13 @@
 // AddAppDialog.qml - 添加采集应用对话框（枚举可见窗口，搜索选择）。
 // 打开时调用 WhitelistViewModel.listWindows() 从后端拉取当前所有可见顶层窗口，
 // 用户搜索/选择后，点"添加"调 addApp(path, name, "other") 写入白名单。
+//
+// 【数据模型】用 QML ListModel（而非 JS 数组 + 整数 count 做 Repeater model）。
+// 早期实现用 property var windows + filteredCount(int) + getWindow(index) 命令式
+// 取数组元素，在 image provider 异步预览场景下 delegate 创建/绑定求值时序交错，
+// getWindow(index) 偶发返回 undefined → card.win.path 抛 TypeError（日志见
+// line 248）。ListModel 把数据附在 model role 上，delegate 用 required property
+// 绑定，Qt 框架保证 role 在 delegate 创建时已就绪，无越界/时序问题。
 
 import QtQuick
 import QtQuick.Controls
@@ -14,8 +21,8 @@ Dialog {
     modal: true
     closePolicy: Dialog.CloseOnEscape
     anchors.centerIn: parent
-    width: 480
-    height: 520
+    width: 720
+    height: 560
     padding: 20
     topPadding: 20
     bottomPadding: 20
@@ -25,12 +32,22 @@ Dialog {
     // 全局 context property whitelistVm（不通过属性传入，避免初始化时机导致 null）。
     // 注意：对话框是 SettingsPage 的子组件，whitelistVm 是全局 context property。
 
-    // 本地状态
-    property var windows: []        // 从后端拿到的全部窗口（QVariantMap 列表）
     property string filterText: ""
-    property var selectedPath: ""   // 当前选中窗口的 path
+    property string selectedPath: ""   // 当前选中窗口的 path
     property string selectedName: ""
     property bool loading: false
+
+    // 网格列数 + 卡片尺寸
+    readonly property int gridColumns: 3
+    readonly property int cardGap: 12
+
+    // 全部窗口数据（ListModel）。get/append/clear 都是 model 原生操作，
+    // 变更自动通知绑定了它的视图，无需手动维护 filteredCount 之类的中间量。
+    ListModel { id: allWindowsModel }
+
+    // 过滤后的窗口数据（ListModel）。filterText 或数据源变化时由
+    // applyFilter() 重建。Repeater 直接绑它做 model。
+    ListModel { id: filteredModel }
 
     background: Rectangle {
         color: Theme.bg3
@@ -39,20 +56,28 @@ Dialog {
         radius: 12
     }
 
-    // 过滤后的窗口列表（按 name 或 title 包含 filterText）
-    function filteredWindows() {
-        if (filterText === "") return windows
+    // 按 filterText 把 allWindowsModel 过滤进 filteredModel。
+    // 命令式重建（不用绑定），避开 Repeater 对 JS 数组的 binding loop 风险。
+    function applyFilter() {
+        filteredModel.clear()
         var key = filterText.toLowerCase()
-        var out = []
-        for (var i = 0; i < windows.length; i++) {
-            var w = windows[i]
+        for (var i = 0; i < allWindowsModel.count; i++) {
+            var w = allWindowsModel.get(i)
+            if (key === "") {
+                filteredModel.append(w)
+                continue
+            }
             var n = (w.name || "").toLowerCase()
             var t = (w.title || "").toLowerCase()
             if (n.indexOf(key) >= 0 || t.indexOf(key) >= 0) {
-                out.push(w)
+                filteredModel.append(w)
             }
         }
-        return out
+    }
+
+    // 计算卡片宽度
+    function cardWidth(containerWidth) {
+        return Math.floor((containerWidth - cardGap * (gridColumns - 1)) / gridColumns)
     }
 
     // 应用名去 .exe 后缀
@@ -85,11 +110,18 @@ Dialog {
             Layout.fillWidth: true
             label: qsTr("Search")
             placeholder: qsTr("Filter by app name or window title")
-            onTextEdited: root.filterText = newText
+            // 坑 #1/#6：自定义 TextField 的 textEdited(newText) 信号必须用
+            // function(newText) 显式接收，旧式隐式参数注入在 Qt6 已废弃且
+            // newText 会是 undefined → filterText 被污染 → 过滤抛 TypeError。
+            onTextEdited: function(newText) {
+                root.filterText = newText
+                root.applyFilter()
+            }
         }
 
         // 窗口列表（可滚动）
         Rectangle {
+            id: gridContainer
             Layout.fillWidth: true
             Layout.fillHeight: true
             color: Theme.bg
@@ -97,96 +129,130 @@ Dialog {
             border.width: 1
             radius: 8
 
-            ListView {
-                id: winList
+            // 选中索引
+            property int selectedIndex: -1
+
+            // 空状态
+            Text {
+                anchors.centerIn: parent
+                z: 10
+                visible: filteredModel.count === 0 && !root.loading
+                text: allWindowsModel.count === 0
+                      ? qsTr("No visible windows")
+                      : qsTr("No matching windows")
+                color: Theme.muted
+                font.pixelSize: 13
+            }
+
+            // 加载中
+            Text {
+                anchors.centerIn: parent
+                z: 10
+                visible: root.loading && allWindowsModel.count === 0
+                text: qsTr("Loading...")
+                color: Theme.muted
+                font.pixelSize: 13
+            }
+
+            Flickable {
+                id: flick
                 anchors.fill: parent
-                anchors.margins: 1
+                anchors.margins: 8
                 clip: true
-                model: root.filteredWindows()
-                currentIndex: -1
+                contentWidth: width
+                // 内容高度 = 行数 × (卡高+间距)
+                contentHeight: Math.ceil(Math.max(filteredModel.count, 1) / root.gridColumns)
+                                * (root.cardWidth(width) * 9 / 16 + 52 + root.cardGap)
+                boundsBehavior: Flickable.StopAtBounds
 
-                // 空状态
-                Text {
-                    anchors.centerIn: parent
-                    visible: winList.count === 0 && !root.loading
-                    text: root.windows.length === 0
-                          ? qsTr("No visible windows")
-                          : qsTr("No matching windows")
-                    color: Theme.muted
-                    font.pixelSize: 13
-                }
+                Repeater {
+                    model: filteredModel
 
-                // 加载中
-                Text {
-                    anchors.centerIn: parent
-                    visible: root.loading && winList.count === 0
-                    text: qsTr("Loading...")
-                    color: Theme.muted
-                    font.pixelSize: 13
-                }
+                    delegate: Rectangle {
+                        id: card
+                        // model role 直接绑（Qt6 推荐范式，框架保证 role 就绪）。
+                        required property int index
+                        required property string hwnd
+                        required property string path
+                        required property string name
+                        required property string title
+                        width: root.cardWidth(flick.width)
+                        height: Math.floor(width * 9 / 16) + 52
+                        radius: 10
+                        clip: true
+                        color: Theme.bg3
+                        border.color: gridContainer.selectedIndex === card.index ? Theme.accent : Theme.rule
+                        border.width: gridContainer.selectedIndex === card.index ? 3 : 1
 
-                delegate: Rectangle {
-                    id: winRow
-                    required property var modelData
-                    required property int index
-                    width: winList.width
-                    height: 52
-                    color: winList.currentIndex === index ? Theme.accentBg2
-                           : (ma.containsMouse ? Theme.bg3 : "transparent")
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        spacing: 10
-
-                        // 应用图标（类别色首字母占位）
-                        Rectangle {
-                            width: 32
-                            height: 32
-                            radius: 6
-                            color: Theme.colorOf("other")
-                            Layout.alignment: Qt.AlignVCenter
-                            Text {
-                                anchors.centerIn: parent
-                                text: root.cleanName(winRow.modelData.name).substring(0, 2)
-                                color: "#FFFFFF"
-                                font.pixelSize: 12
-                                font.weight: Font.Bold
-                            }
-                        }
+                        // 手动网格定位
+                        x: (card.index % root.gridColumns) * (width + root.cardGap)
+                        y: Math.floor(card.index / root.gridColumns) * (height + root.cardGap)
 
                         ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 1
-                            Text {
-                                text: root.cleanName(winRow.modelData.name)
-                                color: Theme.ink
-                                font.pixelSize: 13
-                                font.weight: Font.DemiBold
+                            anchors.fill: parent
+                            anchors.margins: 6
+                            spacing: 0
+
+                            // 截图区 16:9
+                            Rectangle {
                                 Layout.fillWidth: true
-                                elide: Text.ElideRight
+                                Layout.preferredHeight: Math.floor(width * 9 / 16)
+                                color: Theme.bg
+                                clip: true
+
+                                Image {
+                                    anchors.fill: parent
+                                    // hwnd 在 ListModel 里以 string 存（ListElement 不支持
+                                    // 64 位 int 的完整精度， qint64 经 JS number 会丢精度），
+                                    // image provider 侧 id.toLongLong() 能正确解析数字串。
+                                    source: "image://winthumb/" + card.hwnd
+                                            + "@" + root.cleanName(card.name)
+                                    fillMode: Image.PreserveAspectCrop
+                                    sourceSize.width: 320
+                                    sourceSize.height: 180
+                                    cache: false
+                                }
+                            }
+
+                            // 信息区：首字母色块 + 应用名 + 标题
+                            Row {
+                                Layout.fillWidth: true
+                                Layout.topMargin: 4
+                                spacing: 6
+
+                                Rectangle {
+                                    width: 14; height: 14; radius: 3
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    color: Theme.colorOf("other")
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: root.cleanName(card.name).substring(0, 2)
+                                        color: "#FFFFFF"; font.pixelSize: 8; font.weight: Font.Bold
+                                    }
+                                }
+                                Text {
+                                    text: root.cleanName(card.name)
+                                    color: Theme.ink; font.pixelSize: 13; font.weight: Font.DemiBold
+                                    elide: Text.ElideRight; width: parent.width - 20
+                                }
                             }
                             Text {
-                                text: winRow.modelData.title || ""
-                                color: Theme.muted
-                                font.pixelSize: 11
+                                text: card.title || ""
+                                color: Theme.muted; font.pixelSize: 11
                                 Layout.fillWidth: true
-                                elide: Text.ElideRight
-                                visible: text !== ""
+                                elide: Text.ElideRight; visible: text !== ""
                             }
                         }
-                    }
 
-                    MouseArea {
-                        id: ma
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        hoverEnabled: true
-                        onClicked: {
-                            winList.currentIndex = index
-                            root.selectedPath = winRow.modelData.path
-                            root.selectedName = root.cleanName(winRow.modelData.name)
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            hoverEnabled: true
+                            onClicked: {
+                                gridContainer.selectedIndex = card.index
+                                root.selectedPath = card.path
+                                root.selectedName = root.cleanName(card.name)
+                            }
                         }
                     }
                 }
@@ -238,9 +304,11 @@ Dialog {
     function loadWindows() {
         if (!whitelistVm) return
         root.loading = true
-        root.windows = []
+        allWindowsModel.clear()
+        filteredModel.clear()
         root.selectedPath = ""
-        winList.currentIndex = -1
+        root.selectedName = ""
+        gridContainer.selectedIndex = -1
         whitelistVm.listWindows()
     }
 
@@ -249,13 +317,27 @@ Dialog {
     Connections {
         target: whitelistVm
         function onWindowsListed(windows, error) {
+            console.log("[AddAppDialog] onWindowsListed: windows.length=" + (windows ? windows.length : "null")
+                        + " error='" + error + "'")
             root.loading = false
             if (error && error !== "") {
                 var win = ApplicationWindow.window
                 if (win && win.toast) win.toast(qsTr("Failed to list windows: ") + error, "error")
                 return
             }
-            root.windows = windows
+            // 填充 ListModel。ListElement 不支持 qint64 完整精度，hwnd 转 string 存，
+            // image provider 侧 toLongLong() 解析。
+            for (var i = 0; windows && i < windows.length; i++) {
+                var w = windows[i]
+                allWindowsModel.append({
+                    hwnd: String(w.hwnd),
+                    path: w.path,
+                    name: w.name,
+                    title: w.title
+                })
+            }
+            applyFilter()
+            console.log("[AddAppDialog] onWindowsListed: allWindowsModel.count=" + allWindowsModel.count)
         }
     }
 

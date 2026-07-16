@@ -30,6 +30,7 @@
 #include "utils/backendlauncher.h"
 #include "utils/singleinstance.h"
 #include "i18n/translator.h"
+#include "image/windowthumbnailprovider.h"
 #include "viewmodels/overview_vm.h"
 #include "viewmodels/settings_vm.h"
 #include "viewmodels/timeline_vm.h"
@@ -218,6 +219,13 @@ int main(int argc, char *argv[]) {
 
     logMsg("[main] creating engine");
     QQmlApplicationEngine engine;
+
+    // 注册窗口缩略图 image provider，供「添加采集应用」网格卡片懒加载截图。
+    // QML 侧用 Image { source: "image://winthumb/<hwnd>@<appName>" }。
+    // addImageProvider 接管 provider 所有权（无需父对象）。必须在 engine.load
+    // 之前注册。
+    engine.addImageProvider(QStringLiteral("winthumb"),
+                            new WindowThumbnailProvider());
 
     // Bind the QML engine to the translator so live language switches can
     // trigger retranslate(). Must be called BEFORE engine.load() so that

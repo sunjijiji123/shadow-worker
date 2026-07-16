@@ -146,6 +146,8 @@ target_link_libraries(config_grpc PRIVATE config_proto whitelist_proto)
 # ============================================================
 qt_add_executable(shadow-worker-client
     src/main.cpp
+    src/image/windowthumbnailprovider.h
+    src/image/windowthumbnailprovider.cpp
     src/viewmodels/overview_vm.h
     src/viewmodels/overview_vm.cpp
     src/viewmodels/whitelist_vm.h
