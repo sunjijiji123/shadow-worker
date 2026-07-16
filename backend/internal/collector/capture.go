@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"log"
 	"sync"
 	"syscall"
 	"unsafe"
@@ -33,34 +34,51 @@ var captureMu sync.Mutex
 // （Electron/CEF）用 BitBlt 只能拿到空白/加载态，导致帧差信号失效、
 // state 误判。PrintWindow 对所有窗口类型都能拿到真实内容。
 func CaptureWindow(hwnd winapi.HWND) []byte {
+	bits, w, h, ok := captureWindowBGRA(hwnd)
+	if !ok {
+		return nil
+	}
+	return resizeNearestRGB(bits, int(w), int(h), CaptureTargetWidth, CaptureTargetHeight)
+}
+
+// captureWindowBGRA 截取指定窗口到 32-bit BGRA 像素缓冲。
+// 封装 GetWindowRect→GetDC→CreateCompatibleDC→PrintWindow→GetDIBits 这段
+// 所有窗口截图共用的 setup（CaptureWindow/CaptureWindowPNG/CaptureWindowThumbnail
+// 三者原本各写一遍，抽出来去重）。走 captureMu 全局锁。失败返回 ok=false。
+func captureWindowBGRA(hwnd winapi.HWND) (bits []byte, w, h int32, ok bool) {
 	captureMu.Lock()
 	defer captureMu.Unlock()
 
 	var rect winapi.RECT
 	if !winapi.GetWindowRect(hwnd, &rect) {
-		return nil
+		log.Printf("[captureWindowBGRA] GetWindowRect 失败 hwnd=%d", hwnd)
+		return nil, 0, 0, false
 	}
-	w := rect.Right - rect.Left
-	h := rect.Bottom - rect.Top
+	w = rect.Right - rect.Left
+	h = rect.Bottom - rect.Top
 	if w <= 0 || h <= 0 {
-		return nil
+		log.Printf("[captureWindowBGRA] 尺寸无效 hwnd=%d w=%d h=%d", hwnd, w, h)
+		return nil, 0, 0, false
 	}
 
 	hdc := winapi.GetDC(0)
 	if hdc == 0 {
-		return nil
+		log.Printf("[captureWindowBGRA] GetDC 失败 hwnd=%d", hwnd)
+		return nil, 0, 0, false
 	}
 	defer winapi.ReleaseDC(0, hdc)
 
 	memDC := winapi.CreateCompatibleDC(winapi.HDC(hdc))
 	if memDC == 0 {
-		return nil
+		log.Printf("[captureWindowBGRA] CreateCompatibleDC 失败 hwnd=%d", hwnd)
+		return nil, 0, 0, false
 	}
 	defer winapi.DeleteDC(memDC)
 
 	bmp := winapi.CreateCompatibleBitmap(winapi.HDC(hdc), w, h)
 	if bmp == 0 {
-		return nil
+		log.Printf("[captureWindowBGRA] CreateCompatibleBitmap 失败 hwnd=%d", hwnd)
+		return nil, 0, 0, false
 	}
 	defer winapi.DeleteObject(winapi.Handle(bmp))
 
@@ -68,15 +86,15 @@ func CaptureWindow(hwnd winapi.HWND) []byte {
 	defer winapi.SelectObject(memDC, old)
 
 	if !winapi.PrintWindow(hwnd, syscall.Handle(memDC), winapi.PW_RENDERFULLCONTENT) {
-		return nil
+		log.Printf("[captureWindowBGRA] PrintWindow 失败 hwnd=%d", hwnd)
+		return nil, 0, 0, false
 	}
 
-	bits, ok := dibitsRGB(winapi.HDC(hdc), bmp, w, h)
+	bits, ok = dibitsRGB(winapi.HDC(hdc), bmp, w, h)
 	if !ok {
-		return nil
+		log.Printf("[captureWindowBGRA] dibitsRGB 失败 hwnd=%d", hwnd)
 	}
-
-	return resizeNearestRGB(bits, int(w), int(h), CaptureTargetWidth, CaptureTargetHeight)
+	return bits, w, h, ok
 }
 
 // resizeNearestRGB 把 32-bit BGRA 最邻近降采样为 RGB。
@@ -95,6 +113,29 @@ func resizeNearestRGB(src []byte, srcW, srcH, dstW, dstH int) []byte {
 			dst[dstIdx+0] = src[srcIdx+2]
 			dst[dstIdx+1] = src[srcIdx+1]
 			dst[dstIdx+2] = src[srcIdx+0]
+		}
+	}
+	return dst
+}
+
+// resizeBGRA 把 32-bit BGRA 像素缓冲最邻近降采样，输出仍为 BGRA（4 字节/像素，
+// 保留 alpha 字节）。与 resizeNearestRGB 同算法但不做 BGRA→RGB 转换，供
+// CaptureWindowThumbnail 用（bitsToPNG 接受 BGRA 输入）。
+func resizeBGRA(src []byte, srcW, srcH, dstW, dstH int) []byte {
+	dst := make([]byte, dstW*dstH*4)
+	for y := 0; y < dstH; y++ {
+		sy := y * srcH / dstH
+		for x := 0; x < dstW; x++ {
+			sx := x * srcW / dstW
+			srcIdx := (sy*srcW + sx) * 4
+			dstIdx := (y*dstW + x) * 4
+			if srcIdx+3 >= len(src) {
+				continue
+			}
+			dst[dstIdx+0] = src[srcIdx+0]
+			dst[dstIdx+1] = src[srcIdx+1]
+			dst[dstIdx+2] = src[srcIdx+2]
+			dst[dstIdx+3] = src[srcIdx+3]
 		}
 	}
 	return dst
@@ -142,47 +183,25 @@ func abs(a int) int {
 // 加载态画面。PrintWindow 让窗口把内容绘制到我们提供的 DC，对所有窗口类型都
 // 有效（Windows 8.1+）。失败返回 nil。
 func CaptureWindowPNG(hwnd winapi.HWND) []byte {
-	captureMu.Lock()
-	defer captureMu.Unlock()
-
-	var rect winapi.RECT
-	if !winapi.GetWindowRect(hwnd, &rect) {
+	bits, w, h, ok := captureWindowBGRA(hwnd)
+	if !ok {
 		return nil
 	}
-	w := rect.Right - rect.Left
-	h := rect.Bottom - rect.Top
-	if w <= 0 || h <= 0 {
+	return bitsToPNG(bits, w, h)
+}
+
+// CaptureWindowThumbnail 截取指定窗口并降采样为 320×180 PNG（16:9）。
+// 供"添加跟踪应用"网格预览懒加载用（经 GetWindowThumbnail RPC）。
+// 走 captureMu 全局锁（与 movement/VLM 截图串行，避免对目标窗口叠加重绘）。
+// 失败（窗口已关/hwnd 失效）返回 nil，由调用方返回空 png 交前端降级。
+func CaptureWindowThumbnail(hwnd winapi.HWND) []byte {
+	bits, w, h, ok := captureWindowBGRA(hwnd)
+	if !ok {
+		log.Printf("[CaptureWindowThumbnail] 失败 hwnd=%d", hwnd)
 		return nil
 	}
-
-	hdc := winapi.GetDC(0)
-	if hdc == 0 {
-		return nil
-	}
-	defer winapi.ReleaseDC(0, hdc)
-
-	memDC := winapi.CreateCompatibleDC(winapi.HDC(hdc))
-	if memDC == 0 {
-		return nil
-	}
-	defer winapi.DeleteDC(memDC)
-
-	bmp := winapi.CreateCompatibleBitmap(winapi.HDC(hdc), w, h)
-	if bmp == 0 {
-		return nil
-	}
-	defer winapi.DeleteObject(winapi.Handle(bmp))
-
-	old := winapi.SelectObject(memDC, winapi.Handle(bmp))
-	defer winapi.SelectObject(memDC, old)
-
-	// PrintWindow 把窗口内容绘制到 memDC。PW_RENDERFULLCONTENT 对硬件加速
-	// 窗口必需；对普通窗口也兼容（相当于标准绘制）。
-	if !winapi.PrintWindow(hwnd, syscall.Handle(memDC), winapi.PW_RENDERFULLCONTENT) {
-		return nil
-	}
-
-	return dibitsToPNG(winapi.HDC(hdc), bmp, w, h)
+	thumb := resizeBGRA(bits, int(w), int(h), CaptureTargetWidth, CaptureTargetHeight)
+	return bitsToPNG(thumb, CaptureTargetWidth, CaptureTargetHeight)
 }
 
 // CaptureScreenPNG 截取整块虚拟屏幕（所有显示器并集）并返回 PNG 字节。

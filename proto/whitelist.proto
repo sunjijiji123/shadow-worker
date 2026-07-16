@@ -18,6 +18,9 @@ service WhitelistService {
   rpc UpdateCategory(UpdateCategoryRequest) returns (App);
   // 列出当前所有可见顶层窗口(供客户端"添加采集应用"选择)
   rpc ListWindows(ListWindowsRequest) returns (WindowList);
+  // 取指定窗口的缩略图截图(320×180 PNG)，供"添加采集应用"网格预览懒加载。
+  // 失败(窗口已关/hwnd失效)返回空 png 字节，由前端降级为占位图。
+  rpc GetWindowThumbnail(ThumbnailRequest) returns (ThumbnailData);
 }
 
 message ListAppsRequest {
@@ -70,4 +73,15 @@ message WindowInfo {
 
 message WindowList {
   repeated WindowInfo windows = 1;
+}
+
+// 缩略图请求：按 hwnd(来自 ListWindows) 取该窗口当前截图。
+message ThumbnailRequest {
+  int64 hwnd = 1;   // 窗口句柄(仅本次会话有效，来自 ListWindows 返回值)
+}
+
+// 缩略图响应：320×180 PNG。png 为空表示截图失败(窗口已关/hwnd失效)，
+// 客户端应降级为占位图，不视为错误。
+message ThumbnailData {
+  bytes png = 1;
 }

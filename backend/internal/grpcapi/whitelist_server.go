@@ -9,6 +9,7 @@ import (
 
 	"shadow-worker/backend/internal/collector"
 	"shadow-worker/backend/internal/storage"
+	"shadow-worker/backend/internal/winapi"
 )
 
 // WhitelistServer 实现 WhitelistService 的 gRPC 服务。
@@ -145,6 +146,15 @@ func (s *WhitelistServer) ListWindows(ctx context.Context, req *ListWindowsReque
 		})
 	}
 	return out, nil
+}
+
+// GetWindowThumbnail 截取指定窗口的 320×180 PNG 缩略图，供"添加采集应用"
+// 网格预览懒加载。失败（窗口已关/hwnd 失效）返回空 png，不报 error——
+// 前端 image provider 据此降级为首字母占位图。
+func (s *WhitelistServer) GetWindowThumbnail(ctx context.Context, req *ThumbnailRequest) (*ThumbnailData, error) {
+	png := collector.CaptureWindowThumbnail(winapi.HWND(req.Hwnd))
+	s.logger.Debug("取窗口缩略图", "hwnd", req.Hwnd, "bytes", len(png))
+	return &ThumbnailData{Png: png}, nil
 }
 
 func fileName(path string) string {
