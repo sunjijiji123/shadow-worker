@@ -117,9 +117,13 @@ private:
   }
 
   void scaleIfNeeded() {
+    // 后端 CaptureWindowThumbnail 已输出固定 320×180 的 letterbox PNG（原图
+    // 等比缩放居中、四周补深色边带），本身不变形、不被裁剪。这里只按卡片
+    // 实际显示尺寸等比缩放（KeepAspectRatio：装进框内、不裁剪不变形），
+    // 避免之前 KeepAspectRatioByExpanding 把边带内容裁掉。
     if (m_requestedSize.width() > 0 && m_requestedSize.height() > 0 &&
         m_image.size() != m_requestedSize) {
-      m_image = m_image.scaled(m_requestedSize, Qt::KeepAspectRatioByExpanding,
+      m_image = m_image.scaled(m_requestedSize, Qt::KeepAspectRatio,
                                Qt::SmoothTransformation);
     }
   }

@@ -207,7 +207,10 @@ Dialog {
                                     // image provider 侧 id.toLongLong() 能正确解析数字串。
                                     source: "image://winthumb/" + card.hwnd
                                             + "@" + root.cleanName(card.name)
-                                    fillMode: Image.PreserveAspectCrop
+                                    // PreserveAspectFit：后端已按原图比例缩放进
+                                    // 320×180 框内（letterbox，不变形不裁剪），
+                                    // 这里完整铺满预览区，边带融入卡片背景。
+                                    fillMode: Image.PreserveAspectFit
                                     sourceSize.width: 320
                                     sourceSize.height: 180
                                     cache: false

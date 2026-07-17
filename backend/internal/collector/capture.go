@@ -141,6 +141,63 @@ func resizeBGRA(src []byte, srcW, srcH, dstW, dstH int) []byte {
 	return dst
 }
 
+// resizeBGRAFitLetterbox 把任意宽高比的 BGRA 原图等比缩放进 dstW×dstH 框内并
+// 居中，四周补深色边带（letterbox），输出尺寸恒为 dstW×dstH 的 BGRA。供缩略图
+// 预览用：原始窗口可能不是 16:9，直接拉伸会变形，缩放后再裁剪又丢内容。
+// 边带填 #18181B（与卡片背景 Theme.bg 一致），视觉上无缝融入卡片。
+// 输出 BGRA（4 字节/像素），可直接喂 bitsToPNG。
+func resizeBGRAFitLetterbox(src []byte, srcW, srcH, dstW, dstH int) []byte {
+	dst := make([]byte, dstW*dstH*4)
+
+	// 边带填深色 #18181B（BGRA 字节序：B=0x18,G=0x18,B=0x1B,A=0xFF）。
+	for i := 0; i < dstW*dstH; i++ {
+		p := i * 4
+		dst[p+0] = 0x18
+		dst[p+1] = 0x18
+		dst[p+2] = 0x1B
+		dst[p+3] = 0xFF
+	}
+	if srcW <= 0 || srcH <= 0 {
+		return dst
+	}
+
+	// 等比缩放：取宽高两个缩放比的较小者，保证整框装进 dstW×dstH 不变形。
+	scaleW := float64(dstW) / float64(srcW)
+	scaleH := float64(dstH) / float64(srcH)
+	scale := scaleW
+	if scaleH < scaleW {
+		scale = scaleH
+	}
+	fitW := int(float64(srcW) * scale)
+	fitH := int(float64(srcH) * scale)
+	if fitW < 1 {
+		fitW = 1
+	}
+	if fitH < 1 {
+		fitH = 1
+	}
+	offX := (dstW - fitW) / 2
+	offY := (dstH - fitH) / 2
+
+	// 最邻近采样原图到 fitW×fitH，再平移到边框中央 (offX, offY)。
+	for y := 0; y < fitH; y++ {
+		sy := y * srcH / fitH
+		for x := 0; x < fitW; x++ {
+			sx := x * srcW / fitW
+			srcIdx := (sy*srcW + sx) * 4
+			dstIdx := ((y+offY)*dstW + (x + offX)) * 4
+			if srcIdx+3 >= len(src) || dstIdx+3 >= len(dst) {
+				continue
+			}
+			dst[dstIdx+0] = src[srcIdx+0]
+			dst[dstIdx+1] = src[srcIdx+1]
+			dst[dstIdx+2] = src[srcIdx+2]
+			dst[dstIdx+3] = src[srcIdx+3]
+		}
+	}
+	return dst
+}
+
 // FrameDiff 比较两帧 RGB，返回变化像素比例。
 func FrameDiff(prev, curr []byte, w, h int) (float64, error) {
 	if len(prev) != len(curr) || len(prev) != w*h*3 {
@@ -190,8 +247,15 @@ func CaptureWindowPNG(hwnd winapi.HWND) []byte {
 	return bitsToPNG(bits, w, h)
 }
 
-// CaptureWindowThumbnail 截取指定窗口并降采样为 320×180 PNG（16:9）。
-// 供"添加跟踪应用"网格预览懒加载用（经 GetWindowThumbnail RPC）。
+// CaptureWindowThumbnail 截取指定窗口并降采样为 PNG，供"添加采集应用"网格预览
+// 懒加载用（经 GetWindowThumbnail RPC）。
+//
+// 适配策略（letterbox）：窗口原始宽高比各异（竖向窗口、超宽窗口），不能像
+// movement 帧差那样暴力拉伸到固定 16:9（会变形）。这里把原图按比例缩到
+// 目标框（CaptureTargetWidth×CaptureTargetHeight）内、居中放置，四周补深色
+// (#18181B，与卡片背景一致)边带，输出固定尺寸 320×180 PNG。前端 Image 用
+// PreserveAspectFit 即可完整显示原图、不变形、不裁剪。
+//
 // 走 captureMu 全局锁（与 movement/VLM 截图串行，避免对目标窗口叠加重绘）。
 // 失败（窗口已关/hwnd 失效）返回 nil，由调用方返回空 png 交前端降级。
 func CaptureWindowThumbnail(hwnd winapi.HWND) []byte {
@@ -200,8 +264,53 @@ func CaptureWindowThumbnail(hwnd winapi.HWND) []byte {
 		log.Printf("[CaptureWindowThumbnail] 失败 hwnd=%d", hwnd)
 		return nil
 	}
-	thumb := resizeBGRA(bits, int(w), int(h), CaptureTargetWidth, CaptureTargetHeight)
+	// 纯色判空：部分窗口（系统辅助窗口、无客户区渲染的窗口）PrintWindow 能成功，
+	// 但截到的是全黑/纯色画面（日志表现为 bytes≈600~1600 的极小 PNG）。这类
+	// "截图成功但无内容"的窗口对预览无意义，判定为空返回 nil，让前端走首字母
+	// 占位图（比纯色块信息量大）。在 letterbox 前用原始 bits 判，避免边带干扰。
+	if isSolidColor(bits, int(w), int(h)) {
+		log.Printf("[CaptureWindowThumbnail] 截图为纯色，判空 hwnd=%d", hwnd)
+		return nil
+	}
+	thumb := resizeBGRAFitLetterbox(bits, int(w), int(h),
+		CaptureTargetWidth, CaptureTargetHeight)
 	return bitsToPNG(thumb, CaptureTargetWidth, CaptureTargetHeight)
+}
+
+// isSolidColor 检测 BGRA 像素缓冲是否整体只有一个颜色（全黑/纯色）。
+// 用抽样 + 容差：采样若干像素，若与第一个像素的色差全在 tol 内即判定纯色。
+// 用于缩略图预览：纯色截图（PrintWindow 截到的空白画面）等同于无内容。
+func isSolidColor(bits []byte, w, h int) bool {
+	if w <= 0 || h <= 0 || len(bits) < w*h*4 {
+		return true // 数据不全，视为无内容
+	}
+	const tol = 8 // 色差容差，吸收压缩/抖动噪声
+	// 抽样：取第一个像素为基准，网格采样约 400 个点（足够判定纯色）。
+	stepX := w / 20
+	stepY := h / 15
+	if stepX < 1 {
+		stepX = 1
+	}
+	if stepY < 1 {
+		stepY = 1
+	}
+	b0 := bits[0]
+	b1 := bits[1]
+	b2 := bits[2]
+	for y := 0; y < h; y += stepY {
+		for x := 0; x < w; x += stepX {
+			i := (y*w + x) * 4
+			if i+2 >= len(bits) {
+				continue
+			}
+			if abs(int(bits[i])-int(b0)) > tol ||
+				abs(int(bits[i+1])-int(b1)) > tol ||
+				abs(int(bits[i+2])-int(b2)) > tol {
+				return false // 出现色差，不是纯色
+			}
+		}
+	}
+	return true
 }
 
 // CaptureScreenPNG 截取整块虚拟屏幕（所有显示器并集）并返回 PNG 字节。
