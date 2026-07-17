@@ -20,6 +20,18 @@ var (
 	procOpenInputDesktop          = moduser32.NewProc("OpenInputDesktop")
 	procCloseDesktop              = moduser32.NewProc("CloseDesktop")
 	procGetUserObjectInformationW = moduser32.NewProc("GetUserObjectInformationW")
+	procGetWindow                = moduser32.NewProc("GetWindow")
+	procGetClassNameW             = moduser32.NewProc("GetClassNameW")
+)
+
+// GetWindow 关系常量。
+const (
+	GW_HWNDFIRST = 0
+	GW_HWNDLAST  = 1
+	GW_HWNDNEXT  = 2
+	GW_HWNDPREV  = 3
+	GW_OWNER     = 4
+	GW_CHILD     = 5
 )
 
 // 桌面访问与 UOI 常量。
@@ -92,9 +104,30 @@ func GetWindowTextW(hwnd HWND, buf *uint16, maxCount int32) int32 {
 	return int32(r)
 }
 
+// GetClassNameW 获取窗口的类名（如 "Progman"、"CabinetWClass"）。
+// 类名是窗口类型标识，比进程名更精准：explorer.exe 同时托管桌面（Progman）
+// 和文件资源管理器（CabinetWClass），按类名可只排除桌面、保留文件窗口。
+// 返回写入 buf 的字符数（不含结尾 \0），失败返回 0。
+func GetClassNameW(hwnd HWND, buf *uint16, maxCount int32) int32 {
+	r, _, _ := procGetClassNameW.Call(
+		uintptr(hwnd),
+		uintptr(unsafe.Pointer(buf)),
+		uintptr(maxCount),
+	)
+	return int32(r)
+}
+
 // WindowFromPoint 返回指定屏幕坐标下的窗口句柄。
 func WindowFromPoint(pt POINT) HWND {
 	r, _, _ := procWindowFromPoint.Call(uintptr(unsafe.Pointer(&pt)))
+	return HWND(r)
+}
+
+// GetWindow 按关系常量（GW_OWNER / GW_CHILD 等）返回与 hwnd 相关的窗口句柄。
+// GW_OWNER==0 表示 hwnd 无所有者（即独立顶层应用窗口，而非对话框/工具窗口
+// 这类有 owner 的辅助窗口）。用于"枚举可跟踪应用"时区分应用窗口与辅助窗口。
+func GetWindow(hwnd HWND, cmd uint32) HWND {
+	r, _, _ := procGetWindow.Call(uintptr(hwnd), uintptr(cmd))
 	return HWND(r)
 }
 
